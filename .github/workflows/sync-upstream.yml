@@ -1,60 +1,46 @@
 name: Manually Sync Upstream → Fork (main & development)
 
 on:
-  workflow_dispatch:  # manual trigger
+  workflow_dispatch:
   schedule:
-    - cron: '0 22 * * *'  # runs every day at 8AM AEST
+    - cron: '0 22 * * *'  # Daily at 8AM AEST
 
 jobs:
   sync-main:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout fork
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT }}
 
-      - name: Set up Git config
-        run: |
+      - run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
-      - name: Add upstream remote
-        run: |
           git remote add upstream https://github.com/chsami/Microbot.git
           git fetch upstream
 
-      - name: Sync upstream/main → main
-        run: |
-          git checkout main
+      - run: |
+          git checkout -B main origin/main
           git merge --ff-only upstream/main || echo "✅ main already up to date"
           git push https://x-access-token:${{ secrets.PAT }}@github.com/JogOnJohn/Microbot.git main
 
   sync-development:
+    needs: sync-main
     runs-on: ubuntu-latest
-    needs: sync-main  # Only run after main is synced
-
     steps:
-      - name: Checkout fork
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT }}
 
-      - name: Set up Git config
-        run: |
+      - run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
-      - name: Add upstream remote
-        run: |
           git remote add upstream https://github.com/chsami/Microbot.git
           git fetch upstream
 
-      - name: Sync upstream/development → development
-        run: |
-          git checkout -B origin/development
+      - run: |
+          git checkout -B development origin/development
           git merge --ff-only upstream/development || echo "✅ development already up to date"
           git push https://x-access-token:${{ secrets.PAT }}@github.com/JogOnJohn/Microbot.git development
