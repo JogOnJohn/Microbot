@@ -55,6 +55,6 @@ jobs:
 
       - name: Sync upstream/development → development
         run: |
-          git checkout development
+          git checkout origin/development
           git merge --ff-only upstream/development || echo "✅ development already up to date"
           git push https://x-access-token:${{ secrets.PAT }}@github.com/JogOnJohn/Microbot.git development
