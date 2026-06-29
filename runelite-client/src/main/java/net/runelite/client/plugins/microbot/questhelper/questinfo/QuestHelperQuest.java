@@ -246,10 +246,12 @@ import net.runelite.client.plugins.microbot.questhelper.helpers.quests.thegrandt
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.thegreatbrainrobbery.TheGreatBrainRobbery;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.thehandinthesand.TheHandInTheSand;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.theheartofdarkness.TheHeartOfDarkness;
+import net.runelite.client.plugins.microbot.questhelper.helpers.quests.theidesofmilk.TheIdesOfMilk;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.theknightssword.TheKnightsSword;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.thelosttribe.TheLostTribe;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.thepathofglouphrie.ThePathOfGlouphrie;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.thequeenofthieves.TheQueenOfThieves;
+import net.runelite.client.plugins.microbot.questhelper.helpers.quests.theredreef.TheRedReef;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.therestlessghost.TheRestlessGhost;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.theribbitingtaleofalilypadlabourdispute.TheRibbitingTaleOfALilyPadLabourDispute;
 import net.runelite.client.plugins.microbot.questhelper.helpers.quests.theslugmenace.TheSlugMenace;
@@ -313,6 +315,7 @@ public enum QuestHelperQuest
 	SHEEP_SHEARER(new SheepShearer(), Quest.SHEEP_SHEARER, QuestVarPlayer.QUEST_SHEEP_SHEARER, QuestDetails.Type.F2P, QuestDetails.Difficulty.NOVICE),
 	SHIELD_OF_ARRAV_PHOENIX_GANG(new ShieldOfArravPhoenixGang(), Quest.SHIELD_OF_ARRAV.getId(), "Shield of Arrav - Phoenix Gang", QuestVarPlayer.QUEST_SHIELD_OF_ARRAV, QuestDetails.Type.F2P, QuestDetails.Difficulty.NOVICE),
 	SHIELD_OF_ARRAV_BLACK_ARM_GANG(new ShieldOfArravBlackArmGang(), Quest.SHIELD_OF_ARRAV.getId(), "Shield of Arrav - Black Arm Gang", QuestVarPlayer.QUEST_SHIELD_OF_ARRAV_STATE_146, QuestDetails.Type.F2P, QuestDetails.Difficulty.NOVICE),
+	THE_IDES_OF_MILK(new TheIdesOfMilk(), Quest.THE_IDES_OF_MILK, QuestVarbits.QUEST_THE_IDES_OF_MILK, QuestDetails.Type.F2P, QuestDetails.Difficulty.NOVICE),
 	VAMPYRE_SLAYER(new VampyreSlayer(), Quest.VAMPYRE_SLAYER, QuestVarPlayer.QUEST_VAMPYRE_SLAYER, QuestDetails.Type.F2P, QuestDetails.Difficulty.INTERMEDIATE),
 	WITCHS_POTION(new WitchsPotion(), Quest.WITCHS_POTION, QuestVarPlayer.QUEST_WITCHS_POTION, QuestDetails.Type.F2P, QuestDetails.Difficulty.NOVICE),
 	X_MARKS_THE_SPOT(new XMarksTheSpot(), Quest.X_MARKS_THE_SPOT, QuestVarbits.QUEST_X_MARKS_THE_SPOT, QuestDetails.Type.F2P, QuestDetails.Difficulty.NOVICE),
@@ -404,6 +407,7 @@ public enum QuestHelperQuest
 	RAG_AND_BONE_MAN_I(new RagAndBoneManI(), Quest.RAG_AND_BONE_MAN_I, QuestVarPlayer.QUEST_RAG_AND_BONE_MAN_I, QuestDetails.Type.P2P, QuestDetails.Difficulty.NOVICE),
 	RAG_AND_BONE_MAN_II(new RagAndBoneManII(), Quest.RAG_AND_BONE_MAN_II, QuestVarPlayer.QUEST_RAG_AND_BONE_MAN_II, QuestDetails.Type.P2P, QuestDetails.Difficulty.EXPERIENCED),
 	RATCATCHERS(new RatCatchers(), Quest.RATCATCHERS, QuestVarbits.QUEST_RATCATCHERS, QuestDetails.Type.P2P, QuestDetails.Difficulty.INTERMEDIATE),
+	THE_RED_REEF(new TheRedReef(), Quest.THE_RED_REEF, QuestVarbits.QUEST_THE_RED_REEF, QuestDetails.Type.P2P, QuestDetails.Difficulty.EXPERIENCED),
 	RECIPE_FOR_DISASTER_START(new RFDStart(), Quest.RECIPE_FOR_DISASTER.getId(), "RFD - Start", Arrays.asList("recipe", "for", "disaster"), QuestVarbits.QUEST_RECIPE_FOR_DISASTER, QuestDetails.Type.P2P, QuestDetails.Difficulty.NOVICE),
 	RECIPE_FOR_DISASTER_DWARF(new RFDDwarf(), Quest.RECIPE_FOR_DISASTER.getId(), "RFD - Dwarf", Arrays.asList("recipe", "for", "disaster"), QuestVarbits.QUEST_RECIPE_FOR_DISASTER_DWARF, QuestDetails.Type.P2P, QuestDetails.Difficulty.NOVICE),
 	RECIPE_FOR_DISASTER_WARTFACE_AND_BENTNOZE(new RFDGoblins(), Quest.RECIPE_FOR_DISASTER.getId(), "RFD - Wartface & Bentnoze", Arrays.asList("recipe", "for", "disaster"), QuestVarbits.QUEST_RECIPE_FOR_DISASTER_WARTFACE_AND_BENTNOZE, QuestDetails.Type.P2P, QuestDetails.Difficulty.NOVICE),
