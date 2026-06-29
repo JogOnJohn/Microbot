@@ -1236,8 +1236,11 @@ public class Rs2Walker {
                             Math.max(0L, System.currentTimeMillis() - lastAttemptedMinimapClickAtMs),
                             interimTargetWp);
                 }
-                lastMovedTimeMs = System.currentTimeMillis();
-                stuckCount = 0;
+                if (tryStallRecoveryClick(path, rawPath, target, distance)) {
+                    lastMovedTimeMs = System.currentTimeMillis();
+                    stuckCount = 0;
+                    continue;
+                }
                 recalculatePath();
                 continue;
             }
@@ -3089,6 +3092,88 @@ public class Rs2Walker {
         }
 
         return WalkerState.MOVING;
+    }
+
+    private static boolean tryStallRecoveryClick(List<WorldPoint> path,
+                                                 List<WorldPoint> rawPath,
+                                                 WorldPoint target,
+                                                 int distance) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        if (playerLoc == null || target == null || path == null || path.isEmpty()) {
+            return false;
+        }
+
+        final int recoveryReachEuclidean = 13;
+        boolean inInstance = Microbot.getClient().getTopLevelWorldView().isInstance();
+        int indexOfStartPoint = getClosestTileIndex(path);
+        if (indexOfStartPoint < 0) {
+            indexOfStartPoint = 0;
+        }
+        int startIndex = Math.max(0, Math.min(indexOfStartPoint, path.size() - 1));
+        int targetIdx = findFurthestClickableIndex(path, startIndex, playerLoc,
+                wp -> {
+                    Set<Transport> transports = ShortestPathPlugin.getTransports().get(wp);
+                    return transports != null && !transports.isEmpty();
+                },
+                recoveryReachEuclidean);
+
+        WorldPoint waypoint = path.get(targetIdx);
+        if (targetIdx < startIndex || euclideanSq(waypoint, playerLoc) > recoveryReachEuclidean * recoveryReachEuclidean) {
+            waypoint = interpolateClickableTarget(path, startIndex, playerLoc, waypoint, recoveryReachEuclidean - 1,
+                    wp -> inInstance || isKnownWalkableOrUnloaded(wp));
+            targetIdx = Math.max(startIndex, targetIdx);
+        }
+
+        WorldPoint clickTarget = inInstance ? waypoint : getPointWithWallDistance(waypoint);
+        if (!inInstance && !Rs2Tile.isTileReachable(clickTarget)) {
+            WorldPoint rawReachableTarget = findFurthestReachableRawPathPoint(rawPath, playerLoc, recoveryReachEuclidean - 1);
+            if (rawReachableTarget != null) {
+                waypoint = rawReachableTarget;
+                clickTarget = rawReachableTarget;
+            }
+        }
+
+        if (clickTarget == null || clickTarget.equals(playerLoc)) {
+            return false;
+        }
+
+        WorldPoint actualClickTarget = clickTarget;
+        boolean clicked = Rs2Walker.walkMiniMap(clickTarget);
+        if (!clicked) {
+            actualClickTarget = walkMiniMapTowardTarget(clickTarget, playerLoc, recoveryReachEuclidean - 1);
+            clicked = actualClickTarget != null;
+        }
+        if (!clicked) {
+            clicked = walkFastCanvas(clickTarget);
+        }
+        if (!clicked) {
+            log.info("[Walker] Stall recovery click failed target={} player={} waypoint={} idx={}",
+                    target, playerLoc, waypoint, targetIdx);
+            return false;
+        }
+
+        final WorldPoint before = playerLoc;
+        final WorldPoint clickedPoint = actualClickTarget != null ? actualClickTarget : clickTarget;
+        boolean moved = sleepUntil(() -> {
+            WorldPoint now = Rs2Player.getWorldLocation();
+            return now != null
+                    && (!now.equals(before)
+                    || Rs2Player.isMoving()
+                    || now.distanceTo2D(target) <= tightFinishThreshold(target, path.get(path.size() - 1), distance));
+        }, 1_200);
+
+        log.info("[Walker] Stall recovery click clicked=true moved={} target={} playerBefore={} clickTarget={} waypoint={} idx={}",
+                moved, target, before, clickedPoint, waypoint, targetIdx);
+
+        if (moved) {
+            interimTargetWp = clickedPoint;
+            interimTargetIdx = targetIdx;
+            interimSetAtMs = System.currentTimeMillis();
+            interimLastProgressAtMs = interimSetAtMs;
+            interimLastBestPathIdx = getClosestTileIndex(path);
+            interimLastRetargetAtMs = interimSetAtMs;
+        }
+        return moved;
     }
 
     private static boolean hasPendingExplicitTransportStepBeforeArrival(List<WorldPoint> path,
