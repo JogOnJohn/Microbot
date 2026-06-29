@@ -131,10 +131,11 @@ public class Rs2Walker {
 	private static volatile long lastPartialTransRecalcMs = 0L;
 	private static final long PARTIAL_TRANS_RECAL_COOLDOWN_MS = 3500L;
 
-	private static final int INTERIM_CLOSE_TILES = 4;
-	private static final long INTERIM_PROGRESS_TIMEOUT_MS = 2500L;
-	private static final long INTERIM_MAX_AGE_MS = 10_000L;
-	private static final long INTERIM_RETARGET_COOLDOWN_MS = 900L;
+	private static final int INTERIM_CLOSE_TILES = 6;
+	private static final long INTERIM_PROGRESS_TIMEOUT_MS = 1500L;
+	private static final long INTERIM_MAX_AGE_MS = 6_000L;
+    private static final double WALK_MINIMAP_ZOOM = 3.0;
+	private static final long INTERIM_RETARGET_COOLDOWN_MS = 500L;
     private static final long RAW_SCAN_DOOR_FOCUS_MAX_MS = 2200L;
     private static final int RAW_SCAN_DOOR_FOCUS_MAX_ATTEMPTS = 3;
     private static final long DOOR_POST_INTERACT_SETTLE_MS = 900L;
@@ -1237,7 +1238,7 @@ public class Rs2Walker {
                 }
                 lastMovedTimeMs = System.currentTimeMillis();
                 stuckCount = 0;
-                setTarget(target);
+                recalculatePath();
                 continue;
             }
             if (stuckCount > 10) {
@@ -1716,6 +1717,23 @@ public class Rs2Walker {
 					if (interim != null && interim.getPlane() == playerLoc.getPlane()) {
 						int interimDist = interim.distanceTo2D(playerLoc);
 						if (interimDist > INTERIM_CLOSE_TILES) {
+                            int bestIdxNow = getClosestTileIndex(path);
+                            long interimAgeMs = interimSetAtMs > 0L ? System.currentTimeMillis() - interimSetAtMs : 0L;
+                            boolean passedInterimIndex = interimTargetIdx >= 0
+                                    && bestIdxNow > interimTargetIdx
+                                    && interimAgeMs > 700L;
+                            boolean overshotInterim = interimAgeMs > 900L && interimDist > MINIMAP_REACH_EUCLIDEAN;
+                            if (passedInterimIndex || overshotInterim) {
+                                log.info("[Walker] Clearing stale interim target={} player={} dist={} bestIdx={} interimIdx={} ageMs={} reason={}",
+                                        interim, playerLoc, interimDist, bestIdxNow, interimTargetIdx, interimAgeMs,
+                                        passedInterimIndex ? "passed-index" : "overshot-distance");
+                                interimTargetWp = null;
+                                interimTargetIdx = -1;
+                                interimSetAtMs = 0L;
+                                interimLastProgressAtMs = 0L;
+                                interimLastBestPathIdx = -1;
+                                interimLastRetargetAtMs = 0L;
+                            } else {
 							final WorldPoint interimFinal = interim;
 							// If we're already moving toward the interim checkpoint, just wait until
 							// we get close. If we've stopped (no movement), re-click the same interim
@@ -1725,7 +1743,7 @@ public class Rs2Walker {
 								sleepUntil(() ->
 												interimFinal.distanceTo2D(Rs2Player.getWorldLocation()) <= INTERIM_CLOSE_TILES
 														|| !Rs2Player.isMoving(),
-										2000);
+										900);
 								if (posBeforeWait.distanceTo2D(Rs2Player.getWorldLocation()) > 0 || Rs2Player.isMoving()) {
 									lastMovedTimeMs = System.currentTimeMillis();
 									stuckCount = 0;
@@ -1745,6 +1763,7 @@ public class Rs2Walker {
 								interimLastBestPathIdx = -1;
 								interimLastRetargetAtMs = 0L;
 							}
+                            }
 						}
 						// Close enough: allow selecting a new checkpoint.
 						interimTargetWp = null;
@@ -1812,7 +1831,7 @@ public class Rs2Walker {
 								interimLastProgressAtMs = nowMs;
 							}
 							boolean movingOrRecentlyMoved = Rs2Player.isMoving()
-									|| (lastMovedTimeMs > 0 && nowMs - lastMovedTimeMs < 1500);
+									|| (lastMovedTimeMs > 0 && nowMs - lastMovedTimeMs < 900);
 							boolean makingRecentProgress = interimLastProgressAtMs > 0
 									&& nowMs - interimLastProgressAtMs < INTERIM_PROGRESS_TIMEOUT_MS;
 							boolean retargetCoolingDown = interimLastRetargetAtMs > 0
@@ -1849,27 +1868,33 @@ public class Rs2Walker {
                                 "to=" + compactWorldPoint(clickTarget));
                     }
                     markStartupPhase("click_candidate_found", target, "to=" + compactWorldPoint(clickTarget));
+                    WorldPoint actualClickTarget = clickTarget;
                     boolean clicked = Rs2Walker.walkMiniMap(clickTarget);
                     if (!clicked) {
-                        clicked = walkMiniMapToward(clickTarget, playerLoc, MINIMAP_REACH_EUCLIDEAN - 1);
+                        actualClickTarget = walkMiniMapTowardTarget(clickTarget, playerLoc, MINIMAP_REACH_EUCLIDEAN - 1);
+                        clicked = actualClickTarget != null;
                     }
                     if (walkCancelledDiag(target, "processWalk:after-minimap-click", processWalkTail)) {
                         return WalkerState.EXIT;
+                    }
+                    if (clicked && actualClickTarget != null && !actualClickTarget.equals(clickTarget)) {
+                        log.info("[Walker] Minimap fallback selected original={} actual={} waypoint={} idx={} player={}",
+                                clickTarget, actualClickTarget, targetWp, targetIdx, posBefore);
                     }
                     lastAttemptedMinimapClick = targetWp;
                     lastAttemptedMinimapClickOk = clicked;
                     lastAttemptedMinimapClickAtMs = nowMs;
                     if (clicked) {
                         markFirstMovementClick("first_minimap_click", target, posBefore,
-                                "to=" + compactWorldPoint(clickTarget));
-						interimTargetWp = targetWp;
+                                "to=" + compactWorldPoint(actualClickTarget));
+						interimTargetWp = actualClickTarget;
 						interimTargetIdx = targetIdx;
 						interimSetAtMs = nowMs;
 						interimLastProgressAtMs = nowMs;
 						interimLastBestPathIdx = getClosestTileIndex(path);
 						interimLastRetargetAtMs = nowMs;
 
-                        final WorldPoint b = targetWp;
+                        final WorldPoint b = actualClickTarget;
                         final WorldPoint before = posBefore;
                         // Proximity-primary wake: let each click cover most of its distance
                         // before re-clicking, like a human. The progress cap is a safety net
@@ -2322,23 +2347,28 @@ public class Rs2Walker {
 
 
     public static boolean walkMiniMap(WorldPoint worldPoint) {
-        return walkMiniMap(worldPoint, 5);
+        return walkMiniMap(worldPoint, WALK_MINIMAP_ZOOM);
     }
 
     static boolean walkMiniMapToward(WorldPoint target, WorldPoint playerLoc, int maxEuclidean) {
+        return walkMiniMapTowardTarget(target, playerLoc, maxEuclidean) != null;
+    }
+
+    static WorldPoint walkMiniMapTowardTarget(WorldPoint target, WorldPoint playerLoc, int maxEuclidean) {
         if (target == null || playerLoc == null || target.getPlane() != playerLoc.getPlane()) {
-            return false;
+            return null;
         }
 
         int dx = target.getX() - playerLoc.getX();
         int dy = target.getY() - playerLoc.getY();
         double distance = Math.sqrt(dx * dx + dy * dy);
         if (distance <= 1) {
-            return false;
+            return null;
         }
 
-        if (walkReachableMiniMapToward(target, playerLoc, maxEuclidean)) {
-            return true;
+        WorldPoint reachableTarget = walkReachableMiniMapTowardTarget(target, playerLoc, maxEuclidean);
+        if (reachableTarget != null) {
+            return reachableTarget;
         }
 
         int cappedRadius = Math.max(2, maxEuclidean);
@@ -2358,14 +2388,18 @@ public class Rs2Walker {
             }
             if (Rs2Walker.walkMiniMap(fallback)) {
                 log.info("[Walker] Minimap click target {} was outside clip; used fallback {}", target, fallback);
-                return true;
+                return fallback;
             }
         }
 
-        return false;
+        return null;
     }
 
     private static boolean walkReachableMiniMapToward(WorldPoint target, WorldPoint playerLoc, int maxEuclidean) {
+        return walkReachableMiniMapTowardTarget(target, playerLoc, maxEuclidean) != null;
+    }
+
+    private static WorldPoint walkReachableMiniMapTowardTarget(WorldPoint target, WorldPoint playerLoc, int maxEuclidean) {
         int currentDistance = euclideanSq(playerLoc, target);
         return Rs2Tile.getReachableTilesFromTile(playerLoc, Math.max(2, maxEuclidean)).keySet().stream()
                 .filter(tile -> tile != null
@@ -2380,9 +2414,9 @@ public class Rs2Walker {
                 .findFirst()
                 .map(tile -> {
                     log.info("[Walker] Minimap click target {} was outside clip; used reachable fallback {}", target, tile);
-                    return true;
+                    return tile;
                 })
-                .orElse(false);
+                .orElse(null);
     }
 
     private static WorldPoint findFurthestReachableRawPathPoint(List<WorldPoint> rawPath,
@@ -3825,7 +3859,10 @@ public class Rs2Walker {
                                         probe, fromWp, toWp);
                             }
                             markStationaryDoorOpened(probe);
-                            return false;
+                            WebWalkLog.spInfo("door_interact_no_traverse_yield | mode=segment-door probe={} from={} to={} before={} after={}",
+                                    compactWorldPoint(probe), compactWorldPoint(fromWp), compactWorldPoint(toWp),
+                                    compactWorldPoint(posBefore), compactWorldPoint(posAfter));
+                            return true;
                         }
                         markStationaryDoorOpened(probe);
                         markNearbyDoorFamilyOpened(object, probe, action, SEGMENT_DOOR_FAMILY_MARK_RADIUS);
@@ -5512,9 +5549,14 @@ public class Rs2Walker {
         if (goal == null) {
             return;
         }
-        // Must not call setTarget(null)+setTarget(goal): that briefly clears {@link #currentTarget},
-        // and processWalk on another thread treats null as cancel (isWalkCancelled).
-        Rs2WalkerLifecycleRuntime.applyWalkerDestination(goal);
+        WorldPoint start = Rs2Player.getWorldLocation();
+        if (start == null) {
+            Rs2WalkerLifecycleRuntime.applyWalkerDestination(goal);
+            return;
+        }
+        interimTargetWp = null;
+        ShortestPathPlugin.setLastLocation(start);
+        Rs2WalkerLifecycleRuntime.restartPathfinding(start, goal);
     }
 
     /**

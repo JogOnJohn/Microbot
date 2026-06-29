@@ -24,6 +24,7 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.coords.Rs2WorldPoint;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2BankID;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -93,6 +94,11 @@ public class Rs2Bank {
     private static final AtomicInteger BANK_LIVE_EPOCH = new AtomicInteger(0);
 
     private static final int BANK_OPEN_CACHE_SYNC_TIMEOUT_MS = 4_000;
+    private static final int VISIBLE_BANK_FAST_PATH_RADIUS = 32;
+    private static final int VISIBLE_BANK_OPEN_TIMEOUT_MS = 2_500;
+    private static final int VISIBLE_BANK_LONG_DISTANCE_MIN_TIMEOUT_MS = 8_000;
+    private static final int VISIBLE_BANK_LONG_DISTANCE_MAX_TIMEOUT_MS = 14_000;
+    private static final int VISIBLE_BANK_RANDOM_DISTANCE_MARGIN = 3;
 
     /**
      * Monotonic counter incremented in {@link #updateLocalBank} for each applied bank container snapshot.
@@ -1967,6 +1973,154 @@ public class Rs2Bank {
         }
     }
 
+    private static boolean tryOpenVisibleBank() {
+        try {
+            if (Microbot.getClient().isWidgetSelected()) {
+                Microbot.getMouse().click();
+            }
+
+            if (isOpen()) return true;
+
+            WorldPoint anchor = Rs2Player.getWorldLocation();
+            if (anchor == null) return false;
+
+            int epochBeforeInteract = BANK_LIVE_EPOCH.get();
+
+            Optional<TileObject> nearestObj = pickVisibleBankObject(anchor);
+
+            boolean interacted;
+            WorldPoint targetLocation;
+            if (nearestObj.isPresent()) {
+                targetLocation = nearestObj.get().getWorldLocation();
+                if (log.isInfoEnabled()) {
+                    log.info("[Rs2Bank] Trying visible bank object fast path at {} distance={}", targetLocation, anchor.distanceTo2D(targetLocation));
+                }
+                interacted = Rs2GameObject.interact(nearestObj.get(), "Bank");
+            } else {
+                Rs2NpcModel banker = Rs2Npc.getBankerNPC();
+                if (banker == null
+                        || banker.getWorldLocation() == null
+                        || banker.getWorldLocation().distanceTo(anchor) > VISIBLE_BANK_FAST_PATH_RADIUS
+                        || !Rs2Npc.hasLineOfSight(banker)) {
+                    if (log.isInfoEnabled()) {
+                        log.info("[Rs2Bank] No visible bank target found within {} tiles, falling back to walker", VISIBLE_BANK_FAST_PATH_RADIUS);
+                    }
+                    return false;
+                }
+
+                if (log.isInfoEnabled()) {
+                    log.info("[Rs2Bank] Trying visible banker NPC fast path at {}", banker.getWorldLocation());
+                }
+                targetLocation = banker.getWorldLocation();
+                interacted = Rs2Npc.interact(banker, "Bank");
+            }
+
+            if (!interacted || !awaitVisibleBankOpenSince(epochBeforeInteract, targetLocation)) {
+                if (log.isInfoEnabled()) {
+                    log.info("[Rs2Bank] Visible bank fast path did not open the bank, falling back to walker");
+                }
+                return false;
+            }
+            return awaitBankContainerSnapshotSince(epochBeforeInteract);
+        } catch (Exception ex) {
+            Microbot.logStackTrace("Rs2Bank", ex);
+            return false;
+        }
+    }
+
+    private static boolean awaitVisibleBankOpenSince(int epochBeforeInteract, WorldPoint targetLocation) {
+        int waitTime = getVisibleBankOpenTimeout(targetLocation);
+        if (log.isInfoEnabled()) {
+            log.info("[Rs2Bank] Waiting up to {}ms for visible bank fast path", waitTime);
+        }
+
+        if (sleepUntil(Rs2Bank::isOpen, waitTime)) {
+            return awaitBankContainerSnapshotSince(epochBeforeInteract);
+        }
+
+        if (targetLocation == null || !Rs2Player.isMoving()) {
+            return false;
+        }
+
+        sleepUntil(() -> !Rs2Player.isMoving() || Rs2Bank.isOpen(), 5_000);
+        if (Rs2Bank.isOpen()) {
+            return awaitBankContainerSnapshotSince(epochBeforeInteract);
+        }
+
+        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+        if (currentLocation == null || currentLocation.distanceTo2D(targetLocation) > 8) {
+            return false;
+        }
+
+        TileObject object = Rs2GameObject.findBank(10);
+        if (object == null) {
+            object = Rs2GameObject.findGrandExchangeBooth(10);
+        }
+        if (object == null || !Rs2GameObject.interact(object, "Bank")) {
+            return false;
+        }
+
+        return sleepUntil(Rs2Bank::isOpen, VISIBLE_BANK_OPEN_TIMEOUT_MS)
+                && awaitBankContainerSnapshotSince(epochBeforeInteract);
+    }
+
+    private static int getVisibleBankOpenTimeout(WorldPoint targetLocation) {
+        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+        if (currentLocation == null || targetLocation == null) {
+            return VISIBLE_BANK_OPEN_TIMEOUT_MS;
+        }
+
+        int distance = currentLocation.distanceTo2D(targetLocation);
+        if (distance <= 8) {
+            return VISIBLE_BANK_OPEN_TIMEOUT_MS;
+        }
+
+        int scaledTimeout = VISIBLE_BANK_OPEN_TIMEOUT_MS + (distance * 450);
+        return Math.min(VISIBLE_BANK_LONG_DISTANCE_MAX_TIMEOUT_MS, Math.max(VISIBLE_BANK_LONG_DISTANCE_MIN_TIMEOUT_MS, scaledTimeout));
+    }
+
+    private static Optional<TileObject> pickVisibleBankObject(WorldPoint anchor) {
+        List<TileObject> candidates = Rs2GameObject.getAll(object ->
+                        Rs2BankID.BANK_ID_SET.contains(object.getId())
+                                && Rs2GameObject.hasAction(object, "Bank", false),
+                anchor,
+                VISIBLE_BANK_FAST_PATH_RADIUS);
+
+        TileObject grandExchangeBooth = Rs2GameObject.findGrandExchangeBooth(VISIBLE_BANK_FAST_PATH_RADIUS);
+        if (grandExchangeBooth != null) {
+            candidates.add(grandExchangeBooth);
+        }
+
+        candidates = candidates.stream()
+                .filter(Objects::nonNull)
+                .filter(object -> object.getWorldLocation() != null)
+                .collect(Collectors.toList());
+
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+
+        int closestDistance = candidates.stream()
+                .mapToInt(object -> object.getWorldLocation().distanceTo2D(anchor))
+                .min()
+                .orElse(Integer.MAX_VALUE);
+
+        List<TileObject> nearestCandidates = candidates.stream()
+                .filter(object -> object.getWorldLocation().distanceTo2D(anchor) <= closestDistance + VISIBLE_BANK_RANDOM_DISTANCE_MARGIN)
+                .collect(Collectors.toList());
+
+        TileObject selected = nearestCandidates.get(Rs2Random.between(0, nearestCandidates.size() - 1));
+        if (log.isInfoEnabled()) {
+            log.info("[Rs2Bank] Selected visible bank candidate {}/{} closestDistance={} selectedDistance={} margin={}",
+                    nearestCandidates.size(),
+                    candidates.size(),
+                    closestDistance,
+                    selected.getWorldLocation().distanceTo2D(anchor),
+                    VISIBLE_BANK_RANDOM_DISTANCE_MARGIN);
+        }
+        return Optional.of(selected);
+    }
+
     /**
      * Opens the Bank Collection Box in the game if it is not already open.
      * The method determines the closest and most appropriate object or NPC to interact with
@@ -2500,6 +2654,9 @@ public class Rs2Bank {
         }
         if (Rs2Bank.isOpen()) return true;
         Rs2Player.toggleRunEnergy(toggleRun);
+        if (tryOpenVisibleBank()) {
+            return true;
+        }
         Microbot.status = "Walking to nearest bank " + bankLocation.toString();
         boolean result = Rs2Walker.getDistanceBetween(Rs2Player.getWorldLocation(), bankLocation.getWorldPoint()) <= 8;
         if (!result) {
