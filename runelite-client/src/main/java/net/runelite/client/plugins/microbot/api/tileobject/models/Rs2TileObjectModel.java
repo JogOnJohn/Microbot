@@ -17,6 +17,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.Arrays;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
@@ -238,12 +239,12 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             }
 
 
-            int index = 0;
+            int index = action == null || action.isEmpty() ? 0 : -1;
             String objName = "";
-            if (action != null) {
+            String[] actions = new String[0];
+            if (action != null && !action.isEmpty()) {
                 //performance improvement to only get compoisiton if action has been specified
                 var objComp = getObjectComposition();
-                String[] actions;
                 if (objComp.getImpostorIds() != null && objComp.getImpostor() != null) {
                     actions = objComp.getImpostor().getActions();
                 } else {
@@ -258,9 +259,6 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                     }
                 }
 
-                if (index == actions.length)
-                    index = 0;
-
                 objName = objComp.getName();
 
                 // both hands must be free before using MINECART
@@ -272,7 +270,9 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             }
 
             if (index == -1) {
-                log.warn("Failed to interact with object {} - action '{}' not found", getId(), action);
+                log.warn("Failed to interact with object {} at {} - action '{}' not found in {}",
+                        getId(), getWorldLocation(), action, Arrays.toString(actions));
+                return false;
             }
 
 
@@ -289,6 +289,8 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             } else if (index == 4) {
                 menuAction = MenuAction.GAME_OBJECT_FIFTH_OPTION;
             }
+            log.info("[QuestObjectClick] object={} name='{}' action='{}' optionIndex={} menuAction={} location={}",
+                    getId(), objName, action, index, menuAction, getWorldLocation());
 
             if (!Rs2Camera.isTileOnScreen(getLocalLocation())) {
                 Rs2Camera.turnTo(tileObject);

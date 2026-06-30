@@ -131,7 +131,7 @@ public class Rs2Walker {
 	private static volatile long lastPartialTransRecalcMs = 0L;
 	private static final long PARTIAL_TRANS_RECAL_COOLDOWN_MS = 3500L;
 
-	private static final int INTERIM_CLOSE_TILES = 6;
+	private static final int INTERIM_CLOSE_TILES = 7;
 	private static final long INTERIM_PROGRESS_TIMEOUT_MS = 1500L;
 	private static final long INTERIM_MAX_AGE_MS = 6_000L;
     private static final double WALK_MINIMAP_ZOOM = 3.0;
@@ -1703,7 +1703,7 @@ public class Rs2Walker {
                     exitReason = "door-settling-yield";
                     break;
                 }
-                nextWalkingDistance = path.size() <= 5 ? 0 : Rs2Random.between(9, 12);
+                nextWalkingDistance = path.size() <= 5 ? 0 : Rs2Random.between(10, 12);
                 int dist2d = currentWorldPoint.distanceTo2D(Rs2Player.getWorldLocation());
                 if (dist2d > nextWalkingDistance) {
                     tmarkPostTransport("post_transport_click_eligibility", target,
@@ -1726,6 +1726,9 @@ public class Rs2Walker {
                                     && bestIdxNow > interimTargetIdx
                                     && interimAgeMs > 700L;
                             boolean overshotInterim = interimAgeMs > 900L && interimDist > MINIMAP_REACH_EUCLIDEAN;
+                            walkerDiag("interim-check interim=%s dist=%d close=%d player=%s bestIdx=%d interimIdx=%d ageMs=%d passed=%s overshot=%s moving=%s",
+                                    interim, interimDist, INTERIM_CLOSE_TILES, playerLoc, bestIdxNow, interimTargetIdx,
+                                    interimAgeMs, passedInterimIndex, overshotInterim, Rs2Player.isMoving());
                             if (passedInterimIndex || overshotInterim) {
                                 log.info("[Walker] Clearing stale interim target={} player={} dist={} bestIdx={} interimIdx={} ageMs={} reason={}",
                                         interim, playerLoc, interimDist, bestIdxNow, interimTargetIdx, interimAgeMs,
@@ -1736,6 +1739,15 @@ public class Rs2Walker {
                                 interimLastProgressAtMs = 0L;
                                 interimLastBestPathIdx = -1;
                                 interimLastRetargetAtMs = 0L;
+                                if (overshotInterim && !passedInterimIndex) {
+                                    walkerDiag("interim-overshot-recalc player=%s target=%s interim=%s pathSize=%d bestIdx=%d interimIdx=%d",
+                                            playerLoc, target, interim, path.size(), bestIdxNow, interimTargetIdx);
+                                    Telemetry.recordOffPathRecalc(playerLoc, path.size());
+                                    WebWalkLog.recalc("stale_interim_overshot");
+                                    recalculatePath();
+                                    exitReason = "stale-interim-overshot";
+                                    break;
+                                }
                             } else {
 							final WorldPoint interimFinal = interim;
 							// If we're already moving toward the interim checkpoint, just wait until
@@ -1759,6 +1771,8 @@ public class Rs2Walker {
 								// Not moving but still far from the interim checkpoint. Treat the interim
 								// as stale and pick a fresh checkpoint below (could still resolve to the
 								// same tile, but ensures we actually issue a new click).
+								walkerDiag("interim-stale-not-moving interim=%s interimDist=%d player=%s bestIdx=%d interimIdx=%d",
+										interimFinal, interimDist, playerLoc, bestIdxNow, interimTargetIdx);
 								interimTargetWp = null;
 								interimTargetIdx = -1;
 								interimSetAtMs = 0L;
@@ -1819,6 +1833,9 @@ public class Rs2Walker {
 					if (sticky != null && sticky.getPlane() == playerLoc.getPlane()) {
 						int stickyDist = sticky.distanceTo2D(playerLoc);
 						if (stickyDist <= INTERIM_CLOSE_TILES || nowMs - interimSetAtMs > INTERIM_MAX_AGE_MS) {
+							walkerDiag("sticky-clear sticky=%s stickyDist=%d close=%d ageMs=%d reason=%s player=%s",
+									sticky, stickyDist, INTERIM_CLOSE_TILES, nowMs - interimSetAtMs,
+									stickyDist <= INTERIM_CLOSE_TILES ? "close" : "max-age", playerLoc);
 							interimTargetWp = null;
 							interimTargetIdx = -1;
 							interimSetAtMs = 0L;
@@ -1839,10 +1856,17 @@ public class Rs2Walker {
 									&& nowMs - interimLastProgressAtMs < INTERIM_PROGRESS_TIMEOUT_MS;
 							boolean retargetCoolingDown = interimLastRetargetAtMs > 0
 									&& nowMs - interimLastRetargetAtMs < INTERIM_RETARGET_COOLDOWN_MS;
+							walkerDiag("sticky-eval sticky=%s stickyDist=%d player=%s targetWp=%s targetIdx=%d pathIdx=%d stickyPathIdx=%d movingRecent=%s progressRecent=%s cooldown=%s progressAgeMs=%d cooldownAgeMs=%d",
+									sticky, stickyDist, playerLoc, targetWp, targetIdx, i, interimTargetIdx,
+									movingOrRecentlyMoved, makingRecentProgress, retargetCoolingDown,
+									interimLastProgressAtMs > 0 ? nowMs - interimLastProgressAtMs : -1,
+									interimLastRetargetAtMs > 0 ? nowMs - interimLastRetargetAtMs : -1);
 
 							// While moving and making progress, keep the existing interim target.
 							// Cooldown prevents thrash when the route bends and the minimap flag drops.
 							if ((movingOrRecentlyMoved && makingRecentProgress) || retargetCoolingDown) {
+								walkerDiag("sticky-keep sticky=%s replacesTarget=%s targetIdx=%d pathIdx=%d",
+										sticky, targetWp, targetIdx, i);
 								targetWp = sticky;
 								// Keep the loop index conservative: the sticky point might be interpolated
 								// and not exist in the path.
@@ -1871,6 +1895,9 @@ public class Rs2Walker {
                                 "to=" + compactWorldPoint(clickTarget));
                     }
                     markStartupPhase("click_candidate_found", target, "to=" + compactWorldPoint(clickTarget));
+                    walkerDiag("minimap-click-candidate player=%s target=%s pathIdx=%d targetIdx=%d waypoint=%s clickTarget=%s interim=%s dist2d=%d nextWalkingDistance=%d reachable=%s",
+                            posBefore, target, i, targetIdx, targetWp, clickTarget, interimTargetWp,
+                            dist2d, nextWalkingDistance, inInstance || Rs2Tile.isTileReachable(clickTarget));
                     WorldPoint actualClickTarget = clickTarget;
                     boolean clicked = Rs2Walker.walkMiniMap(clickTarget);
                     if (!clicked) {
@@ -1890,6 +1917,8 @@ public class Rs2Walker {
                     if (clicked) {
                         markFirstMovementClick("first_minimap_click", target, posBefore,
                                 "to=" + compactWorldPoint(actualClickTarget));
+						walkerDiag("minimap-click-result clicked=true player=%s actual=%s waypoint=%s targetIdx=%d pathIdx=%d",
+								posBefore, actualClickTarget, targetWp, targetIdx, i);
 						interimTargetWp = actualClickTarget;
 						interimTargetIdx = targetIdx;
 						interimSetAtMs = nowMs;
@@ -1904,8 +1933,8 @@ public class Rs2Walker {
                         // for the rare case where proximity never fires (player detoured, got
                         // blocked by another entity, etc.) — set just above max reach so it
                         // only triggers when something is actually wrong.
-                        final int proximityWake = Rs2Random.between(2, 4);
-                        final int progressCap = 16;
+                        final int proximityWake = Rs2Random.between(4, 6);
+                        final int progressCap = 12;
                         final long clickedAt = System.currentTimeMillis();
                         sleepUntil(() -> {
                             if (isWalkCancelled(target)) return true;
@@ -1917,6 +1946,10 @@ public class Rs2Walker {
                             return before.distanceTo2D(now) >= progressCap;
                         }, 2000);
                         WorldPoint afterClickWait = Rs2Player.getWorldLocation();
+						walkerDiag("minimap-click-wait-done target=%s clickedTo=%s before=%s after=%s moving=%s proximityWake=%d progressCap=%d distToClick=%d progressed=%d",
+								target, b, before, afterClickWait, Rs2Player.isMoving(), proximityWake, progressCap,
+								afterClickWait != null ? b.distanceTo2D(afterClickWait) : -1,
+								afterClickWait != null ? before.distanceTo2D(afterClickWait) : -1);
                         if (afterClickWait != null && afterClickWait.equals(before) && !Rs2Player.isMoving()
                                 && walkReachableMiniMapToward(b, before, MINIMAP_REACH_EUCLIDEAN - 1)) {
                             sleepUntil(() -> {
@@ -1990,15 +2023,24 @@ public class Rs2Walker {
             }
 
             if (!"end-of-path".equals(exitReason)) {
-                WebWalkLog.earlyExit(exitReason,
-                        Rs2Player.getWorldLocation(),
-                        target,
-                        path.get(path.size() - 1),
-                        indexOfStartPoint,
-                        path.size());
+                if ("interim-in-flight".equals(exitReason) || "off-path-but-moving".equals(exitReason)) {
+                    WebWalkLog.yieldDebug(exitReason,
+                            Rs2Player.getWorldLocation(),
+                            target,
+                            path.get(path.size() - 1),
+                            indexOfStartPoint,
+                            path.size());
+                } else {
+                    WebWalkLog.earlyExit(exitReason,
+                            Rs2Player.getWorldLocation(),
+                            target,
+                            path.get(path.size() - 1),
+                            indexOfStartPoint,
+                            path.size());
+                }
                 walkerDiag("early-exit detail reason=%s interim=%s doorOrTransport=%s partialPath=%s",
-                        exitReason,
-                        interimTargetWp,
+                      exitReason,
+                      interimTargetWp,
                         doorOrTransportResult,
                         partialPath);
             }

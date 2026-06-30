@@ -1435,12 +1435,20 @@ public class QuestScript extends Script {
         if (hasLineOfSightToObject(object) || object != null && (Rs2Camera.isTileOnScreen(object.getLocalLocation()) || object.getCanvasLocation() != null)) {
             Rs2Walker.clearWalkingRoute("quest-helper:object-step-interact");
 
+            boolean clicked;
+            String objectAction = chooseCorrectObjectOption(step, object);
+            Microbot.log(Level.INFO, "[QuestHelper] object-step click id=" + object.getId()
+                    + " name='" + object.getName() + "' action='" + objectAction
+                    + "' location=" + object.getWorldLocation() + " player=" + Rs2Player.getWorldLocation());
             if (itemId == -1)
-                object.click(chooseCorrectObjectOption(step, object));
+                clicked = object.click(objectAction);
             else {
                 Rs2Inventory.use(itemId);
-                object.click("");
+                clicked = object.click("");
             }
+
+            if (!clicked)
+                return false;
 
             sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating());
             sleep(100);
