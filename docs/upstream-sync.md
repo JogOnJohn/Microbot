@@ -2,10 +2,13 @@
 
 Microbot tracks two upstreams:
 
+- `origin`: `https://github.com/JogOnJohn/Microbot.git`
 - `upstream`: `https://github.com/chsami/Microbot.git`
 - `runelite`: `https://github.com/runelite/runelite.git`
 
-Use `upstream` for normal Microbot branch updates. Use `runelite` only when manually reviewing or integrating RuneLite base changes into a Microbot update branch.
+Use `upstream` for normal Microbot branch updates. Keep `origin/development` as the clean fork mirror of `upstream/development`. Use `local/development` for local integration work and push it to `origin/local/development` as a backup branch. Promote `local/development` to `origin/development` only when intentionally preparing PR-ready work.
+
+Use `runelite` only when manually reviewing or integrating RuneLite base changes into a Microbot update branch. It is a vendor source, not the normal Microbot upstream.
 
 ## Refresh Remotes
 
@@ -23,7 +26,7 @@ git remote -v
 
 ## Update Microbot Branches
 
-Fast-forward the fork branch from Microbot upstream when there are no local-only commits:
+Fast-forward the clean fork branch from Microbot upstream when there are no local-only commits:
 
 ```powershell
 git fetch --all --prune
@@ -31,7 +34,7 @@ git merge-base --is-ancestor origin/development upstream/development
 git push origin upstream/development:refs/heads/development
 ```
 
-For the local working base branch, merge the refreshed Microbot upstream and validate before pushing:
+For the local working branch, merge the refreshed Microbot upstream, validate, and push to the backup branch:
 
 ```powershell
 git switch local/development
@@ -39,6 +42,14 @@ git merge --no-edit upstream/development
 ./gradlew.bat :client:compileJava
 git push origin local/development
 ```
+
+Promote local work to the fork's clean PR branch only when that work is ready to send upstream:
+
+```powershell
+git push origin local/development:refs/heads/development
+```
+
+After promotion, open a PR from `JogOnJohn/Microbot:development` to `chsami/Microbot:development`.
 
 ## Manual RuneLite Update Flow
 
