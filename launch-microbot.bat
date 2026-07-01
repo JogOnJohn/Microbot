@@ -2,8 +2,8 @@
 setlocal
 
 set "REPO_DIR=%~dp0"
-set "JAVA_EXE=%USERPROFILE%\.jdks\temurin-17.0.19\bin\javaw.exe"
-if not exist "%JAVA_EXE%" set "JAVA_EXE=javaw.exe"
+set "JAVA_EXE=%USERPROFILE%\.jdks\temurin-17.0.19\bin\java.exe"
+if not exist "%JAVA_EXE%" set "JAVA_EXE=java.exe"
 
 for /f "tokens=2 delims==" %%V in ('findstr /b "microbot.version=" "%REPO_DIR%gradle.properties"') do set "MICROBOT_VERSION=%%V"
 set "JAR_PATH=%REPO_DIR%runelite-client\build\libs\microbot-%MICROBOT_VERSION%.jar"
@@ -23,4 +23,14 @@ if not exist "%JAR_PATH%" (
     exit /b 1
 )
 
-start "Microbot" /D "%REPO_DIR%" "%JAVA_EXE%" -jar "%JAR_PATH%"
+pushd "%REPO_DIR%"
+for /f "delims=" %%B in ('git branch --show-current 2^>nul') do set "GIT_BRANCH=%%B"
+title Microbot - %GIT_BRANCH%
+echo Launching Microbot from %REPO_DIR%
+if defined GIT_BRANCH echo Branch: %GIT_BRANCH%
+echo Jar: %JAR_PATH%
+echo.
+"%JAVA_EXE%" -jar "%JAR_PATH%"
+echo.
+echo Microbot exited with code %ERRORLEVEL%.
+pause
