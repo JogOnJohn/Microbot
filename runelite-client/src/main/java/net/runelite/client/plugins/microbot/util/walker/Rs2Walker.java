@@ -1330,6 +1330,7 @@ public class Rs2Walker {
             String exitReason = "end-of-path";
             final int HANDLER_RANGE = 13;
             Map<String, WorldPoint> doorEdgesAttemptedThisTail = new HashMap<>();
+            Map<Integer, WorldPoint> unreachableRecoveryAttemptsThisWalk = new HashMap<>();
             ObstaclePolicy startupPolicy = obstaclePolicyForCurrentPhase();
 
             boolean postTransportWindow = lastTransportHandledAtMs > 0
@@ -1648,6 +1649,12 @@ public class Rs2Walker {
                                 recoverTarget = interpolateClickableTarget(path, i, playerLoc,
                                         path.get(i), RECOVERY_MINIMAP_REACH_EUCLIDEAN - 1,
                                         wp -> inInstance || isKnownWalkableOrUnloaded(wp));
+                            }
+                            if (!markUnreachableRecoveryAttempt(unreachableRecoveryAttemptsThisWalk, recoverIdx, playerLoc)) {
+                                WebWalkLog.recalc("repeat_unreachable_recovery");
+                                recalculatePath();
+                                exitReason = "repeat-unreachable-recovery-recalc";
+                                break;
                             }
                             boolean clicked = recoverTarget != null
                                     && !recoverTarget.equals(playerLoc)
@@ -3898,10 +3905,12 @@ public class Rs2Walker {
 
                 if (object instanceof WallObject) {
                     WallObject wallObj = (WallObject) object;
+                    if (!wallDoorTouchesSegment(wallObj, fromWp, toWp)) {
+                        Telemetry.recordDoorReject("wall-segment-mismatch");
+                        continue;
+                    }
                     int orientationA = wallObj.getOrientationA();
                     int orientationB = wallObj.getOrientationB();
-                    boolean pathTouchesBothEnds = probe.distanceTo(fromWp) <= 1 && probe.distanceTo(toWp) <= 1
-                            && fromWp.distanceTo(toWp) >= 1 && fromWp.distanceTo(toWp) <= 2;
                     boolean orientOk = false;
                     if (orientationA != 0) {
                         orientOk = searchNeighborPoint(orientationA, probe, fromWp)
@@ -3910,9 +3919,6 @@ public class Rs2Walker {
                     if (!orientOk && orientationB != 0) {
                         orientOk = searchNeighborPoint(orientationB, probe, fromWp)
                                 || searchNeighborPoint(orientationB, probe, toWp);
-                    }
-                    if (!orientOk && pathTouchesBothEnds) {
-                        orientOk = true;
                     }
                     if (orientOk) {
                         log.info("Found WallObject door - name {} with action {} at {} - from {} to {}", name, action, probe, fromWp, toWp);
@@ -4777,6 +4783,22 @@ public class Rs2Walker {
             return false;
         }
         attemptedDoorEdgesThisPass.put(edgeKey, playerBeforeAttempt);
+        return true;
+    }
+
+    private static boolean markUnreachableRecoveryAttempt(Map<Integer, WorldPoint> attempts,
+                                                          int recoverIdx,
+                                                          WorldPoint playerLoc) {
+        if (attempts == null || playerLoc == null || recoverIdx < 0) {
+            return true;
+        }
+        WorldPoint previous = attempts.get(recoverIdx);
+        if (previous != null
+                && previous.getPlane() == playerLoc.getPlane()
+                && previous.distanceTo2D(playerLoc) <= 2) {
+            return false;
+        }
+        attempts.put(recoverIdx, playerLoc);
         return true;
     }
 
