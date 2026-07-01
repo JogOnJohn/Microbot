@@ -1,6 +1,7 @@
 - [Architecture](ARCHITECTURE.md)
 - [Decision Records](decisions/)
 - [Development Setup](development.md)
+- [Upstream Sync](upstream-sync.md)
 - [Installation](installation.md)
 - [API Overview](../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/README.md)
 - [Queryable API Guide](../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/QUERYABLE_API.md)
