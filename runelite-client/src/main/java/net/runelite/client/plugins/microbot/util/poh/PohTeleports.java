@@ -119,7 +119,18 @@ public class PohTeleports {
             log.info("[POH] ornate pool click returned false");
             return false;
         }
-        boolean finished = sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+        // The drink hasn't started at click time (the player may still be walking to the pool),
+        // so waiting for !isAnimating() straight away returns true immediately — execute() then
+        // reports success while the drink is still pending, the caller captures a pre-drink
+        // player position for the routing anchor/pathfinder restart, and the 60s reuse cooldown
+        // is armed even if the click never turned into a drink. Wait for the animation to start
+        // (allowing walk time), then for the player to settle.
+        boolean started = sleepUntil(Rs2Player::isAnimating, 5000);
+        if (!started) {
+            log.info("[POH] ornate pool drink never started player={}", Rs2Player.getWorldLocation());
+            return false;
+        }
+        boolean finished = sleepUntil(() -> !Rs2Player.isAnimating() && !Rs2Player.isMoving(), 8000);
         log.info("[POH] ornate pool interaction finished={} player={}", finished, Rs2Player.getWorldLocation());
         if (finished) {
             lastOrnatePoolUseMs = System.currentTimeMillis();
