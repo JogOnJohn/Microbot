@@ -30,11 +30,11 @@ public enum World330HostedHouse implements PohTeleport {
 
     @Override
     public boolean execute() {
-        if (!PohTeleports.isInHouse() && !enterHostedHouse()) {
+        if (!isInHostedHouse() && !enterHostedHouse()) {
             return false;
         }
         PohTeleports.useOrnateRejuvenationPoolIfPresent();
-        return PohTeleports.isInHouse();
+        return isInHostedHouse();
     }
 
     @Override
@@ -62,7 +62,13 @@ public enum World330HostedHouse implements PohTeleport {
         if (!selectTopAdvertisedHouse()) {
             return false;
         }
-        return sleepUntil(PohTeleports::isInHouse, 16000);
+        return sleepUntil(this::isInHostedHouse, 16000);
+    }
+
+    public boolean isInHostedHouse() {
+        return Microbot.getClient() != null
+                && Microbot.getClient().getWorld() == 330
+                && (PohTeleports.isInHouse() || Rs2Player.IsInInstance());
     }
 
     private boolean isNearHouseAdvertisement() {

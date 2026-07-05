@@ -52,6 +52,7 @@ import org.slf4j.event.Level;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
 import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
+import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.leaguetransport.LeaguesRegion;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
@@ -1530,7 +1531,9 @@ public class Rs2Walker {
                         break;
                     }
 
-                    if (PohTeleports.isInHouse() || !inInstance) {
+                    if (PohTeleports.isInHouse()
+                            || World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()
+                            || !inInstance) {
                         doorOrTransportResult = handleTransportsInRawSegment(rawPath, rawI, rawEnd);
                     }
 

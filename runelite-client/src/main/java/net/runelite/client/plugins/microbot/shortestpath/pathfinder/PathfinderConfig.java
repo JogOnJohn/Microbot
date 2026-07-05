@@ -22,6 +22,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.leaguetransport.Rs2LeaguesTransport;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
+import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 import java.io.IOException;
@@ -662,7 +663,7 @@ public class PathfinderConfig {
         if (useWorld330) {
             Map<WorldPoint, Set<Transport>> world330Transports = PohPanel.getWorld330MaxHouseTransports(allTransports);
             for (var entry : world330Transports.entrySet()) {
-                if (entry.getKey() == null && !PohTeleports.isInHouse()) {
+                if (entry.getKey() == null && !isInWorld330HostedHouse()) {
                     mergedTransports.put(null, new HashSet<>(entry.getValue()));
                     continue;
                 }
@@ -684,7 +685,7 @@ public class PathfinderConfig {
         }
 
         // If we're already in Poh there's no reason to add teleports to Poh
-        if (PohTeleports.isInHouse()) {
+        if (PohTeleports.isInHouse() || isInWorld330HostedHouse()) {
             return mergedTransports;
         }
         if (useWorld330) {
@@ -703,9 +704,16 @@ public class PathfinderConfig {
         if (!useWorld330MaxHouse || client == null || client.getWorld() != 330) {
             return false;
         }
-        return PohTeleports.isInHouse()
+        return isInWorld330HostedHouse()
                 || Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)
                 || (useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE));
+    }
+
+    private boolean isInWorld330HostedHouse() {
+        return useWorld330MaxHouse
+                && client != null
+                && client.getWorld() == 330
+                && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
     }
 
     public void refresh() {
@@ -1521,6 +1529,7 @@ public class PathfinderConfig {
                 useWorld330MaxHouse,
                 client != null ? client.getWorld() : 0,
                 PohTeleports.isInHouse(),
+                isInWorld330HostedHouse(),
                 maxSimilar,
                 preferTp,
                 distanceBeforeUsingTeleport);

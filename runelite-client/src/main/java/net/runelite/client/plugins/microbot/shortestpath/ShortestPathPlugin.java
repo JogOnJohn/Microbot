@@ -845,7 +845,9 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                     Microbot.log("[ShortestPath] In POH instance — remapping pathfinder start "
                             + rawStart + " -> exit portal " + exitPortal);
                     start = exitPortal;
-                } else if (config.useWorld330MaxHouse() && inInstance && PohTeleports.isInHouse()) {
+                } else if (config.useWorld330MaxHouse()
+                        && inInstance
+                        && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()) {
                     start = World330HostedHouse.POH_INSTANCE_ANCHOR;
                 } else {
                     start = rawStart;
