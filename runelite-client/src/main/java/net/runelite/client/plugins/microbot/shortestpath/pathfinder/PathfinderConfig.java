@@ -1529,6 +1529,9 @@ public class PathfinderConfig {
         int members = (client != null && client.getWorldType().contains(WorldType.MEMBERS)) ? 1 : 0;
         int preferTp = (config != null && config.preferTransportToTarget()) ? 1 : 0;
         int maxSimilar = config != null ? config.maxSimilarTransportDistance() : 0;
+        WorldPoint world330HostedAnchor = useWorld330MaxHouse && client != null && client.getWorld() == 330
+                ? World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor()
+                : null;
         return Objects.hash(
                 packTransportRefreshToggleBits(),
                 useTeleportationItems,
@@ -1546,6 +1549,7 @@ public class PathfinderConfig {
                 client != null ? client.getWorld() : 0,
                 PohTeleports.isInHouse(),
                 isInWorld330HostedHouse(),
+                world330HostedAnchor,
                 maxSimilar,
                 preferTp,
                 distanceBeforeUsingTeleport);
