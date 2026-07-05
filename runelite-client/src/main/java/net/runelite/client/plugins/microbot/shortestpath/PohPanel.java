@@ -241,7 +241,7 @@ public class PohPanel extends PluginPanel {
 
     public static Map<WorldPoint, Set<Transport>> getWorld330MaxHouseTransports(Map<WorldPoint, Set<Transport>> allTransports) {
         Map<WorldPoint, Set<Transport>> pohTransports = new HashMap<>();
-        WorldPoint anchor = World330HostedHouse.POH_INSTANCE_ANCHOR;
+        WorldPoint anchor = World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor();
 
         pohTransports.put(null, Set.of(new World330HostedHouseTransport(anchor)));
 

@@ -6340,6 +6340,10 @@ public class Rs2Walker {
                     if (transport.getType() == TransportType.TELEPORTATION_ITEM) {
                         if (transport instanceof World330HostedHouseTransport) {
                             if (attemptObserved(transport, () -> ((World330HostedHouseTransport) transport).execute())) {
+                                WorldPoint playerLocation = Rs2Player.getWorldLocation();
+                                if (playerLocation != null && currentTarget != null) {
+                                    restartPathfinding(playerLocation, currentTarget);
+                                }
                                 return finishHandledTransport(transport);
                             }
                             continue;

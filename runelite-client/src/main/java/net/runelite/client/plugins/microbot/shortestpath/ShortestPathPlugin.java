@@ -848,7 +848,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                 } else if (config.useWorld330MaxHouse()
                         && inInstance
                         && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()) {
-                    start = World330HostedHouse.POH_INSTANCE_ANCHOR;
+                    start = World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor();
                 } else {
                     start = rawStart;
                 }

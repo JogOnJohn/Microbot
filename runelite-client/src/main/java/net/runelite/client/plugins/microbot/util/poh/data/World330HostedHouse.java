@@ -39,7 +39,7 @@ public enum World330HostedHouse implements PohTeleport {
 
     @Override
     public WorldPoint getDestination() {
-        return POH_INSTANCE_ANCHOR;
+        return getRoutingAnchor();
     }
 
     @Override
@@ -69,6 +69,14 @@ public enum World330HostedHouse implements PohTeleport {
         return Microbot.getClient() != null
                 && Microbot.getClient().getWorld() == 330
                 && (PohTeleports.isInHouse() || Rs2Player.IsInInstance());
+    }
+
+    public WorldPoint getRoutingAnchor() {
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (isInHostedHouse() && playerLocation != null) {
+            return playerLocation;
+        }
+        return POH_INSTANCE_ANCHOR;
     }
 
     private boolean isNearHouseAdvertisement() {
