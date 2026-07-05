@@ -21,6 +21,7 @@ import net.runelite.client.plugins.microbot.util.magic.RuneFilter;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.leaguetransport.Rs2LeaguesTransport;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
+import net.runelite.client.plugins.microbot.util.poh.PohTransport;
 import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
 import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
@@ -663,6 +664,13 @@ public class PathfinderConfig {
         boolean inWorld330HostedHouse = isInWorld330HostedHouse();
         if (useWorld330) {
             Map<WorldPoint, Set<Transport>> world330Transports = PohPanel.getWorld330MaxHouseTransports(allTransports);
+            int world330TransportCount = world330Transports.values().stream().mapToInt(Set::size).sum();
+            log.info("[W330POH] createMergedList useWorld330=true inHosted={} keys={} transports={} player={} loadedPohObject={}",
+                    inWorld330HostedHouse,
+                    world330Transports.size(),
+                    world330TransportCount,
+                    Rs2Player.getWorldLocation(),
+                    PohTeleports.firstLoadedPohObjectId());
             if (inWorld330HostedHouse) {
                 mergedTransports.remove(null);
             }
@@ -1115,7 +1123,10 @@ public class PathfinderConfig {
             case NPC:
                 return useNpcs;
             case POH:
-                return usePoh;
+                return usePoh || (useWorld330MaxHouse
+                        && client != null
+                        && client.getWorld() == 330
+                        && transport instanceof PohTransport);
             case QUETZAL:
                 return useQuetzals;
             case SPIRIT_TREE:

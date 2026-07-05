@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.util.poh.data;
 
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ObjectID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
@@ -15,6 +16,7 @@ import java.util.Objects;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
+@Slf4j
 public enum World330HostedHouse implements PohTeleport {
     ADVERTISED_HOUSE;
 
@@ -30,11 +32,18 @@ public enum World330HostedHouse implements PohTeleport {
 
     @Override
     public boolean execute() {
+        log.info("[W330POH] execute start inHosted={} player={} loadedPohObject={}",
+                isInHostedHouse(), Rs2Player.getWorldLocation(), PohTeleports.firstLoadedPohObjectId());
         if (!isInHostedHouse() && !enterHostedHouse()) {
+            log.info("[W330POH] failed to enter hosted house player={} loadedPohObject={}",
+                    Rs2Player.getWorldLocation(), PohTeleports.firstLoadedPohObjectId());
             return false;
         }
-        PohTeleports.useOrnateRejuvenationPoolIfPresent();
-        return isInHostedHouse();
+        boolean poolUsed = PohTeleports.useOrnateRejuvenationPoolIfPresent();
+        boolean inHostedHouse = isInHostedHouse();
+        log.info("[W330POH] execute end poolUsed={} inHosted={} player={} loadedPohObject={}",
+                poolUsed, inHostedHouse, Rs2Player.getWorldLocation(), PohTeleports.firstLoadedPohObjectId());
+        return inHostedHouse;
     }
 
     @Override
@@ -66,9 +75,10 @@ public enum World330HostedHouse implements PohTeleport {
     }
 
     public boolean isInHostedHouse() {
-        return Microbot.getClient() != null
-                && Microbot.getClient().getWorld() == 330
-                && (PohTeleports.isInHouse() || Rs2Player.IsInInstance());
+        if (Microbot.getClient() == null || Microbot.getClient().getWorld() != 330) {
+            return false;
+        }
+        return Rs2Player.IsInInstance() && PohTeleports.hasLoadedPohObject();
     }
 
     public WorldPoint getRoutingAnchor() {

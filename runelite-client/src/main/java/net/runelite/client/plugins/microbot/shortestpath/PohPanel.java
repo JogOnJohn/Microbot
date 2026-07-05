@@ -242,6 +242,7 @@ public class PohPanel extends PluginPanel {
     public static Map<WorldPoint, Set<Transport>> getWorld330MaxHouseTransports(Map<WorldPoint, Set<Transport>> allTransports) {
         Map<WorldPoint, Set<Transport>> pohTransports = new HashMap<>();
         WorldPoint anchor = World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor();
+        boolean inHostedHouse = World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
 
         pohTransports.put(null, Set.of(new World330HostedHouseTransport(anchor)));
 
@@ -271,6 +272,12 @@ public class PohPanel extends PluginPanel {
             pohTransports.computeIfAbsent(entry.getKey(), k -> new HashSet<>()).addAll(entry.getValue());
         }
 
+        int transportCount = pohTransports.values().stream().mapToInt(Set::size).sum();
+        Microbot.log("[W330POH] transport merge anchor=" + anchor
+                + " inHosted=" + inHostedHouse
+                + " keys=" + pohTransports.size()
+                + " transports=" + transportCount
+                + " loadedPohObject=" + PohTeleports.firstLoadedPohObjectId());
         return pohTransports;
     }
 

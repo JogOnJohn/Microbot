@@ -6224,8 +6224,16 @@ public class Rs2Walker {
                     log.debug("[Walker] Handling {} transport: {} (i={}, path[i]={}, origin={})",
                             transport.getType(), transport.getDisplayInfo(), i, path.get(i), origin);
                     if (transport.getType() == TransportType.POH) {
+                        log.info("[W330POH] attempting POH transport display='{}' origin={} dest={} pathIndex={} pathTile={} player={}",
+                                transport.getDisplayInfo(),
+                                transport.getOrigin(),
+                                transport.getDestination(),
+                                i,
+                                path.get(i),
+                                Rs2Player.getWorldLocation());
                         boolean pohResult = attemptObserved(transport, () -> handlePohTransport(transport));
-                        log.debug("[Walker] handlePohTransport({}) returned {}", transport.getDisplayInfo(), pohResult);
+                        log.info("[W330POH] POH transport result display='{}' result={} player={}",
+                                transport.getDisplayInfo(), pohResult, Rs2Player.getWorldLocation());
                         if (pohResult) {
                             // Shares ship/NPC/boat 10s landing budget — intentional single timeout constant.
                             boolean pohNearDest = sleepUntil(

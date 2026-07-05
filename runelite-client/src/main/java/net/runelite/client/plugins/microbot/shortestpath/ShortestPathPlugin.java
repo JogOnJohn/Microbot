@@ -839,19 +839,22 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                 // configured". PohTeleports.isInHouse() is too strict — it additionally
                 // requires POH_EXIT_PORTAL to be currently loaded in the scene, which fails
                 // on larger houses where the portal is out of render range.
-                WorldPoint exitPortal = PohPanel.getExitPortalTile();
-                boolean inInstance = client.getTopLevelWorldView().getScene().isInstance();
-                if (exitPortal != null && inInstance) {
-                    Microbot.log("[ShortestPath] In POH instance — remapping pathfinder start "
-                            + rawStart + " -> exit portal " + exitPortal);
-                    start = exitPortal;
-                } else if (config.useWorld330MaxHouse()
-                        && inInstance
-                        && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()) {
-                    start = World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor();
-                } else {
-                    start = rawStart;
-                }
+            WorldPoint exitPortal = PohPanel.getExitPortalTile();
+            boolean inInstance = client.getTopLevelWorldView().getScene().isInstance();
+            if (config.useWorld330MaxHouse()
+                    && inInstance
+                    && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()) {
+                start = World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor();
+                Microbot.log("[W330POH] remapping pathfinder start " + rawStart
+                        + " -> hosted anchor " + start
+                        + " loadedPohObject=" + PohTeleports.firstLoadedPohObjectId());
+            } else if (exitPortal != null && inInstance) {
+                Microbot.log("[ShortestPath] In POH instance — remapping pathfinder start "
+                        + rawStart + " -> exit portal " + exitPortal);
+                start = exitPortal;
+            } else {
+                start = rawStart;
+            }
                 lastLocation = start;
             }
             final Set<WorldPoint> destinations = new HashSet<>(targets);

@@ -37,6 +37,18 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntilTrue;
 @Slf4j
 public class PohTeleports {
     private static final int ORNATE_REJUVENATION_POOL = 29241;
+    private static final int PORTAL_NEXUS = 33410;
+    private static final int ORNATE_JEWELLERY_BOX = 37540;
+    private static final int MOUNTED_DIGSITE = 33420;
+    private static final int MOUNTED_XERICS = 33419;
+    private static final Integer[] HOSTED_HOUSE_OBJECT_IDS = new Integer[]{
+            ObjectID.POH_EXIT_PORTAL,
+            ORNATE_REJUVENATION_POOL,
+            PORTAL_NEXUS,
+            ORNATE_JEWELLERY_BOX,
+            MOUNTED_DIGSITE,
+            MOUNTED_XERICS
+    };
 
     /**
      * Checks if the player is in their house
@@ -73,11 +85,19 @@ public class PohTeleports {
     public static boolean useOrnateRejuvenationPoolIfPresent() {
         GameObject pool = findPohObjectAnywhere(new Integer[]{ORNATE_REJUVENATION_POOL});
         if (pool == null) {
+            log.info("[POH] ornate pool not found in loaded scene at {}", Rs2Player.getWorldLocation());
             return false;
         }
+        log.info("[POH] clicking ornate pool id={} loc={} player={}",
+                pool.getId(), pool.getWorldLocation(), Rs2Player.getWorldLocation());
         boolean clicked = Rs2GameObject.interact(pool, "Drink");
-        if (!clicked) return false;
-        return sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+        if (!clicked) {
+            log.info("[POH] ornate pool click returned false");
+            return false;
+        }
+        boolean finished = sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+        log.info("[POH] ornate pool interaction finished={} player={}", finished, Rs2Player.getWorldLocation());
+        return finished;
     }
 
     /**
@@ -87,6 +107,15 @@ public class PohTeleports {
      */
     public static boolean hasHouse() {
         return HouseLocation.getHouseLocation() != null;
+    }
+
+    public static boolean hasLoadedPohObject() {
+        return findPohObjectAnywhere(HOSTED_HOUSE_OBJECT_IDS) != null;
+    }
+
+    public static int firstLoadedPohObjectId() {
+        GameObject object = findPohObjectAnywhere(HOSTED_HOUSE_OBJECT_IDS);
+        return object != null ? object.getId() : -1;
     }
 
     /**
