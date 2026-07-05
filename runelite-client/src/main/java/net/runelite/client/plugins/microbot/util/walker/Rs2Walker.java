@@ -6733,6 +6733,24 @@ public class Rs2Walker {
                             + " precomputed=" + hasPrecomputedContinuation
                             + " type=" + (transport != null ? transport.getType() : "null"));
         }
+        if (transport instanceof World330HostedHouseTransport && goal != null) {
+            WorldPoint actualLocation = Rs2Player.getWorldLocation();
+            boolean queued = actualLocation != null && restartPathfinding(actualLocation, goal);
+            WebWalkLog.tmark("transport_handoff_w330_reanchor",
+                    System.currentTimeMillis() - handoffStartedAt,
+                    goal,
+                    actualLocation,
+                    "queued=" + queued + " dest=" + compactWorldPoint(transportDest));
+            if (!queued) {
+                recalculatePath();
+                WebWalkLog.tmark("transport_handoff_w330_recalc_fallback",
+                        System.currentTimeMillis() - handoffStartedAt,
+                        goal,
+                        actualLocation,
+                        "dest=" + compactWorldPoint(transportDest));
+            }
+            return true;
+        }
         if ((expectedTransport || hasPrecomputedContinuation) && goal != null) {
             WebWalkLog.tmark(expectedTransport ? "transport_handoff_expected_hit" : "transport_handoff_precomputed_hit",
                     System.currentTimeMillis() - handoffStartedAt,
