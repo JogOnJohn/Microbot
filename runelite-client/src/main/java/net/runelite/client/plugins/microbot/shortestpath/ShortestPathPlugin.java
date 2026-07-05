@@ -53,6 +53,8 @@ import net.runelite.client.plugins.microbot.shortestpath.pathfinder.Pathfinder;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderConfig;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.SplitFlagMap;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
+import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.ui.ClientToolbar;
@@ -380,6 +382,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             "recalculateDistance",
             "finishDistance",
             "calculationCutoff",
+            "useWorld330MaxHouse",
             "walkWithBankedTransports",
             "minBankRouteSavings",
             "bankTripWhenCacheUnavailable",
@@ -842,6 +845,8 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                     Microbot.log("[ShortestPath] In POH instance — remapping pathfinder start "
                             + rawStart + " -> exit portal " + exitPortal);
                     start = exitPortal;
+                } else if (config.useWorld330MaxHouse() && inInstance && PohTeleports.isInHouse()) {
+                    start = World330HostedHouse.POH_INSTANCE_ANCHOR;
                 } else {
                     start = rawStart;
                 }

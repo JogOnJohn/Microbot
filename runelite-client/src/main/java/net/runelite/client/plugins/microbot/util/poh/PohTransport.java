@@ -31,6 +31,7 @@ public class PohTransport extends Transport {
      * @return true on successful teleportation
      */
     public boolean execute() {
+        PohTeleports.useOrnateRejuvenationPoolIfPresent();
         return teleport.execute();
     }
 

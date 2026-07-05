@@ -10,10 +10,8 @@ import net.runelite.client.plugins.microbot.shortestpath.components.ExitTilePane
 import net.runelite.client.plugins.microbot.shortestpath.components.JewelleryBoxPanel;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
-import net.runelite.client.plugins.microbot.util.poh.data.HouseLocation;
-import net.runelite.client.plugins.microbot.util.poh.data.NexusPortal;
-import net.runelite.client.plugins.microbot.util.poh.data.PohPortal;
-import net.runelite.client.plugins.microbot.util.poh.data.PohTeleport;
+import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
+import net.runelite.client.plugins.microbot.util.poh.data.*;
 import net.runelite.client.ui.PluginPanel;
 
 import javax.swing.*;
@@ -237,6 +235,35 @@ public class PohPanel extends PluginPanel {
         pohTransports.computeIfAbsent(exitPortal, p -> new HashSet<>()).addAll(pohTeleports.stream().map(
                 t -> new PohTransport(exitPortal, t)
         ).collect(Collectors.toList()));
+
+        return pohTransports;
+    }
+
+    public static Map<WorldPoint, Set<Transport>> getWorld330MaxHouseTransports(Map<WorldPoint, Set<Transport>> allTransports) {
+        Map<WorldPoint, Set<Transport>> pohTransports = new HashMap<>();
+        WorldPoint anchor = World330HostedHouse.POH_INSTANCE_ANCHOR;
+
+        pohTransports.put(null, Set.of(new World330HostedHouseTransport(anchor)));
+
+        Set<PohTeleport> pohTeleports = new HashSet<>();
+        pohTeleports.addAll(Set.of(PohPortal.values()));
+        pohTeleports.addAll(Set.of(NexusPortal.values()));
+        pohTeleports.addAll(Set.of(JewelleryBox.values()));
+        pohTeleports.addAll(Set.of(MountedGlory.values()));
+        pohTeleports.addAll(Set.of(MountedMythical.values()));
+        pohTeleports.addAll(Set.of(MountedDigsite.values()));
+        pohTeleports.addAll(Set.of(MountedXerics.values()));
+
+        pohTransports.computeIfAbsent(anchor, p -> new HashSet<>()).addAll(pohTeleports.stream()
+                .map(t -> new PohTransport(anchor, t))
+                .collect(Collectors.toList()));
+
+        for (var entry : createFairyRingMap(anchor, allTransports).entrySet()) {
+            pohTransports.computeIfAbsent(entry.getKey(), k -> new HashSet<>()).addAll(entry.getValue());
+        }
+        for (var entry : createSpiritTreeMap(anchor, allTransports).entrySet()) {
+            pohTransports.computeIfAbsent(entry.getKey(), k -> new HashSet<>()).addAll(entry.getValue());
+        }
 
         return pohTransports;
     }

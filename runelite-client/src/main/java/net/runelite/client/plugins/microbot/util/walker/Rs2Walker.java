@@ -51,6 +51,7 @@ import java.util.function.BooleanSupplier;
 import org.slf4j.event.Level;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
+import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.leaguetransport.LeaguesRegion;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
@@ -6334,6 +6335,12 @@ public class Rs2Walker {
                     }
 
                     if (transport.getType() == TransportType.TELEPORTATION_ITEM) {
+                        if (transport instanceof World330HostedHouseTransport) {
+                            if (attemptObserved(transport, () -> ((World330HostedHouseTransport) transport).execute())) {
+                                return finishHandledTransport(transport);
+                            }
+                            continue;
+                        }
                         if (attemptObserved(transport, () -> handleTeleportItem(transport))) {
                             sleepUntil(() -> !Rs2Player.isAnimating());
                             sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),

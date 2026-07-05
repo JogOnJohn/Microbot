@@ -36,6 +36,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntilTrue;
  */
 @Slf4j
 public class PohTeleports {
+    private static final int ORNATE_REJUVENATION_POOL = 29241;
 
     /**
      * Checks if the player is in their house
@@ -67,6 +68,18 @@ public class PohTeleports {
             return false;
         }
         return true;
+    }
+
+    public static boolean useOrnateRejuvenationPoolIfPresent() {
+        if (!isInHouse()) {
+            return false;
+        }
+        boolean clicked = Microbot.getRs2TileObjectCache().query()
+                .interact(ORNATE_REJUVENATION_POOL, "Drink");
+        if (!clicked) {
+            return false;
+        }
+        return sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
     }
 
     /**
