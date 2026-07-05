@@ -5931,7 +5931,8 @@ public class Rs2Walker {
                 // Pre-compute origin/destination indices once per transport (not per inner iteration)
                 int precomputedIndexOfOrigin = -1;
                 int precomputedIndexOfDest = -1;
-                if (!TransportType.isTeleport(transport.getType(), transport.getOrigin())) {
+                if (!TransportType.isTeleport(transport.getType(), transport.getOrigin())
+                        && !(transport.getType() == TransportType.POH && transport.getOrigin() == null)) {
                     Integer originIdx = pathFirstIndex.get(transport.getOrigin());
                     Integer destIdx = pathFirstIndex.get(transport.getDestination());
                     precomputedIndexOfOrigin = originIdx != null ? originIdx : -1;
@@ -7515,6 +7516,9 @@ public class Rs2Walker {
                             spiritTree != null ? "non-null @ " + spiritTree.getWorldLocation() : "NULL");
                 }
             }
+            if (PohTeleports.isInHouse()) {
+                PohTeleports.useOrnateRejuvenationPoolIfPresent();
+            }
             boolean interactResult = Rs2GameObject.interact(spiritTree, "Travel");
             if (log.isDebugEnabled())
             {
@@ -8124,6 +8128,10 @@ public class Rs2Walker {
         if (fairyRingObject == null) return false;
 
         if (!PohTeleports.isInHouse() && !Rs2GameObject.canWalkTo(fairyRingObject, 25)) return false;
+
+        if (PohTeleports.isInHouse()) {
+            PohTeleports.useOrnateRejuvenationPoolIfPresent();
+        }
 
         boolean hasLumbridgeElite = Microbot.getVarbitValue(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE) == 1;
 

@@ -408,11 +408,22 @@ public interface ShortestPathConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "useWorld330MaxHouse",
+            name = "Use W330 max house",
+            description = "On world 330, assume a maxed hosted POH is reachable with Teleport to House tablets and include all known POH teleports.",
+            position = 25,
+            section = sectionSettings
+    )
+    default boolean useWorld330MaxHouse() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "cancelInstead",
             name = "Cancel instead of recalculating",
             description = "Whether the path should be cancelled rather than recalculated " +
                     "when the recalculate distance limit is exceeded",
-            position = 25,
+            position = 26,
             section = sectionSettings
     )
     default boolean cancelInstead() {
@@ -423,7 +434,7 @@ public interface ShortestPathConfig extends Config {
             keyName = "showTransportInfo",
             name = "Show transport info",
             description = "Whether to display transport destination hint info, e.g. which chat option and text to click",
-            position = 26,
+            position = 27,
             section = sectionSettings
     )
     default boolean showTransportInfo() {
@@ -435,7 +446,7 @@ public interface ShortestPathConfig extends Config {
             name = "Teleport distance",
             description = "Distance before using a teleport<br>" +
                     "(This is to avoid using teleports when you are to close",
-            position = 27,
+            position = 28,
             section = sectionSettings
     )
     default int distanceBeforeUsingTeleport() {
@@ -450,7 +461,7 @@ public interface ShortestPathConfig extends Config {
             keyName = "recalculateDistance",
             name = "Recalculate distance",
             description = "Distance from the path the player should be for it to be recalculated (-1 for never)",
-            position = 28,
+            position = 29,
             section = sectionSettings
     )
     default int recalculateDistance() {
@@ -465,7 +476,7 @@ public interface ShortestPathConfig extends Config {
             keyName = "finishDistance",
             name = "Finish distance",
             description = "Distance from the target tile at which the path should be ended (-1 for never)",
-            position = 29,
+            position = 30,
             section = sectionSettings
     )
     default int reachedDistance() {
@@ -476,7 +487,7 @@ public interface ShortestPathConfig extends Config {
             keyName = "showTileCounter",
             name = "Show tile counter",
             description = "Whether to display the number of tiles travelled, number of tiles remaining or disable counting",
-            position = 30,
+            position = 31,
             section = sectionSettings
     )
     default TileCounter showTileCounter() {
@@ -487,7 +498,7 @@ public interface ShortestPathConfig extends Config {
             keyName = "tileCounterStep",
             name = "Tile counter step",
             description = "The number of tiles between the displayed tile counter numbers",
-            position = 31,
+            position = 32,
             section = sectionSettings
     )
     default int tileCounterStep()
@@ -507,7 +518,7 @@ public interface ShortestPathConfig extends Config {
             name = "Calculation cutoff",
             description = "The cutoff threshold in number of ticks (0.6 seconds) of no progress being<br>" +
                     "made towards the path target before the calculation will be stopped",
-            position = 32,
+            position = 33,
             section = sectionSettings
     )
     default int calculationCutoff()

@@ -78,6 +78,22 @@ public class PohTeleports {
         return HouseLocation.getHouseLocation() != null;
     }
 
+    public static boolean useOrnateRejuvenationPoolIfPresent() {
+        if (!isInHouse()) {
+            return false;
+        }
+        boolean interacted = Microbot.getRs2TileObjectCache()
+                .query()
+                .withIds(ObjectID.POH_POOL_REJUVENATION, ObjectID.XMAS20_POH_POOL_REJUVENATION)
+                .interact("Drink");
+        if (!interacted) {
+            return false;
+        }
+        sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating(), 2000);
+        sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Player.isAnimating(), 5000);
+        return true;
+    }
+
     /**
      * Interacts with the jewelllerybox in a players house
      * The reason we use JewelleryLocationEnum is because it contains all the data we need for

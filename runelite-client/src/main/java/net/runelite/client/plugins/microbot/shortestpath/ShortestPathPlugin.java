@@ -385,6 +385,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             "bankTripWhenCacheUnavailable",
             "preferNonConsumableTeleportAndSpells",
             "preferTransportToTarget",
+            "useWorld330MaxHouse",
             "maxSimilarTransportDistance"
     );
     private static final String RELOAD_TRANSPORT_DEFINITIONS_KEY = "reloadTransportDefinitions";
