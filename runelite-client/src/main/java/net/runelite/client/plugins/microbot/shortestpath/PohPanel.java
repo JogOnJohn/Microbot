@@ -259,9 +259,15 @@ public class PohPanel extends PluginPanel {
                 .collect(Collectors.toList()));
 
         for (var entry : createFairyRingMap(anchor, allTransports).entrySet()) {
+            if (!anchor.equals(entry.getKey())) {
+                continue;
+            }
             pohTransports.computeIfAbsent(entry.getKey(), k -> new HashSet<>()).addAll(entry.getValue());
         }
         for (var entry : createSpiritTreeMap(anchor, allTransports).entrySet()) {
+            if (!anchor.equals(entry.getKey())) {
+                continue;
+            }
             pohTransports.computeIfAbsent(entry.getKey(), k -> new HashSet<>()).addAll(entry.getValue());
         }
 

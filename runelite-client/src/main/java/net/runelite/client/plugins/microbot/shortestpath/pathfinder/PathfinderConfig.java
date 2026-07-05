@@ -928,7 +928,9 @@ public class PathfinderConfig {
         }
 
         // Check if Teleports are globally disabled
-        if (TransportType.isTeleport(transport.getType(), transport.getOrigin()) && Rs2Walker.disableTeleports) {
+        if (!(transport instanceof World330HostedHouseTransport)
+                && TransportType.isTeleport(transport.getType(), transport.getOrigin())
+                && Rs2Walker.disableTeleports) {
             log.debug("Transport ( O: {} D: {} ) is a teleport but teleports are globally disabled", transport.getOrigin(), transport.getDestination());
             return false;
         }
