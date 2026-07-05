@@ -85,10 +85,7 @@ public enum World330HostedHouse implements PohTeleport {
         if (Microbot.getClient() == null || Microbot.getClient().getWorld() != 330) {
             return false;
         }
-        if (!Rs2Player.IsInInstance() || !isOnHostedHouseTemplate()) {
-            return false;
-        }
-        return PohTeleports.hasLoadedPohObject();
+        return isOnHostedHouseTemplate();
     }
 
     public WorldPoint getRoutingAnchor() {
