@@ -3092,14 +3092,28 @@ public class Rs2Walker {
             return null;
         }
 
+        Client client = Microbot.getClient();
+        boolean inInstance = client != null
+                && client.getTopLevelWorldView() != null
+                && client.getTopLevelWorldView().isInstance();
+
         int finishTh = Math.max(0, distance);
         if (playerLoc.distanceTo(target) <= finishTh) {
-            if (tryHandleArrivalSceneTransition(target)) {
-                setTarget(null, "rs2walker:direct-local-prepath:arrival-scene-transition");
-                return WalkerState.MOVING;
+            // distanceTo is Chebyshev (collision-blind), so "within distance" alone does not
+            // imply the target can actually be reached — a mark of grace on an adjacent rooftop
+            // section is a few straight-line tiles away but across an unwalkable gap. Only report
+            // ARRIVED when the target is genuinely reachable (or we are on it / in an instance
+            // where the reachability BFS is unreliable). Otherwise fall through to the pathfinder,
+            // which reports UNREACHABLE instead of us falsely arriving and the caller spam-clicking.
+            if (playerLoc.equals(target) || inInstance || Rs2Tile.isTileReachable(target)) {
+                if (tryHandleArrivalSceneTransition(target)) {
+                    setTarget(null, "rs2walker:direct-local-prepath:arrival-scene-transition");
+                    return WalkerState.MOVING;
+                }
+                setTarget(null, "rs2walker:direct-local-prepath:already-within-distance");
+                return WalkerState.ARRIVED;
             }
-            setTarget(null, "rs2walker:direct-local-prepath:already-within-distance");
-            return WalkerState.ARRIVED;
+            return null;
         }
 
         final int directClickMaxDistance = 13;
@@ -3107,10 +3121,6 @@ public class Rs2Walker {
             return null;
         }
 
-        Client client = Microbot.getClient();
-        boolean inInstance = client != null
-                && client.getTopLevelWorldView() != null
-                && client.getTopLevelWorldView().isInstance();
         if (!inInstance && (!Rs2Tile.isWalkable(target) || !Rs2Tile.isTileReachable(target))) {
             return null;
         }
