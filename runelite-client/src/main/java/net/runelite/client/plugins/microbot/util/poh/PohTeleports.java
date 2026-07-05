@@ -37,12 +37,18 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntilTrue;
 @Slf4j
 public class PohTeleports {
     private static final int ORNATE_REJUVENATION_POOL = 29241;
+    private static final int FIERY_ORNATE_REJUVENATION_POOL = 49993;
     private static final int PORTAL_NEXUS = 33410;
     private static final int ORNATE_JEWELLERY_BOX = 37540;
     private static final int MOUNTED_DIGSITE = 33420;
     private static final int MOUNTED_XERICS = 33419;
+    private static final Integer[] ORNATE_REJUVENATION_POOL_IDS = new Integer[]{
+            ORNATE_REJUVENATION_POOL,
+            FIERY_ORNATE_REJUVENATION_POOL
+    };
     private static final Integer[] HOSTED_HOUSE_FACILITY_OBJECT_IDS = new Integer[]{
             ORNATE_REJUVENATION_POOL,
+            FIERY_ORNATE_REJUVENATION_POOL,
             PORTAL_NEXUS,
             ORNATE_JEWELLERY_BOX,
             MOUNTED_DIGSITE,
@@ -51,6 +57,7 @@ public class PohTeleports {
     private static final Integer[] HOSTED_HOUSE_OBJECT_IDS = new Integer[]{
             ObjectID.POH_EXIT_PORTAL,
             ORNATE_REJUVENATION_POOL,
+            FIERY_ORNATE_REJUVENATION_POOL,
             PORTAL_NEXUS,
             ORNATE_JEWELLERY_BOX,
             MOUNTED_DIGSITE,
@@ -90,7 +97,7 @@ public class PohTeleports {
     }
 
     public static boolean useOrnateRejuvenationPoolIfPresent() {
-        GameObject pool = findPohObjectAnywhere(new Integer[]{ORNATE_REJUVENATION_POOL});
+        GameObject pool = findPohObjectAnywhere(ORNATE_REJUVENATION_POOL_IDS);
         if (pool == null) {
             log.info("[POH] ornate pool not found in loaded scene at {}", Rs2Player.getWorldLocation());
             return false;
@@ -108,7 +115,7 @@ public class PohTeleports {
     }
 
     public static boolean hasLoadedOrnateRejuvenationPool() {
-        return findPohObjectAnywhere(new Integer[]{ORNATE_REJUVENATION_POOL}) != null;
+        return findPohObjectAnywhere(ORNATE_REJUVENATION_POOL_IDS) != null;
     }
 
     /**
