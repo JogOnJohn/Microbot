@@ -6049,8 +6049,14 @@ public class Rs2Walker {
         // When the player is inside a POH instance, the player's raw world-location plane is
         // the instance-template plane and has no relationship to the POH-transport origin plane.
         // Skip the plane guard in that case so POH transports can actually be considered.
+        // W330 hosted houses must qualify too: their PohTransport origins are anchored at the
+        // player's instance-frame tile, so WorldPoint.toLocalInstance(origin) below returns an
+        // empty collection (no template chunk maps to an instance-frame point) and the transport
+        // would be silently skipped — the walker then minimap-walks toward the teleport landing
+        // thousands of tiles away and clamps clicks at the house wall.
         boolean inPohInstance = Microbot.getClient().getTopLevelWorldView().getScene().isInstance()
-                && net.runelite.client.plugins.microbot.shortestpath.PohPanel.getExitPortalTile() != null;
+                && (net.runelite.client.plugins.microbot.shortestpath.PohPanel.getExitPortalTile() != null
+                        || World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse());
 
         // Pre-compute path point index map for O(1) lookups instead of repeated O(n) scans
         Map<WorldPoint, Integer> pathFirstIndex = new HashMap<>(path.size());
