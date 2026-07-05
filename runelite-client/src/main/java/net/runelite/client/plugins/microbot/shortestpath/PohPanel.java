@@ -11,20 +11,13 @@ import net.runelite.client.plugins.microbot.shortestpath.components.JewelleryBox
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
 import net.runelite.client.plugins.microbot.util.poh.data.HouseLocation;
-import net.runelite.client.plugins.microbot.util.poh.data.JewelleryBox;
-import net.runelite.client.plugins.microbot.util.poh.data.MountedDigsite;
-import net.runelite.client.plugins.microbot.util.poh.data.MountedGlory;
-import net.runelite.client.plugins.microbot.util.poh.data.MountedMythical;
-import net.runelite.client.plugins.microbot.util.poh.data.MountedXerics;
 import net.runelite.client.plugins.microbot.util.poh.data.NexusPortal;
 import net.runelite.client.plugins.microbot.util.poh.data.PohPortal;
 import net.runelite.client.plugins.microbot.util.poh.data.PohTeleport;
-import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.ui.PluginPanel;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -202,44 +195,6 @@ public class PohPanel extends PluginPanel {
                 new Transport(outsidePoint, exitPortal, location.name() + " -> PoH", TransportType.TELEPORTATION_PORTAL, true, "Home", "Portal", location.getPortalId())
         ));
         return transportMap;
-    }
-
-    public static Map<WorldPoint, Set<Transport>> getWorld330MaxHouseTransports(Map<WorldPoint, Set<Transport>> allTransports) {
-        Map<WorldPoint, Set<Transport>> pohTransports = new HashMap<>();
-        WorldPoint exitPortal = getExitPortalTile();
-        if (exitPortal == null) {
-            exitPortal = World330HostedHouse.POH_INSTANCE_ANCHOR;
-        }
-
-        Set<PohTeleport> pohTeleports = new HashSet<>();
-        pohTeleports.addAll(Arrays.asList(PohPortal.values()));
-        pohTeleports.addAll(Arrays.asList(NexusPortal.values()));
-        pohTeleports.addAll(Arrays.asList(JewelleryBox.values()));
-        pohTeleports.addAll(Arrays.asList(MountedGlory.values()));
-        pohTeleports.addAll(Arrays.asList(MountedXerics.values()));
-        pohTeleports.addAll(Arrays.asList(MountedDigsite.values()));
-        pohTeleports.addAll(Arrays.asList(MountedMythical.values()));
-
-        final WorldPoint pohOrigin = exitPortal;
-        pohTransports.computeIfAbsent(pohOrigin, p -> new HashSet<>()).addAll(pohTeleports.stream()
-                .map(t -> new PohTransport(pohOrigin, t))
-                .collect(Collectors.toSet()));
-
-        for (var entry : createFairyRingMap(pohOrigin, allTransports).entrySet()) {
-            pohTransports
-                    .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
-                    .addAll(entry.getValue());
-        }
-        for (var entry : createSpiritTreeMap(pohOrigin, allTransports).entrySet()) {
-            pohTransports
-                    .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
-                    .addAll(entry.getValue());
-        }
-
-        if (!PohTeleports.isInHouse()) {
-            pohTransports.put(null, Set.of(new PohTransport(null, World330HostedHouse.ADVERTISED_HOUSE)));
-        }
-        return pohTransports;
     }
 
     /**

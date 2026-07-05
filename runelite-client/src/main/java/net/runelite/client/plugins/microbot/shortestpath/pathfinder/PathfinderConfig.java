@@ -118,7 +118,6 @@ public class PathfinderConfig {
             useGnomeGliders,
             useMinecarts,
             usePoh,
-            useWorld330MaxHouse,
             useQuetzals,
             useTeleportationLevers,
             useTeleportationMinigames,
@@ -207,7 +206,6 @@ public class PathfinderConfig {
         useShips = ShortestPathPlugin.override("useShips", config.useShips());
         useMinecarts = ShortestPathPlugin.override("useMinecarts", config.useMinecarts());
         usePoh = ShortestPathPlugin.override("usePoh", config.usePoh());
-        useWorld330MaxHouse = ShortestPathPlugin.override("useWorld330MaxHouse", config.useWorld330MaxHouse());
         useSpiritTreeEtceteria = ShortestPathPlugin.override("spiritTreeEtceteria", config.spiritTreeEtceteria());
         useSpiritTreeBrimhaven = ShortestPathPlugin.override("spiritTreeBrimhaven", config.spiritTreeBrimhaven());
         useSpiritTreePortSarim = ShortestPathPlugin.override("spiritTreePortSarim", config.spiritTreePortSarim());
@@ -649,23 +647,13 @@ public class PathfinderConfig {
 
 
     private Map<WorldPoint, Set<Transport>> createMergedList() {
+        if (!usePoh) return allTransports;
         Map<WorldPoint, Set<Transport>> mergedTransports = new HashMap<>();
 
         // Start with putting all the TSV imported persistent transports
         for (var entry : allTransports.entrySet()) {
             mergedTransports.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
-
-        if (shouldUseWorld330MaxHouse()) {
-            Map<WorldPoint, Set<Transport>> world330Transports = PohPanel.getWorld330MaxHouseTransports(allTransports);
-            forceWorld330MaxHouseEntry(mergedTransports, world330Transports);
-            for (var entry : world330Transports.entrySet()) {
-                mergedTransports
-                        .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
-                        .addAll(entry.getValue());
-            }
-        }
-        if (!usePoh) return mergedTransports;
 
         // Add transports from PoH to somewhere in the world
         for (var entry : PohPanel.getAvailableTransports(allTransports).entrySet()) {
@@ -685,42 +673,6 @@ public class PathfinderConfig {
                     .addAll(entry.getValue());
         }
         return mergedTransports;
-    }
-
-    private boolean shouldUseWorld330MaxHouse() {
-        if (!useWorld330MaxHouse || client == null || client.getWorld() != 330) {
-            return false;
-        }
-        return PohTeleports.isInHouse()
-                || Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)
-                || (useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE));
-    }
-
-    private void forceWorld330MaxHouseEntry(Map<WorldPoint, Set<Transport>> mergedTransports,
-                                           Map<WorldPoint, Set<Transport>> world330Transports) {
-        if (PohTeleports.isInHouse()) {
-            return;
-        }
-        Set<Transport> world330Entry = world330Transports.get(null);
-        if (world330Entry == null || world330Entry.isEmpty()) {
-            return;
-        }
-        int replaced = Optional.ofNullable(mergedTransports.get(null))
-                .map(Set::size)
-                .orElse(0);
-        mergedTransports.put(null, new HashSet<>(world330Entry));
-        WebWalkLog.cfg("w330_max_house force_originless replaced={} entries={} invTab={} bankTab={} useBank={}",
-                replaced,
-                world330Entry.size(),
-                Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE),
-                useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE),
-                useBankItems);
-        WebWalkLog.spInfo("w330_max_house force_originless replaced={} entries={} invTab={} bankTab={} useBank={}",
-                replaced,
-                world330Entry.size(),
-                Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE),
-                useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE),
-                useBankItems);
     }
 
     public void refresh() {
@@ -1110,7 +1062,7 @@ public class PathfinderConfig {
             case NPC:
                 return useNpcs;
             case POH:
-                return usePoh || useWorld330MaxHouse;
+                return usePoh;
             case QUETZAL:
                 return useQuetzals;
             case SPIRIT_TREE:
@@ -1524,9 +1476,7 @@ public class PathfinderConfig {
                 leaguesCtx.isActive(),
                 leaguesCtx.getUnlockedRegions().hashCode(),
                 usePoh,
-                useWorld330MaxHouse,
                 PohTeleports.isInHouse(),
-                client != null ? client.getWorld() : 0,
                 maxSimilar,
                 preferTp,
                 distanceBeforeUsingTeleport);
@@ -1554,8 +1504,6 @@ public class PathfinderConfig {
         if (useMinecarts) bits |= 1L << s;
         s++;
         if (usePoh) bits |= 1L << s;
-        s++;
-        if (useWorld330MaxHouse) bits |= 1L << s;
         s++;
         if (useQuetzals) bits |= 1L << s;
         s++;
