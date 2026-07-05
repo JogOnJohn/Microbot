@@ -18,6 +18,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.poh.data.HouseLocation;
 import net.runelite.client.plugins.microbot.util.poh.data.JewelleryBoxType;
 import net.runelite.client.plugins.microbot.util.poh.data.NexusPortal;
+import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
 import java.util.*;
@@ -36,6 +37,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntilTrue;
  */
 @Slf4j
 public class PohTeleports {
+    private static final long ORNATE_POOL_REUSE_COOLDOWN_MS = 60_000L;
     private static final int ORNATE_REJUVENATION_POOL = 29241;
     private static final int FIERY_ORNATE_REJUVENATION_POOL = 49993;
     private static final int PORTAL_NEXUS = 33410;
@@ -63,6 +65,7 @@ public class PohTeleports {
             MOUNTED_DIGSITE,
             MOUNTED_XERICS
     };
+    private static volatile long lastOrnatePoolUseMs;
 
     /**
      * Checks if the player is in their house
@@ -72,6 +75,7 @@ public class PohTeleports {
      * @return
      */
     public static boolean isInHouse() {
+        if (World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()) return true;
         if (!Rs2Player.IsInInstance()) return false;
         // Use the tile-object cache rather than Rs2GameObject.getGameObject; the latter
         // routes through Rs2Player.getWorldLocation() as a scene anchor which returns the
@@ -97,6 +101,12 @@ public class PohTeleports {
     }
 
     public static boolean useOrnateRejuvenationPoolIfPresent() {
+        long now = System.currentTimeMillis();
+        long elapsed = now - lastOrnatePoolUseMs;
+        if (elapsed >= 0 && elapsed < ORNATE_POOL_REUSE_COOLDOWN_MS) {
+            log.info("[POH] ornate pool skipped; used {}ms ago", elapsed);
+            return true;
+        }
         GameObject pool = findPohObjectAnywhere(ORNATE_REJUVENATION_POOL_IDS);
         if (pool == null) {
             log.info("[POH] ornate pool not found in loaded scene at {}", Rs2Player.getWorldLocation());
@@ -111,6 +121,9 @@ public class PohTeleports {
         }
         boolean finished = sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
         log.info("[POH] ornate pool interaction finished={} player={}", finished, Rs2Player.getWorldLocation());
+        if (finished) {
+            lastOrnatePoolUseMs = System.currentTimeMillis();
+        }
         return finished;
     }
 

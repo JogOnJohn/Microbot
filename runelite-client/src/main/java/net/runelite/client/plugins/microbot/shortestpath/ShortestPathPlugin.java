@@ -336,7 +336,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         getClientThread().invokeLater(() -> {
             long invokeLaterDelay = System.currentTimeMillis() - scheduleTime;
             long refreshStart = System.currentTimeMillis();
-            pathfinderConfig.refresh();
+            pathfinderConfig.refresh(ends.size() == 1 ? ends.iterator().next() : null);
             long refreshTime = System.currentTimeMillis() - refreshStart;
             pathfinderConfig.filterLocations(ends, canReviveFiltered);
             synchronized (pathfinderMutex) {

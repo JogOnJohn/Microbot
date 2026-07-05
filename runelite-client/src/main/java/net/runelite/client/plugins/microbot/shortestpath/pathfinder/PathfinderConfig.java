@@ -41,6 +41,7 @@ import static net.runelite.client.plugins.microbot.shortestpath.TransportType.TE
 
 @Slf4j
 public class PathfinderConfig {
+    private static final int WORLD330_MIN_TARGET_DISTANCE = 150;
     private static final WorldArea WILDERNESS_ABOVE_GROUND = new WorldArea(2944, 3525, 448, 448, 0);
     private static final WorldArea WILDERNESS_ABOVE_GROUND_LEVEL_20 = new WorldArea(2944, 3680, 448, 448, 0);
     private static final WorldArea WILDERNESS_ABOVE_GROUND_LEVEL_30 = new WorldArea(2944, 3760, 448, 448, 0);
@@ -351,7 +352,7 @@ public class PathfinderConfig {
         usableTeleports.clear();
 
         long mergeStart = System.currentTimeMillis();
-        Map<WorldPoint, Set<Transport>> mergedList = createMergedList();
+        Map<WorldPoint, Set<Transport>> mergedList = createMergedList(target);
         long mergeTime = System.currentTimeMillis() - mergeStart;
 
         long cacheStart = System.currentTimeMillis();
@@ -651,8 +652,8 @@ public class PathfinderConfig {
     }
 
 
-    private Map<WorldPoint, Set<Transport>> createMergedList() {
-        boolean useWorld330 = shouldUseWorld330MaxHouse();
+    private Map<WorldPoint, Set<Transport>> createMergedList(WorldPoint target) {
+        boolean useWorld330 = shouldUseWorld330MaxHouse(target);
         if (!usePoh && !useWorld330) return allTransports;
         Map<WorldPoint, Set<Transport>> mergedTransports = new HashMap<>();
 
@@ -714,11 +715,24 @@ public class PathfinderConfig {
     }
 
     private boolean shouldUseWorld330MaxHouse() {
+        return shouldUseWorld330MaxHouse(null);
+    }
+
+    private boolean shouldUseWorld330MaxHouse(WorldPoint target) {
         if (!useWorld330MaxHouse || client == null || client.getWorld() != 330) {
             return false;
         }
-        return isInWorld330HostedHouse()
-                || Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)
+        if (isInWorld330HostedHouse()) {
+            return true;
+        }
+        WorldPoint player = Rs2Player.getWorldLocation();
+        if (target != null && player != null && player.getPlane() == target.getPlane()
+                && player.distanceTo2D(target) < WORLD330_MIN_TARGET_DISTANCE) {
+            log.info("[W330POH] skipped hosted house route: targetDist={} min={} player={} target={}",
+                    player.distanceTo2D(target), WORLD330_MIN_TARGET_DISTANCE, player, target);
+            return false;
+        }
+        return Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)
                 || (useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE));
     }
 
@@ -1547,6 +1561,7 @@ public class PathfinderConfig {
                 usePoh,
                 useWorld330MaxHouse,
                 client != null ? client.getWorld() : 0,
+                target,
                 PohTeleports.isInHouse(),
                 isInWorld330HostedHouse(),
                 world330HostedAnchor,
