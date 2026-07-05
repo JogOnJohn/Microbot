@@ -11,8 +11,13 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
@@ -28,21 +33,23 @@ public enum World330HostedHouse implements PohTeleport {
     private static final int ENTER_CHILD = 19;
     private static final int ENTER_CONTAINER_WIDGET = 3407891;
     private static final int SORT_ASCENDING_SPRITE = 1050;
+    private static final int MAX_ADVERTISED_HOST_ATTEMPTS = 8;
     public static final WorldPoint POH_INSTANCE_ANCHOR = new WorldPoint(1877, 7052, 1);
 
     @Override
     public boolean execute() {
-        log.info("[W330POH] execute start inHosted={} player={} loadedPohObject={}",
-                isInHostedHouse(), Rs2Player.getWorldLocation(), PohTeleports.firstLoadedPohObjectId());
+        log.info("[W330POH] execute start inHosted={} player={}",
+                isInHostedHouse(), Rs2Player.getWorldLocation());
         if (!isInHostedHouse() && !enterHostedHouse()) {
-            log.info("[W330POH] failed to enter hosted house player={} loadedPohObject={}",
-                    Rs2Player.getWorldLocation(), PohTeleports.firstLoadedPohObjectId());
+            log.info("[W330POH] failed to enter hosted house player={}",
+                    Rs2Player.getWorldLocation());
             return false;
         }
         boolean poolUsed = PohTeleports.useOrnateRejuvenationPoolIfPresent();
         boolean inHostedHouse = isInHostedHouse();
-        log.info("[W330POH] execute end poolUsed={} inHosted={} player={} loadedPohObject={}",
-                poolUsed, inHostedHouse, Rs2Player.getWorldLocation(), PohTeleports.firstLoadedPohObjectId());
+        log.info("[W330POH] execute end poolUsed={} inHosted={} player={} facilityId={}",
+                poolUsed, inHostedHouse, Rs2Player.getWorldLocation(),
+                inHostedHouse ? PohTeleports.firstLoadedHostedHouseFacilityId() : -1);
         return inHostedHouse;
     }
 
@@ -68,7 +75,7 @@ public enum World330HostedHouse implements PohTeleport {
         if (!isAdvertisementWidgetOpen() && !openAdvertisementBoard()) {
             return false;
         }
-        if (!selectTopAdvertisedHouse()) {
+        if (!selectAdvertisedHouse()) {
             return false;
         }
         return sleepUntil(this::isInHostedHouse, 16000);
@@ -78,7 +85,10 @@ public enum World330HostedHouse implements PohTeleport {
         if (Microbot.getClient() == null || Microbot.getClient().getWorld() != 330) {
             return false;
         }
-        return Rs2Player.IsInInstance() && PohTeleports.hasLoadedPohObject();
+        if (!Rs2Player.IsInInstance() || !isOnHostedHouseTemplate()) {
+            return false;
+        }
+        return PohTeleports.hasLoadedPohObject();
     }
 
     public WorldPoint getRoutingAnchor() {
@@ -118,7 +128,56 @@ public enum World330HostedHouse implements PohTeleport {
         return Rs2Widget.isWidgetVisible(HOUSE_ADVERTISEMENT_WIDGET);
     }
 
-    private boolean selectTopAdvertisedHouse() {
+    private boolean selectAdvertisedHouse() {
+        Set<String> failedAdvertisedHosts = new HashSet<>();
+        for (int attempt = 0; attempt < MAX_ADVERTISED_HOST_ATTEMPTS; attempt++) {
+            if (!isAdvertisementWidgetOpen() && !openAdvertisementBoard()) {
+                return false;
+            }
+            if (!ensureBestHouseSort()) {
+                return false;
+            }
+
+            Widget containerNames = Rs2Widget.getWidget(NAMES_GROUP, NAMES_CHILD);
+            Widget containerEnter = Rs2Widget.getWidget(ENTER_GROUP, ENTER_CHILD);
+            if (containerNames == null || containerNames.getChildren() == null
+                    || containerEnter == null || containerEnter.getChildren() == null) {
+                return false;
+            }
+
+            List<String> advertisedHosts = advertisedHouseNames(containerNames);
+            for (int row = 0; row < advertisedHosts.size(); row++) {
+                String houseOwner = advertisedHosts.get(row);
+                if (failedAdvertisedHosts.contains(houseOwner)) {
+                    continue;
+                }
+                Widget enter = matchingEnterWidget(containerEnter, houseOwner);
+                if (enter == null) {
+                    failedAdvertisedHosts.add(houseOwner);
+                    continue;
+                }
+
+                log.info("[W330POH] trying advertised host row={} skippedHosts={}",
+                        row, failedAdvertisedHosts.size());
+                Rs2Widget.clickChildWidget(ENTER_CONTAINER_WIDGET, enter.getIndex());
+                boolean entered = sleepUntil(this::isInHostedHouse, 9000);
+                if (entered) {
+                    return true;
+                }
+
+                failedAdvertisedHosts.add(houseOwner);
+                log.info("[W330POH] advertised host row={} did not enter skippedHosts={}",
+                        row, failedAdvertisedHosts.size());
+                if (!isAdvertisementWidgetOpen() && !openAdvertisementBoard()) {
+                    return false;
+                }
+                break;
+            }
+        }
+        return false;
+    }
+
+    private boolean ensureBestHouseSort() {
         Widget containerNames = Rs2Widget.getWidget(NAMES_GROUP, NAMES_CHILD);
         Widget containerEnter = Rs2Widget.getWidget(ENTER_GROUP, ENTER_CHILD);
         if (containerNames == null || containerNames.getChildren() == null
@@ -140,35 +199,23 @@ public enum World330HostedHouse implements PohTeleport {
                 return false;
             }
         }
-
-        String houseOwner = topAdvertisedHouseName(containerNames);
-        if (houseOwner == null) {
-            return false;
-        }
-
-        Widget enter = matchingEnterWidget(containerEnter, houseOwner);
-        if (enter == null) {
-            return false;
-        }
-
-        Rs2Widget.clickChildWidget(ENTER_CONTAINER_WIDGET, enter.getIndex());
-        Rs2Player.waitForWalking();
         return true;
     }
 
-    private String topAdvertisedHouseName(Widget containerNames) {
-        String houseOwner = null;
-        int smallestOriginalY = Integer.MAX_VALUE;
+    private List<String> advertisedHouseNames(Widget containerNames) {
+        List<Widget> nameWidgets = new ArrayList<>();
         for (Widget child : containerNames.getChildren()) {
             if (child == null || child.getText() == null || child.getText().isEmpty()) {
                 continue;
             }
-            if (child.getOriginalY() < smallestOriginalY) {
-                houseOwner = child.getText();
-                smallestOriginalY = child.getOriginalY();
-            }
+            nameWidgets.add(child);
         }
-        return houseOwner;
+        nameWidgets.sort(Comparator.comparingInt(Widget::getOriginalY));
+        List<String> names = new ArrayList<>();
+        for (Widget child : nameWidgets) {
+            names.add(child.getText());
+        }
+        return names;
     }
 
     private Widget matchingEnterWidget(Widget containerEnter, String houseOwner) {
@@ -184,5 +231,12 @@ public enum World330HostedHouse implements PohTeleport {
             }
         }
         return null;
+    }
+
+    private boolean isOnHostedHouseTemplate() {
+        WorldPoint location = Rs2Player.getWorldLocation();
+        return location != null
+                && location.getY() >= 7000
+                && location.getY() <= 8000;
     }
 }

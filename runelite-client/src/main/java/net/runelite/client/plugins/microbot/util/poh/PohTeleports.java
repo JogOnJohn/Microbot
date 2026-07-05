@@ -41,6 +41,13 @@ public class PohTeleports {
     private static final int ORNATE_JEWELLERY_BOX = 37540;
     private static final int MOUNTED_DIGSITE = 33420;
     private static final int MOUNTED_XERICS = 33419;
+    private static final Integer[] HOSTED_HOUSE_FACILITY_OBJECT_IDS = new Integer[]{
+            ORNATE_REJUVENATION_POOL,
+            PORTAL_NEXUS,
+            ORNATE_JEWELLERY_BOX,
+            MOUNTED_DIGSITE,
+            MOUNTED_XERICS
+    };
     private static final Integer[] HOSTED_HOUSE_OBJECT_IDS = new Integer[]{
             ObjectID.POH_EXIT_PORTAL,
             ORNATE_REJUVENATION_POOL,
@@ -113,8 +120,17 @@ public class PohTeleports {
         return findPohObjectAnywhere(HOSTED_HOUSE_OBJECT_IDS) != null;
     }
 
+    public static boolean hasLoadedHostedHouseFacility() {
+        return findPohObjectAnywhere(HOSTED_HOUSE_FACILITY_OBJECT_IDS) != null;
+    }
+
     public static int firstLoadedPohObjectId() {
         GameObject object = findPohObjectAnywhere(HOSTED_HOUSE_OBJECT_IDS);
+        return object != null ? object.getId() : -1;
+    }
+
+    public static int firstLoadedHostedHouseFacilityId() {
+        GameObject object = findPohObjectAnywhere(HOSTED_HOUSE_FACILITY_OBJECT_IDS);
         return object != null ? object.getId() : -1;
     }
 

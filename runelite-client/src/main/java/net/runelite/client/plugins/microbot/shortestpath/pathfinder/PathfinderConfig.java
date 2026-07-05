@@ -665,12 +665,11 @@ public class PathfinderConfig {
         if (useWorld330) {
             Map<WorldPoint, Set<Transport>> world330Transports = PohPanel.getWorld330MaxHouseTransports(allTransports);
             int world330TransportCount = world330Transports.values().stream().mapToInt(Set::size).sum();
-            log.info("[W330POH] createMergedList useWorld330=true inHosted={} keys={} transports={} player={} loadedPohObject={}",
+            log.info("[W330POH] createMergedList useWorld330=true inHosted={} keys={} transports={} player={}",
                     inWorld330HostedHouse,
                     world330Transports.size(),
                     world330TransportCount,
-                    Rs2Player.getWorldLocation(),
-                    PohTeleports.firstLoadedPohObjectId());
+                    Rs2Player.getWorldLocation());
             if (inWorld330HostedHouse) {
                 mergedTransports.remove(null);
             }

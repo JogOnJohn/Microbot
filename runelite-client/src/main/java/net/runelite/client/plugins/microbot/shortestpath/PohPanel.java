@@ -276,8 +276,7 @@ public class PohPanel extends PluginPanel {
         Microbot.log("[W330POH] transport merge anchor=" + anchor
                 + " inHosted=" + inHostedHouse
                 + " keys=" + pohTransports.size()
-                + " transports=" + transportCount
-                + " loadedPohObject=" + PohTeleports.firstLoadedPohObjectId());
+                + " transports=" + transportCount);
         return pohTransports;
     }
 
