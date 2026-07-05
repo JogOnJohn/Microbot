@@ -107,6 +107,10 @@ public class PohTeleports {
         return finished;
     }
 
+    public static boolean hasLoadedOrnateRejuvenationPool() {
+        return findPohObjectAnywhere(new Integer[]{ORNATE_REJUVENATION_POOL}) != null;
+    }
+
     /**
      * Checks if the player has a house
      *

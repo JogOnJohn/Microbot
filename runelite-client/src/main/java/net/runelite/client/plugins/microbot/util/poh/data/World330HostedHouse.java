@@ -38,12 +38,18 @@ public enum World330HostedHouse implements PohTeleport {
 
     @Override
     public boolean execute() {
+        boolean wasInHostedHouse = isInHostedHouse();
         log.info("[W330POH] execute start inHosted={} player={}",
-                isInHostedHouse(), Rs2Player.getWorldLocation());
-        if (!isInHostedHouse() && !enterHostedHouse()) {
+                wasInHostedHouse, Rs2Player.getWorldLocation());
+        if (!wasInHostedHouse && !enterHostedHouse()) {
             log.info("[W330POH] failed to enter hosted house player={}",
                     Rs2Player.getWorldLocation());
             return false;
+        }
+        if (!wasInHostedHouse) {
+            boolean poolLoaded = sleepUntil(PohTeleports::hasLoadedOrnateRejuvenationPool, 3000);
+            log.info("[W330POH] post-entry ornate pool loaded={} player={}",
+                    poolLoaded, Rs2Player.getWorldLocation());
         }
         boolean poolUsed = PohTeleports.useOrnateRejuvenationPoolIfPresent();
         boolean inHostedHouse = isInHostedHouse();
