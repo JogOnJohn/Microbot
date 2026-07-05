@@ -71,14 +71,12 @@ public class PohTeleports {
     }
 
     public static boolean useOrnateRejuvenationPoolIfPresent() {
-        if (!isInHouse()) {
+        GameObject pool = findPohObjectAnywhere(new Integer[]{ORNATE_REJUVENATION_POOL});
+        if (pool == null) {
             return false;
         }
-        boolean clicked = Microbot.getRs2TileObjectCache().query()
-                .interact(ORNATE_REJUVENATION_POOL, "Drink");
-        if (!clicked) {
-            return false;
-        }
+        boolean clicked = Rs2GameObject.interact(pool, "Drink");
+        if (!clicked) return false;
         return sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
     }
 

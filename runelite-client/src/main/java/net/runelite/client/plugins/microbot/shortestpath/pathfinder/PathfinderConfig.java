@@ -660,11 +660,17 @@ public class PathfinderConfig {
             mergedTransports.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
+        boolean inWorld330HostedHouse = isInWorld330HostedHouse();
         if (useWorld330) {
             Map<WorldPoint, Set<Transport>> world330Transports = PohPanel.getWorld330MaxHouseTransports(allTransports);
+            if (inWorld330HostedHouse) {
+                mergedTransports.remove(null);
+            }
             for (var entry : world330Transports.entrySet()) {
-                if (entry.getKey() == null && !isInWorld330HostedHouse()) {
-                    mergedTransports.put(null, new HashSet<>(entry.getValue()));
+                if (entry.getKey() == null) {
+                    if (!inWorld330HostedHouse) {
+                        mergedTransports.put(null, new HashSet<>(entry.getValue()));
+                    }
                     continue;
                 }
                 mergedTransports
