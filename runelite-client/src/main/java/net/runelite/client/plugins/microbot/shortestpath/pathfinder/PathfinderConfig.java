@@ -1554,6 +1554,12 @@ public class PathfinderConfig {
         WorldPoint world330HostedAnchor = useWorld330MaxHouse && client != null && client.getWorld() == 330
                 ? World330HostedHouse.ADVERTISED_HOUSE.getRoutingAnchor()
                 : null;
+        // Hash the same effective target shouldUseWorld330MaxHouse resolves (bare refresh()
+        // passes null and the gate falls back to the walker's live destination). Hashing the
+        // raw null would let bare refreshes from different walks share a cache key, so a
+        // short-trip walk could restore a snapshot whose transport map still contains the
+        // W330 house entry from a previous long-trip walk.
+        WorldPoint effectiveTarget = target != null ? target : Rs2Walker.getCurrentTarget();
         return Objects.hash(
                 packTransportRefreshToggleBits(),
                 useTeleportationItems,
@@ -1569,7 +1575,7 @@ public class PathfinderConfig {
                 usePoh,
                 useWorld330MaxHouse,
                 client != null ? client.getWorld() : 0,
-                target,
+                effectiveTarget,
                 PohTeleports.isInHouse(),
                 isInWorld330HostedHouse(),
                 world330HostedAnchor,
