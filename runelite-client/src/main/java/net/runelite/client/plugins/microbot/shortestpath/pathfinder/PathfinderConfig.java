@@ -725,6 +725,14 @@ public class PathfinderConfig {
         if (isInWorld330HostedHouse()) {
             return true;
         }
+        if (target == null) {
+            // Most refresh() call sites don't thread a target through (the walker's mid-walk
+            // refreshes, Rs2WalkerBankingPlanner, Rs2Bank, Rs2DepositBox all call the no-arg
+            // overload), and ShortestPathPlugin passes null for multi-tile end sets — so the
+            // near-target gate below used to be bypassed on almost every refresh. Fall back to
+            // the walker's live destination so short same-plane trips still skip the POH detour.
+            target = Rs2Walker.getCurrentTarget();
+        }
         WorldPoint player = Rs2Player.getWorldLocation();
         if (target != null && player != null && player.getPlane() == target.getPlane()
                 && player.distanceTo2D(target) < WORLD330_MIN_TARGET_DISTANCE) {

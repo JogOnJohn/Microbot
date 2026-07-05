@@ -316,6 +316,33 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         }
     }
 
+    /**
+     * Representative refresh target for a (possibly multi-tile) end set: the end nearest to
+     * {@code start}. Used so target-aware transport gating still fires when the destination is
+     * an area rather than a single tile.
+     */
+    private static WorldPoint nearestEnd(WorldPoint start, Set<WorldPoint> ends) {
+        if (ends == null || ends.isEmpty()) {
+            return null;
+        }
+        if (start == null || ends.size() == 1) {
+            return ends.iterator().next();
+        }
+        WorldPoint best = null;
+        int bestDist = Integer.MAX_VALUE;
+        for (WorldPoint end : ends) {
+            if (end == null) {
+                continue;
+            }
+            int dist = start.distanceTo2D(end);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = end;
+            }
+        }
+        return best;
+    }
+
     public void restartPathfinding(WorldPoint start, Set<WorldPoint> ends, boolean canReviveFiltered) {
         ExecutorService executor;
         synchronized (pathfinderMutex) {
@@ -336,7 +363,11 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         getClientThread().invokeLater(() -> {
             long invokeLaterDelay = System.currentTimeMillis() - scheduleTime;
             long refreshStart = System.currentTimeMillis();
-            pathfinderConfig.refresh(ends.size() == 1 ? ends.iterator().next() : null);
+            // Thread a representative target into refresh() even for multi-tile end sets:
+            // area-based ends (quest-helper zones, bank sets) previously refreshed with null,
+            // which bypassed target-aware gating (e.g. the W330 POH near-target skip). The end
+            // nearest the player is the cheapest sound representative.
+            pathfinderConfig.refresh(nearestEnd(start, ends));
             long refreshTime = System.currentTimeMillis() - refreshStart;
             pathfinderConfig.filterLocations(ends, canReviveFiltered);
             synchronized (pathfinderMutex) {
