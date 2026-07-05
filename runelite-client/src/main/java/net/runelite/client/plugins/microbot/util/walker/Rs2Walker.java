@@ -1100,6 +1100,11 @@ public class Rs2Walker {
                 return WalkerState.EXIT;
             }
 
+            WalkerState directLocalWalk = tryDirectLocalWalkBeforePathfinder(target, distance);
+            if (directLocalWalk != null) {
+                return directLocalWalk;
+            }
+
             Pathfinder pathfinder = ShortestPathPlugin.getPathfinder();
             if (pathfinder == null) {
                 markStartupPhase("pf_wait_enter", target, "reason=pathfinder_null");
@@ -2118,6 +2123,10 @@ public class Rs2Walker {
             int finishThreshold = tightFinishThreshold(target, pathLastForFinish, distance);
             int finalDist = Rs2Player.getWorldLocation().distanceTo(target);
             if (finalDist <= finishThreshold) {
+                if (tryHandleArrivalSceneTransition(target)) {
+                    setTarget(null, "rs2walker:processWalk:arrival-scene-transition");
+                    return WalkerState.MOVING;
+                }
                 setTarget(null, "rs2walker:processWalk:arrived-within-distance");
                 return WalkerState.ARRIVED;
             } else if (partialPath) {
@@ -3073,6 +3082,71 @@ public class Rs2Walker {
         return false;
     }
 
+    private static WalkerState tryDirectLocalWalkBeforePathfinder(WorldPoint target, int distance) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        if (target == null || playerLoc == null) {
+            return null;
+        }
+
+        int finishTh = Math.max(0, distance);
+        if (playerLoc.distanceTo(target) <= finishTh) {
+            if (tryHandleArrivalSceneTransition(target)) {
+                setTarget(null, "rs2walker:direct-local-prepath:arrival-scene-transition");
+                return WalkerState.MOVING;
+            }
+            setTarget(null, "rs2walker:direct-local-prepath:already-within-distance");
+            return WalkerState.ARRIVED;
+        }
+
+        final int directClickMaxDistance = 13;
+        if (playerLoc.getPlane() != target.getPlane() || playerLoc.distanceTo2D(target) > directClickMaxDistance) {
+            return null;
+        }
+
+        Client client = Microbot.getClient();
+        boolean inInstance = client != null
+                && client.getTopLevelWorldView() != null
+                && client.getTopLevelWorldView().isInstance();
+        if (!inInstance && (!Rs2Tile.isWalkable(target) || !Rs2Tile.isTileReachable(target))) {
+            return null;
+        }
+
+        long suppressUntil = suppressTryDirectShortWalkUntilMs;
+        if (suppressUntil != 0L && System.currentTimeMillis() < suppressUntil) {
+            return null;
+        }
+
+        markStartupPhase("direct_local_prepath", target, "to=" + compactWorldPoint(target));
+        WorldPoint before = playerLoc;
+        boolean clicked = walkMiniMap(target);
+        if (!clicked) {
+            clicked = walkMiniMapToward(target, playerLoc, directClickMaxDistance - 1);
+        }
+        if (!clicked) {
+            clicked = walkFastCanvas(target);
+        }
+        if (!clicked) {
+            return null;
+        }
+
+        markFirstMovementClick("direct_local_first_click", target, before, "to=" + compactWorldPoint(target));
+        sleepUntil(() -> {
+            if (isWalkCancelled(target)) {
+                return true;
+            }
+            WorldPoint now = Rs2Player.getWorldLocation();
+            return now != null && (now.distanceTo(target) <= finishTh || !now.equals(before) || Rs2Player.isMoving());
+        }, 800);
+
+        WorldPoint afterClick = Rs2Player.getWorldLocation();
+        if (afterClick != null && afterClick.distanceTo(target) <= finishTh) {
+            setTarget(null, "rs2walker:direct-local-prepath:arrived-after-click");
+            return WalkerState.ARRIVED;
+        }
+
+        return WalkerState.MOVING;
+    }
+
     private static WalkerState tryDirectShortWalk(WorldPoint target,
                                                   int distance,
                                                   List<WorldPoint> rawPath,
@@ -3088,6 +3162,10 @@ public class Rs2Walker {
 
         int initialDist = playerLoc.distanceTo(target);
         if (initialDist <= finishTh) {
+            if (tryHandleArrivalSceneTransition(target)) {
+                setTarget(null, "rs2walker:tryDirectShortWalk:arrival-scene-transition");
+                return WalkerState.MOVING;
+            }
             setTarget(null, "rs2walker:tryDirectShortWalk:already-within-distance");
             return WalkerState.ARRIVED;
         }
@@ -3169,6 +3247,91 @@ public class Rs2Walker {
         }
 
         return WalkerState.MOVING;
+    }
+
+    private static boolean tryHandleArrivalSceneTransition(WorldPoint target) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        if (target == null || playerLoc == null || playerLoc.getPlane() != target.getPlane()) {
+            return false;
+        }
+        if (Rs2Player.isMoving() || isDoorInteractionSettling() || isTransportInteractionSettling()) {
+            return false;
+        }
+
+        TileObject object = Rs2GameObject.getAll(o -> isArrivalSceneTransitionObject(o, target), target, 3).stream()
+                .min(Comparator.comparingInt(o -> o.getWorldLocation().distanceTo2D(target)))
+                .orElse(null);
+        if (object == null) {
+            return false;
+        }
+
+        ObjectComposition comp = resolveCompositionForDoorProbe(object);
+        String action = pickArrivalSceneTransitionAction(comp);
+        if (action == null) {
+            return false;
+        }
+
+        WorldPoint before = playerLoc;
+        if (!Rs2GameObject.interact(object, action)) {
+            return false;
+        }
+
+        WebWalkLog.tmark("arrival_scene_transition", 0, target, before,
+                "object=" + object.getId() + " action=" + action);
+        sleepUntil(() -> {
+            WorldPoint now = Rs2Player.getWorldLocation();
+            return now != null && (!now.equals(before) || now.getPlane() != before.getPlane() || Rs2Player.isMoving());
+        }, 1_500);
+        sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Player.isAnimating(), 5_000);
+        lastMovedTimeMs = System.currentTimeMillis();
+        stuckCount = 0;
+        return true;
+    }
+
+    private static boolean isArrivalSceneTransitionObject(TileObject object, WorldPoint target) {
+        if (object == null || object.getWorldLocation() == null || target == null) {
+            return false;
+        }
+        if (object.getWorldLocation().getPlane() != target.getPlane()
+                || object.getWorldLocation().distanceTo2D(target) > 1) {
+            return false;
+        }
+        ObjectComposition comp = resolveCompositionForDoorProbe(object);
+        return isArrivalSceneTransitionComposition(comp) && pickArrivalSceneTransitionAction(comp) != null;
+    }
+
+    private static boolean isArrivalSceneTransitionComposition(ObjectComposition comp) {
+        if (comp == null || comp.getName() == null || comp.getActions() == null) {
+            return false;
+        }
+        String name = comp.getName().toLowerCase(Locale.ROOT);
+        return name.contains("stair")
+                || name.contains("ladder")
+                || name.contains("trapdoor")
+                || name.contains("steps")
+                || name.contains("stile");
+    }
+
+    private static String pickArrivalSceneTransitionAction(ObjectComposition comp) {
+        if (comp == null || comp.getActions() == null) {
+            return null;
+        }
+        List<String> preferredActions = List.of(
+                "climb-up", "climb up", "climb",
+                "go-up", "go up",
+                "climb-down", "climb down",
+                "go-down", "go down",
+                "enter");
+        for (String preferredAction : preferredActions) {
+            Optional<String> action = Arrays.stream(comp.getActions())
+                    .filter(Objects::nonNull)
+                    .filter(a -> a.equalsIgnoreCase(preferredAction))
+                    .findFirst();
+            if (action.isPresent()) {
+                return action.get();
+            }
+        }
+        return null;
     }
 
     private static boolean tryStallRecoveryClick(List<WorldPoint> path,
@@ -5725,6 +5888,13 @@ public class Rs2Walker {
             return;
         }
         interimTargetWp = null;
+        long now = System.currentTimeMillis();
+        lastMovedTimeMs = now;
+        stuckCount = 0;
+        interimSetAtMs = 0L;
+        interimLastProgressAtMs = 0L;
+        interimLastBestPathIdx = -1;
+        interimLastRetargetAtMs = 0L;
         ShortestPathPlugin.setLastLocation(start);
         Rs2WalkerLifecycleRuntime.restartPathfinding(start, goal);
     }
@@ -6282,7 +6452,7 @@ public class Rs2Walker {
                         }
                         sleepUntil(() -> !Rs2Player.isAnimating());
                         WorldPoint destWait = transport.getDestination();
-                        int maxInclusive = isAdjacentSamePlaneTransport(transport) ? 0 : OFFSET;
+                        int maxInclusive = isAdjacentSamePlaneTransport(transport) ? 1 : OFFSET;
                         if (destWait == null) {
                             return false;
                         }
@@ -7249,14 +7419,14 @@ public class Rs2Walker {
     private static final double STALL_COMBAT_MULTIPLIER = 2.0;
     private static final double STALL_ANIMATING_MULTIPLIER = 1.5;
     private static final double STALL_MOVING_MULTIPLIER = 1.35;
-    /** While a sticky minimap interim waypoint is active, path segments can exceed base stall easily. */
-    private static final double STALL_INTERIM_MINIMAP_MULTIPLIER = 1.75;
+    /** Sticky minimap targets should not turn ordinary road stalls into long idle pauses. */
+    private static final double STALL_INTERIM_MINIMAP_MULTIPLIER = 1.0;
     private static final double STALL_INTERACTING_MULTIPLIER = 1.5;
     /**
      * After a successful minimap walk click, refresh the stall clock this long — blocked tiles / long
      * segments sometimes delay tile deltas without {@link Rs2Player#isMoving()} flipping immediately.
      */
-    private static final long MINIMAP_CLICK_STALL_GRACE_MS = 12_000L;
+    private static final long MINIMAP_CLICK_STALL_GRACE_MS = 4_000L;
 
     private static boolean interactingActorNearWalkablePath() {
         Pathfinder pf = ShortestPathPlugin.getPathfinder();

@@ -351,6 +351,11 @@ public class ClientUI
 						{
 							log.warn("Unexpected exception occurred while check for confirm required", e);
 						}
+						catch (Error e)
+						{
+							log.warn("Exit confirmation dialog failed; continuing shutdown", e);
+							result = JOptionPane.OK_OPTION;
+						}
 					}
 
 					if (result == JOptionPane.OK_OPTION)

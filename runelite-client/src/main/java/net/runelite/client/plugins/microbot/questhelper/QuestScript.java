@@ -1282,6 +1282,7 @@ public class QuestScript extends Script {
     public boolean applyNpcStep(NpcStep step) {
         List<Rs2NpcModel> npcs = step.getNpcs().stream()
                 .map(Rs2NpcModel::new)
+                .filter(npc -> isNpcStepLocationPlausible(step, npc))
                 .collect(Collectors.toList());
         Rs2NpcModel npc = npcs.stream().findFirst().orElse(null);
 
@@ -1302,6 +1303,10 @@ public class QuestScript extends Script {
 
             if (step.getText().stream().anyMatch(x -> x.toLowerCase().contains("kill"))) {
                 if (!Rs2Combat.inCombat()) {
+                    Microbot.log(Level.INFO, "[QuestHelper] npc-step click id=" + npc.getId()
+                            + " name='" + npc.getName()
+                            + "' action='Attack' location=" + npc.getWorldLocation()
+                            + " player=" + Rs2Player.getWorldLocation());
                     npc.click("Attack");
                 }
                 return true;
@@ -1334,9 +1339,20 @@ public class QuestScript extends Script {
             var itemId = step.getIconItemID();
             if (itemId != -1) {
                 Rs2Inventory.use(itemId);
+                Microbot.log(Level.INFO, "[QuestHelper] npc-step click id=" + npc.getId()
+                        + " name='" + npc.getName()
+                        + "' action='' item=" + itemId
+                        + " location=" + npc.getWorldLocation()
+                        + " player=" + Rs2Player.getWorldLocation());
                 npc.click("");
             } else {
-                npc.click(chooseCorrectNPCOption(step, npc));
+                String option = chooseCorrectNPCOption(step, npc);
+                Microbot.log(Level.INFO, "[QuestHelper] npc-step click id=" + npc.getId()
+                        + " name='" + npc.getName()
+                        + "' action='" + option
+                        + "' location=" + npc.getWorldLocation()
+                        + " player=" + Rs2Player.getWorldLocation());
+                npc.click(option);
             }
 
             if (step.isAllowMultipleHighlights()) {
@@ -1344,9 +1360,9 @@ public class QuestScript extends Script {
                 sleepUntil(Rs2Dialogue::isInDialogue);
             }
         } else if (npc != null && npc.getLocalLocation() != null && !Rs2Camera.isTileOnScreen(npc.getLocalLocation())) {
-            Rs2Walker.walkTo(npc.getWorldLocation(), 2);
+            Rs2Walker.walkTo(resolveNpcStepWalkTarget(step, npc), 2);
         } else if (npc != null && (!npc.hasLineOfSight() || !Rs2Walker.canReach(npc.getWorldLocation()))) {
-            Rs2Walker.walkTo(npc.getWorldLocation(), 2);
+            Rs2Walker.walkTo(resolveNpcStepWalkTarget(step, npc), 2);
         } else {
             if (step.getDefinedPoint().getWorldPoint().distanceTo(Rs2Player.getWorldLocation()) > 3) {
                 Rs2Walker.walkTo(step.getDefinedPoint().getWorldPoint(), 2);
@@ -1354,6 +1370,50 @@ public class QuestScript extends Script {
             }
         }
         return true;
+    }
+
+    private WorldPoint resolveNpcStepWalkTarget(NpcStep step, Rs2NpcModel npc) {
+        WorldPoint npcLocation = npc != null ? npc.getWorldLocation() : null;
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        WorldPoint stepLocation = step != null && step.getDefinedPoint() != null
+                ? step.getDefinedPoint().getWorldPoint()
+                : null;
+        if (npcLocation == null) {
+            return stepLocation;
+        }
+        if (stepLocation != null && npcLocation.getPlane() == stepLocation.getPlane()
+                && npcLocation.distanceTo2D(stepLocation) > 64) {
+            Microbot.log(Level.INFO, "[QuestHelper] npc-step walk target projected far from step; using defined point. npc="
+                    + npcLocation + " step=" + stepLocation + " player=" + playerLocation);
+            return stepLocation;
+        }
+        if (playerLocation != null && npcLocation.getPlane() == playerLocation.getPlane()
+                && npcLocation.distanceTo2D(playerLocation) > 128 && stepLocation != null) {
+            Microbot.log(Level.INFO, "[QuestHelper] npc-step walk target projected far from player; using defined point. npc="
+                    + npcLocation + " step=" + stepLocation + " player=" + playerLocation);
+            return stepLocation;
+        }
+        return npcLocation;
+    }
+
+    private boolean isNpcStepLocationPlausible(NpcStep step, Rs2NpcModel npc) {
+        if (step == null || npc == null || step.getDefinedPoint() == null) {
+            return true;
+        }
+        WorldPoint npcLocation = npc.getWorldLocation();
+        WorldPoint stepLocation = step.getDefinedPoint().getWorldPoint();
+        if (npcLocation == null || stepLocation == null || npcLocation.getPlane() != stepLocation.getPlane()) {
+            return true;
+        }
+        if (npcLocation.distanceTo2D(stepLocation) <= 64) {
+            return true;
+        }
+        Microbot.log(Level.INFO, "[QuestHelper] ignoring npc-step candidate far from step id=" + npc.getId()
+                + " name='" + npc.getName()
+                + "' npc=" + npcLocation
+                + " step=" + stepLocation
+                + " player=" + Rs2Player.getWorldLocation());
+        return false;
     }
 
 

@@ -242,21 +242,7 @@ public class Transport {
 
         //START microbot variables
         if ((value = fieldMap.get("menuOption menuTarget objectID")) != null && !value.trim().isEmpty()) {
-            value = value.trim(); // Remove leading/trailing spaces
-
-            // Regex pattern for semicolon-separated values
-            String regex = "^([^;]+);([^;]+);(\\d+)$";
-            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(regex);
-            java.util.regex.Matcher matcher = pattern.matcher(value);
-
-            if (matcher.matches()) {
-                // Extract matched groups
-                action = matcher.group(1).trim();   // First group: menuOption (action)
-                name = matcher.group(2).trim();    // Second group: menuTarget (name)
-                objectId = Integer.parseInt(matcher.group(3).trim()); // Third group: objectID
-            } else {
-                log.debug("Skipped invalid menuOption/menuTarget/objectID value: {}", value);
-            }
+            parseObjectAction(value);
         }
 
         if ((value = fieldMap.get("Currency")) != null) {
@@ -295,17 +281,9 @@ public class Transport {
             }
         }
 
-        if ((value = fieldMap.get("Item IDs")) != null && !value.trim().isEmpty()) {
-            String[] itemIdsList = value.split(DELIM_MULTI);
-            for (String listIds : itemIdsList) {
-                Set<Integer> multiitemList = new HashSet<>();
-                String[] itemIds = listIds.split(DELIM);
-                for (String item : itemIds) {
-                    int itemId = Integer.parseInt(item);
-                    multiitemList.add(itemId);
-                }
-                itemIdRequirements.add(multiitemList);
-            }
+        value = firstNonBlank(fieldMap, "Item IDs", "Items");
+        if (value != null) {
+            parseItemRequirements(value);
         }
 
         if ((value = fieldMap.get("Quests")) != null && !value.trim().isEmpty()) {
@@ -322,7 +300,7 @@ public class Transport {
             this.duration = Math.max(this.duration, 1);
         }
 
-        if ((value = fieldMap.get("Display info")) != null) {
+        if ((value = firstPresent(fieldMap, "Display info", "Display Info")) != null) {
             this.displayInfo = value;
         }
 
@@ -376,7 +354,8 @@ public class Transport {
             }
         }
 
-        if ((value = fieldMap.get("Varplayers")) != null && !value.trim().isEmpty()) {
+        value = firstNonBlank(fieldMap, "Varplayers", "VarPlayers");
+        if (value != null) {
             for (String varplayerCheck : value.split(DELIM_MULTI)) {
                 if (varplayerCheck.isBlank()) {
                     continue;
@@ -419,6 +398,78 @@ public class Transport {
                 (getRequiredLevel(Skill.RANGED) > 1 || getRequiredLevel(Skill.STRENGTH) > 1)) {
             this.type = TransportType.GRAPPLE_SHORTCUT;
         }
+    }
+
+    private void parseObjectAction(String objectValue) {
+        String value = objectValue.trim();
+
+        java.util.regex.Matcher localMatcher = java.util.regex.Pattern
+                .compile("^([^;]+);([^;]+);(\\d+)$")
+                .matcher(value);
+        if (localMatcher.matches()) {
+            action = localMatcher.group(1).trim();
+            name = localMatcher.group(2).trim();
+            objectId = Integer.parseInt(localMatcher.group(3).trim());
+            return;
+        }
+
+        java.util.regex.Matcher upstreamMatcher = java.util.regex.Pattern
+                .compile("^(.+)\\s+(\\d+)$")
+                .matcher(value);
+        if (upstreamMatcher.matches()) {
+            String actionAndName = upstreamMatcher.group(1).trim();
+            String[] parts = actionAndName.split("\\s+", 2);
+            if (parts.length == 2) {
+                action = parts[0].trim();
+                name = parts[1].trim();
+                objectId = Integer.parseInt(upstreamMatcher.group(2).trim());
+                return;
+            }
+        }
+
+        log.debug("Skipped invalid menuOption/menuTarget/objectID value: {}", value);
+    }
+
+    private void parseItemRequirements(String value) {
+        for (String alternativeGroup : value.split(";")) {
+            Set<Integer> alternatives = new HashSet<>();
+            for (String token : alternativeGroup.split("\\|\\||\\s+")) {
+                String itemToken = token.trim();
+                if (itemToken.isEmpty()) {
+                    continue;
+                }
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("^(\\d+)(?:\\s*=\\s*\\d+)?$")
+                        .matcher(itemToken);
+                if (matcher.matches()) {
+                    alternatives.add(Integer.parseInt(matcher.group(1)));
+                } else {
+                    log.debug("Skipping invalid item requirement token: {}", itemToken);
+                }
+            }
+            if (!alternatives.isEmpty()) {
+                itemIdRequirements.add(alternatives);
+            }
+        }
+    }
+
+    private static String firstPresent(Map<String, String> fieldMap, String... keys) {
+        for (String key : keys) {
+            if (fieldMap.containsKey(key)) {
+                return fieldMap.get(key);
+            }
+        }
+        return null;
+    }
+
+    private static String firstNonBlank(Map<String, String> fieldMap, String... keys) {
+        for (String key : keys) {
+            String value = fieldMap.get(key);
+            if (value != null && !value.trim().isEmpty()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     /**
@@ -599,11 +650,15 @@ public class Transport {
         addTransports(transports, "minecarts.tsv", TransportType.MINECART);
         addTransports(transports, "spirit_trees.tsv", TransportType.SPIRIT_TREE, 5);
         addTransports(transports, "quetzals.tsv", TransportType.QUETZAL, 6);
+        addTransports(transports, "quetzal_whistle.tsv", TransportType.TELEPORTATION_ITEM);
         addTransports(transports, "teleportation_items.tsv", TransportType.TELEPORTATION_ITEM);
+        addTransports(transports, "teleportation_boxes.tsv", TransportType.TELEPORTATION_PORTAL);
         addTransports(transports, "teleportation_minigames.tsv", TransportType.TELEPORTATION_MINIGAME);
         addTransports(transports, "teleportation_levers.tsv", TransportType.TELEPORTATION_LEVER);
         addTransports(transports, "teleportation_portals.tsv", TransportType.TELEPORTATION_PORTAL);
+        addTransports(transports, "teleportation_portals_poh.tsv", TransportType.TELEPORTATION_PORTAL);
         addTransports(transports, "teleportation_spells.tsv", TransportType.TELEPORTATION_SPELL);
+        addTransports(transports, "teleportation_spells_home.tsv", TransportType.TELEPORTATION_SPELL);
         addTransports(transports, "wilderness_obelisks.tsv", TransportType.WILDERNESS_OBELISK);
         addTransports(transports, "magic_carpets.tsv", TransportType.MAGIC_CARPET);
         addTransports(transports, "hot_air_balloons.tsv", TransportType.HOT_AIR_BALLOON, 7);

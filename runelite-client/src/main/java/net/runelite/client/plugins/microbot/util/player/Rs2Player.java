@@ -346,6 +346,9 @@ public class Rs2Player {
      * @return {@code true} if the player is moving, {@code false} if they are idle.
      */
     public static boolean isMoving() {
+        if (javax.swing.SwingUtilities.isEventDispatchThread() || !Microbot.isLoggedIn() || Microbot.getClient() == null) {
+            return false;
+        }
         return Microbot.getClientThread().runOnClientThreadOptional(() -> {
             Player localPlayer = Microbot.getClient().getLocalPlayer();
             if (localPlayer == null) {
@@ -965,11 +968,15 @@ public class Rs2Player {
 	 */
 	public static WorldPoint getWorldLocation_Internal(){
 		return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+			Player localPlayer = Microbot.getClient().getLocalPlayer();
+			if (localPlayer == null) {
+				return null;
+			}
 			if (Microbot.getClient().getTopLevelWorldView().getScene().isInstance()) {
-				LocalPoint l = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), Microbot.getClient().getLocalPlayer().getWorldLocation());
+				LocalPoint l = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), localPlayer.getWorldLocation());
 				return WorldPoint.fromLocalInstance(Microbot.getClient(), l);
 			}
-			return Microbot.getClient().getLocalPlayer().getWorldLocation();
+			return localPlayer.getWorldLocation();
 		}).orElse(null);
 	}
 

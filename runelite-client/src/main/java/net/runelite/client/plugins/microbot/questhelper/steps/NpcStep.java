@@ -320,10 +320,7 @@ public class NpcStep extends DetailedQuestStep
 		// This MAY for some NPCs which have alternate version (The Kendal) require re-consideration
 		if (allIds().contains(newNpcId))
 		{
-			if (npcs.isEmpty() || allowMultipleHighlights)
-			{
-				npcs.add(npcChanged.getNpc());
-			}
+			addNpcToListGivenMatchingID(npcChanged.getNpc(), this::npcPassesChecks, npcs);
 		}
 	}
 
