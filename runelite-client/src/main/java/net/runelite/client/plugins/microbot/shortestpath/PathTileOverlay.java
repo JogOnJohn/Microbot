@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class PathTileOverlay extends Overlay {
@@ -293,10 +294,6 @@ public class PathTileOverlay extends Overlay {
         if (!plugin.showTeleportLabels || path == null || path.size() < 2) {
             return;
         }
-        Set<Transport> anywhereTeleports = ShortestPathPlugin.getUsableTeleports();
-        if (anywhereTeleports == null || anywhereTeleports.isEmpty()) {
-            return;
-        }
         LocalPoint playerLp = client.getLocalPlayer() != null ? client.getLocalPlayer().getLocalLocation() : null;
         if (playerLp == null) {
             return;
@@ -306,6 +303,7 @@ public class PathTileOverlay extends Overlay {
             return;
         }
 
+        Map<WorldPoint, Set<Transport>> transports = ShortestPathPlugin.getTransports();
         List<String> labels = new ArrayList<>();
         for (int i = 0; i + 1 < path.size(); i++) {
             WorldPoint from = path.get(i);
@@ -315,14 +313,20 @@ public class PathTileOverlay extends Overlay {
             if (from == null || to == null || from.distanceTo(to) <= 1) {
                 continue;
             }
-            for (Transport teleport : anywhereTeleports) {
-                if (!to.equals(teleport.getDestination())) {
-                    continue;
-                }
-                String info = teleport.getDisplayInfo();
-                if (info != null && !info.isEmpty() && !labels.contains(info)) {
-                    labels.add(info);
-                }
+            // Find the teleport-like transport that produced this jump, matched by destination so it
+            // works regardless of origin frame. Cover all the ways teleports are stored: usable
+            // spell/item teleports; POH facility teleports (jewellery box, etc.) keyed under the house
+            // anchor (the jump origin); and origin-less teleports like the world-330 house entry keyed
+            // under null. This lets the label update from "house tab" to the actual PoH teleport.
+            String info = matchTeleportByDestination(ShortestPathPlugin.getUsableTeleports(), to);
+            if (info == null && transports != null) {
+                info = matchTeleportByDestination(transports.get(from), to);
+            }
+            if (info == null && transports != null) {
+                info = matchTeleportByDestination(transports.get(null), to);
+            }
+            if (info != null && !labels.contains(info)) {
+                labels.add(info);
             }
         }
 
@@ -365,6 +369,32 @@ public class PathTileOverlay extends Overlay {
         graphics.drawString(text, x, y);
 
         return vertical_offset + (int) height + TRANSPORT_LABEL_GAP;
+    }
+
+    /**
+     * Returns the display name of the first teleport-like transport in {@code candidates} whose
+     * destination matches {@code destination}, or null. "Teleport-like" means a genuine teleport
+     * (spell/item/minigame) or a PoH facility teleport (jewellery box, nexus, mounted portals, and
+     * the world-330 house entry), so PoH routing labels update as the path progresses.
+     */
+    private String matchTeleportByDestination(Set<Transport> candidates, WorldPoint destination) {
+        if (candidates == null) {
+            return null;
+        }
+        for (Transport transport : candidates) {
+            if (!destination.equals(transport.getDestination())) {
+                continue;
+            }
+            if (transport.getType() != TransportType.POH
+                    && !TransportType.isTeleport(transport.getType(), transport.getOrigin())) {
+                continue;
+            }
+            String info = transport.getDisplayInfo();
+            if (info != null && !info.isEmpty()) {
+                return info;
+            }
+        }
+        return null;
     }
 
     public static Color generateGradient(float step) {

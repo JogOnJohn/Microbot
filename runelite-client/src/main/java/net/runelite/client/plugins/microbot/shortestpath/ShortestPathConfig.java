@@ -602,8 +602,9 @@ public interface ShortestPathConfig extends Config {
     @ConfigItem(
             keyName = "showTeleportLabels",
             name = "Show teleport labels",
-            description = "Whether to draw the name of the teleport-from-anywhere (spell/item) teleport(s) the " +
-                    "current path will use as text on your player, shown as soon as the path is calculated.",
+            description = "Whether to draw the name of the teleport(s) the current path will use (spell/item " +
+                    "teleports and PoH facility teleports) as text on your player, shown as soon as the path is " +
+                    "calculated and updated as the route progresses.",
             position = 6,
             section = sectionDisplay
     )
