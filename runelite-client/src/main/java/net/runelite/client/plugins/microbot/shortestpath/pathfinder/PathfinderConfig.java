@@ -107,6 +107,9 @@ public class PathfinderConfig {
     private final java.util.concurrent.locks.ReentrantLock refreshLock = new java.util.concurrent.locks.ReentrantLock();
     private final java.util.concurrent.atomic.AtomicBoolean refreshDirty = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile WorldPoint pendingRefreshTarget;
+    // Max consecutive doRefresh runs one refresh() call may perform (see refresh()). Caps how long a
+    // single caller can hold the client thread when refresh() is being hammered from many threads.
+    private static final int MAX_COALESCED_REFRESH_RUNS = 3;
 
     private final Client client;
     private final ShortestPathConfig config;
@@ -222,7 +225,15 @@ public class PathfinderConfig {
         // never waits on a script-thread refresh (which would recreate the client-thread stall).
         pendingRefreshTarget = target;
         refreshDirty.set(true);
-        while (refreshDirty.get() && refreshLock.tryLock()) {
+        // Bound the coalesced re-runs. One re-run is enough to catch a request that arrived while a
+        // run was in flight (e.g. the W330 reanchor). Without a cap, a flood of refresh() calls from
+        // many script threads during heavy questing keeps re-setting refreshDirty, so the client-thread
+        // holder never leaves this loop — it re-runs the heavy doRefresh repeatedly, starves every other
+        // script's runOnClientThreadOptional task, and they time out (near-crash). Anything requested
+        // past the cap stays marked dirty and is picked up by the next refresh() call.
+        int runs = 0;
+        while (refreshDirty.get() && runs < MAX_COALESCED_REFRESH_RUNS && refreshLock.tryLock()) {
+            runs++;
             try {
                 refreshDirty.set(false);
                 doRefresh(pendingRefreshTarget);
