@@ -318,12 +318,13 @@ public class PathTileOverlay extends Overlay {
             // spell/item teleports; POH facility teleports (jewellery box, etc.) keyed under the house
             // anchor (the jump origin); and origin-less teleports like the world-330 house entry keyed
             // under null. This lets the label update from "house tab" to the actual PoH teleport.
+            // usableTeleports covers spell/item teleports and the origin-less world-330 house entry;
+            // transports.get(from) covers PoH facility teleports keyed under the house anchor. Do NOT
+            // look up transports.get(null): getTransports() is a ConcurrentHashMap, which throws on a
+            // null key (and can never hold one anyway), so that call only ever NPE'd the overlay.
             String info = matchTeleportByDestination(ShortestPathPlugin.getUsableTeleports(), to);
             if (info == null && transports != null) {
                 info = matchTeleportByDestination(transports.get(from), to);
-            }
-            if (info == null && transports != null) {
-                info = matchTeleportByDestination(transports.get(null), to);
             }
             if (info != null && !labels.contains(info)) {
                 labels.add(info);
