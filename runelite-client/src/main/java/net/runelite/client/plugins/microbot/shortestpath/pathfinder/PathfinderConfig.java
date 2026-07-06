@@ -95,6 +95,13 @@ public class PathfinderConfig {
     @Getter
     private final Set<Long> blockedTransportEdgesPacked;
 
+    // Serializes refresh() so two overlapping refreshes can never mutate the non-thread-safe
+    // transportsPacked map concurrently (that corrupts it and can spin the client thread — seen
+    // as a ~10s freeze plus a cascade of runOnClientThreadOptional timeouts). Always acquired
+    // with tryLock (never blocking): a caller that hits an in-flight refresh skips instead of
+    // waiting, which is required because refreshTransports makes blocking client-thread hops.
+    private final java.util.concurrent.locks.ReentrantLock refreshLock = new java.util.concurrent.locks.ReentrantLock();
+
     private final Client client;
     private final ShortestPathConfig config;
 
@@ -200,6 +207,16 @@ public class PathfinderConfig {
     }
 
     public void refresh(WorldPoint target) {
+        // refresh() is invoked from many threads (walker/bank on script threads, restartPathfinding
+        // on the client thread). refreshTransports mutates transportsPacked, which is not thread-safe,
+        // so overlapping refreshes can corrupt it and stall the client thread. Skip (do not block) when
+        // another refresh is already running — blocking here would let the client thread wait on a
+        // script-thread refresh whose internal client-thread hop can then never complete (the stall).
+        if (!refreshLock.tryLock()) {
+            WebWalkLog.cfg("refresh skipped: another refresh already in progress");
+            return;
+        }
+        try {
         calculationCutoffMillis = (long) config.calculationCutoff() * Constants.GAME_TICK_LENGTH;
         avoidWilderness = ShortestPathPlugin.override("avoidWilderness", config.avoidWilderness());
         avoidDangerousNpcs = ShortestPathPlugin.override("avoidDangerousNpcs", config.avoidDangerousNpcs());
@@ -247,6 +264,9 @@ public class PathfinderConfig {
             WebWalkLog.cfg("refresh transports={}ms restr={}ms total={}ms",
                     t1 - t0, t2 - t1, t2 - t0);
             //END microbot variables
+        }
+        } finally {
+            refreshLock.unlock();
         }
     }
 
