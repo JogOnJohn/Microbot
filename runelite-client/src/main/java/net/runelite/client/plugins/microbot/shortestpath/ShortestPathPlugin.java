@@ -157,6 +157,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
 	boolean drawTiles;
 	boolean drawTransports;
 	boolean showTransportInfo;
+	boolean showTeleportLabels;
 	Color colourCollisionMap;
 	Color colourPath;
 	Color colourPathCalculating;
@@ -561,6 +562,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
 		drawTiles = override("drawTiles", config.drawTiles());
 		drawTransports = override("drawTransports", config.drawTransports());
 		showTransportInfo = override("showTransportInfo", config.showTransportInfo());
+		showTeleportLabels = override("showTeleportLabels", config.showTeleportLabels());
 
 		colourCollisionMap = override("colourCollisionMap", config.colourCollisionMap());
 		colourPath = override("colourPath", config.colourPath());
@@ -696,6 +698,15 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
 
     public static Map<WorldPoint, Set<Transport>> getTransports() {
         return pathfinderConfig.getTransports();
+    }
+
+    /**
+     * The teleports usable "from anywhere" (spells/items with a null origin). These are kept in a
+     * dedicated set rather than the origin-keyed transport map, so overlays that want to label the
+     * teleport a path uses must consult this directly. May be null before the first refresh.
+     */
+    public static Set<Transport> getUsableTeleports() {
+        return pathfinderConfig == null ? null : pathfinderConfig.getUsableTeleports();
     }
 
     public CollisionMap getMap() {

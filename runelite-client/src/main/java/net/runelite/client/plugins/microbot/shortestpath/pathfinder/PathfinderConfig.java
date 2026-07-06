@@ -84,6 +84,7 @@ public class PathfinderConfig {
     @Getter
     private final Map<WorldPoint, Set<Transport>> allTransports;
     @Setter
+    @Getter
     private volatile Set<Transport> usableTeleports;
     private final List<WorldPoint> filteredTargets = new CopyOnWriteArrayList<>();
 

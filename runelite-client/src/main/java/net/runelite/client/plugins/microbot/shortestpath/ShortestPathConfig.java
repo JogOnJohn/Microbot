@@ -599,6 +599,18 @@ public interface ShortestPathConfig extends Config {
         return false;
     }
 
+    @ConfigItem(
+            keyName = "showTeleportLabels",
+            name = "Show teleport labels",
+            description = "Whether to draw the name of a teleport-from-anywhere (spell/item) teleport as text " +
+                    "at the tile on the path where it is used, e.g. on the player when a teleport is next.",
+            position = 6,
+            section = sectionDisplay
+    )
+    default boolean showTeleportLabels() {
+        return true;
+    }
+
     @ConfigSection(
             name = "Colours",
             description = "Colours for the path map, minimap and scene tiles",

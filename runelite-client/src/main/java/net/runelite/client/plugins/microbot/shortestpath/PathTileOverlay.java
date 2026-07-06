@@ -19,6 +19,7 @@ import java.awt.geom.Rectangle2D;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class PathTileOverlay extends Overlay {
     private final Client client;
@@ -258,9 +259,16 @@ public class PathTileOverlay extends Overlay {
     }
 
     private void drawTransportInfo(Graphics2D graphics, WorldPoint location, WorldPoint locationEnd) {
-        if (locationEnd == null || !plugin.showTransportInfo) {
+        boolean showFixed = plugin.showTransportInfo;
+        boolean showTeleports = plugin.showTeleportLabels;
+        if (locationEnd == null || (!showFixed && !showTeleports)) {
             return;
         }
+        // Teleports usable "from anywhere" (spells/items) have a null origin and so are not in the
+        // origin-keyed transport map; they live in usableTeleports. The pathfinder emits a jump from
+        // the tile it teleports at (location) straight to the teleport destination (locationEnd), so
+        // label those at `location` whenever locationEnd matches a usable teleport's destination.
+        Set<Transport> anywhereTeleports = showTeleports ? ShortestPathPlugin.getUsableTeleports() : null;
         for (WorldPoint point : WorldPoint.toLocalInstance(client, location)) {
             for (WorldPoint pointEnd : WorldPoint.toLocalInstance(client, locationEnd))
             {
@@ -269,39 +277,53 @@ public class PathTileOverlay extends Overlay {
                 }
 
                 int vertical_offset = 0;
-                for (Transport transport : ShortestPathPlugin.getTransports().getOrDefault(point, new HashSet<>())) {
-                    if (pointEnd == null || !pointEnd.equals(transport.getDestination())) {
-                        continue;
+                if (showFixed) {
+                    for (Transport transport : ShortestPathPlugin.getTransports().getOrDefault(point, new HashSet<>())) {
+                        if (pointEnd == null || !pointEnd.equals(transport.getDestination())) {
+                            continue;
+                        }
+                        vertical_offset = drawTransportLabel(graphics, point, transport.getDisplayInfo(), vertical_offset);
                     }
-
-                    String text = transport.getDisplayInfo();
-                    if (text == null || text.isEmpty()) {
-                        continue;
+                }
+                // A teleport is always a long jump, never a step onto an adjacent tile — so a walk
+                // step that merely ends on a teleport's landing tile must not be mislabelled.
+                if (anywhereTeleports != null && pointEnd != null && point.distanceTo(pointEnd) > 1) {
+                    for (Transport teleport : anywhereTeleports) {
+                        if (!pointEnd.equals(teleport.getDestination())) {
+                            continue;
+                        }
+                        vertical_offset = drawTransportLabel(graphics, point, teleport.getDisplayInfo(), vertical_offset);
                     }
-
-                    LocalPoint lp = LocalPoint.fromWorld(client, point);
-                    if (lp == null) {
-                        continue;
-                    }
-
-                    Point p = Perspective.localToCanvas(client, lp, client.getPlane());
-                    if (p == null) {
-                        continue;
-                    }
-
-                    Rectangle2D textBounds = graphics.getFontMetrics().getStringBounds(text, graphics);
-                    double height = textBounds.getHeight();
-                    int x = (int) (p.getX() - textBounds.getWidth() / 2);
-                    int y = (int) (p.getY() - height) - (vertical_offset);
-                    graphics.setColor(Color.BLACK);
-                    graphics.drawString(text, x + 1, y + 1);
-                    graphics.setColor(plugin.colourText);
-                    graphics.drawString(text, x, y);
-
-                    vertical_offset += (int) height + TRANSPORT_LABEL_GAP;
                 }
             }
         }
+    }
+
+    private int drawTransportLabel(Graphics2D graphics, WorldPoint point, String text, int vertical_offset) {
+        if (text == null || text.isEmpty()) {
+            return vertical_offset;
+        }
+
+        LocalPoint lp = LocalPoint.fromWorld(client, point);
+        if (lp == null) {
+            return vertical_offset;
+        }
+
+        Point p = Perspective.localToCanvas(client, lp, client.getPlane());
+        if (p == null) {
+            return vertical_offset;
+        }
+
+        Rectangle2D textBounds = graphics.getFontMetrics().getStringBounds(text, graphics);
+        double height = textBounds.getHeight();
+        int x = (int) (p.getX() - textBounds.getWidth() / 2);
+        int y = (int) (p.getY() - height) - (vertical_offset);
+        graphics.setColor(Color.BLACK);
+        graphics.drawString(text, x + 1, y + 1);
+        graphics.setColor(plugin.colourText);
+        graphics.drawString(text, x, y);
+
+        return vertical_offset + (int) height + TRANSPORT_LABEL_GAP;
     }
 
     public static Color generateGradient(float step) {
