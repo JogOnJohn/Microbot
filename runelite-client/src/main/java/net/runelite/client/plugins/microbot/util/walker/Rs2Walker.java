@@ -1748,7 +1748,15 @@ public class Rs2Walker {
                     break;
                 }
                 nextWalkingDistance = path.size() <= 5 ? 0 : Rs2Random.between(10, 12);
-                int dist2d = currentWorldPoint.distanceTo2D(Rs2Player.getWorldLocation());
+                WorldPoint playerLocNow = Rs2Player.getWorldLocation();
+                if (playerLocNow == null) {
+                    // Player location is momentarily unavailable (loading screen / region change while
+                    // questing). Yield this pass rather than calling distanceTo2D(null), whose NPE would
+                    // propagate out of processWalk and kill the entire walk task.
+                    exitReason = "player-location-null";
+                    break;
+                }
+                int dist2d = currentWorldPoint.distanceTo2D(playerLocNow);
                 if (dist2d > nextWalkingDistance) {
                     tmarkPostTransport("post_transport_click_eligibility", target,
                             "i=" + i + " dist2d=" + dist2d + " threshold=" + nextWalkingDistance);
@@ -1756,7 +1764,7 @@ public class Rs2Walker {
                     // cardinal tiles reach ~13, diagonals ~9. Empirically 14 was too
                     // optimistic (clicks at 13.5–13.9 Euclidean missed the clip).
                     final int MINIMAP_REACH_EUCLIDEAN = 13;
-                    WorldPoint playerLoc = Rs2Player.getWorldLocation();
+                    WorldPoint playerLoc = playerLocNow;
 
 					// Checkpoint-style walking: once we set a minimap flag, let the player actually
 					// travel toward it. Do not keep recalculating/clicking new targets mid-run.
