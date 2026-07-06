@@ -95,12 +95,17 @@ public class PathfinderConfig {
     @Getter
     private final Set<Long> blockedTransportEdgesPacked;
 
-    // Serializes refresh() so two overlapping refreshes can never mutate the non-thread-safe
-    // transportsPacked map concurrently (that corrupts it and can spin the client thread — seen
-    // as a ~10s freeze plus a cascade of runOnClientThreadOptional timeouts). Always acquired
-    // with tryLock (never blocking): a caller that hits an in-flight refresh skips instead of
-    // waiting, which is required because refreshTransports makes blocking client-thread hops.
+    // Coalescing single-runner for refresh(): serializes refreshes so two overlapping ones can
+    // never mutate the non-thread-safe transportsPacked map concurrently (that corrupts it and can
+    // spin the client thread — seen as a ~10s freeze plus a cascade of runOnClientThreadOptional
+    // timeouts). The lock is only ever taken with tryLock (never blocking), because refreshTransports
+    // makes blocking client-thread hops — a blocking wait here could stall the client thread on a
+    // script-thread refresh. A caller that finds a refresh in progress marks the work dirty and
+    // returns; the in-progress runner re-runs with the latest target before releasing, so a required
+    // refresh (e.g. the post-teleport W330 reanchor) is never silently dropped.
     private final java.util.concurrent.locks.ReentrantLock refreshLock = new java.util.concurrent.locks.ReentrantLock();
+    private final java.util.concurrent.atomic.AtomicBoolean refreshDirty = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private volatile WorldPoint pendingRefreshTarget;
 
     private final Client client;
     private final ShortestPathConfig config;
@@ -207,16 +212,26 @@ public class PathfinderConfig {
     }
 
     public void refresh(WorldPoint target) {
-        // refresh() is invoked from many threads (walker/bank on script threads, restartPathfinding
-        // on the client thread). refreshTransports mutates transportsPacked, which is not thread-safe,
-        // so overlapping refreshes can corrupt it and stall the client thread. Skip (do not block) when
-        // another refresh is already running — blocking here would let the client thread wait on a
-        // script-thread refresh whose internal client-thread hop can then never complete (the stall).
-        if (!refreshLock.tryLock()) {
-            WebWalkLog.cfg("refresh skipped: another refresh already in progress");
-            return;
+        // Coalescing single-runner (see refreshLock field). refresh() is called from many threads
+        // (walker/bank on script threads, restartPathfinding on the client thread) and mutates the
+        // non-thread-safe transportsPacked, so refreshes must not overlap. Rather than drop a
+        // contended refresh (which loses the post-teleport W330 reanchor rebuild and leaves stale POH
+        // transports), publish the latest target and mark dirty; whichever thread holds the lock
+        // re-runs until no new request is pending. tryLock is never blocking, so the client thread
+        // never waits on a script-thread refresh (which would recreate the client-thread stall).
+        pendingRefreshTarget = target;
+        refreshDirty.set(true);
+        while (refreshDirty.get() && refreshLock.tryLock()) {
+            try {
+                refreshDirty.set(false);
+                doRefresh(pendingRefreshTarget);
+            } finally {
+                refreshLock.unlock();
+            }
         }
-        try {
+    }
+
+    private void doRefresh(WorldPoint target) {
         calculationCutoffMillis = (long) config.calculationCutoff() * Constants.GAME_TICK_LENGTH;
         avoidWilderness = ShortestPathPlugin.override("avoidWilderness", config.avoidWilderness());
         avoidDangerousNpcs = ShortestPathPlugin.override("avoidDangerousNpcs", config.avoidDangerousNpcs());
@@ -264,9 +279,6 @@ public class PathfinderConfig {
             WebWalkLog.cfg("refresh transports={}ms restr={}ms total={}ms",
                     t1 - t0, t2 - t1, t2 - t0);
             //END microbot variables
-        }
-        } finally {
-            refreshLock.unlock();
         }
     }
 
