@@ -16,6 +16,7 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 import java.awt.*;
 import java.awt.geom.Line2D;
 import java.awt.geom.Rectangle2D;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -119,9 +120,8 @@ public class PathTileOverlay extends Overlay {
         }
 
         final Pathfinder pathfinder = ShortestPathPlugin.getPathfinder();
-        if (plugin.drawTiles && pathfinder != null) {
-            final List<WorldPoint> path = pathfinder.getPath();
-
+        final List<WorldPoint> path = pathfinder != null ? pathfinder.getPath() : null;
+        if (plugin.drawTiles && path != null) {
             int counter = 0;
             if (TileStyle.LINES.equals(plugin.pathStyle)) {
                 for (int i = 1; i < path.size(); i++) {
@@ -142,6 +142,8 @@ public class PathTileOverlay extends Overlay {
                 }
             }
         }
+
+        drawPreferredTeleports(graphics, path);
 
         return null;
     }
@@ -259,16 +261,9 @@ public class PathTileOverlay extends Overlay {
     }
 
     private void drawTransportInfo(Graphics2D graphics, WorldPoint location, WorldPoint locationEnd) {
-        boolean showFixed = plugin.showTransportInfo;
-        boolean showTeleports = plugin.showTeleportLabels;
-        if (locationEnd == null || (!showFixed && !showTeleports)) {
+        if (locationEnd == null || !plugin.showTransportInfo) {
             return;
         }
-        // Teleports usable "from anywhere" (spells/items) have a null origin and so are not in the
-        // origin-keyed transport map; they live in usableTeleports. The pathfinder emits a jump from
-        // the tile it teleports at (location) straight to the teleport destination (locationEnd), so
-        // label those at `location` whenever locationEnd matches a usable teleport's destination.
-        Set<Transport> anywhereTeleports = showTeleports ? ShortestPathPlugin.getUsableTeleports() : null;
         for (WorldPoint point : WorldPoint.toLocalInstance(client, location)) {
             for (WorldPoint pointEnd : WorldPoint.toLocalInstance(client, locationEnd))
             {
@@ -277,25 +272,71 @@ public class PathTileOverlay extends Overlay {
                 }
 
                 int vertical_offset = 0;
-                if (showFixed) {
-                    for (Transport transport : ShortestPathPlugin.getTransports().getOrDefault(point, new HashSet<>())) {
-                        if (pointEnd == null || !pointEnd.equals(transport.getDestination())) {
-                            continue;
-                        }
-                        vertical_offset = drawTransportLabel(graphics, point, transport.getDisplayInfo(), vertical_offset);
+                for (Transport transport : ShortestPathPlugin.getTransports().getOrDefault(point, new HashSet<>())) {
+                    if (pointEnd == null || !pointEnd.equals(transport.getDestination())) {
+                        continue;
                     }
-                }
-                // A teleport is always a long jump, never a step onto an adjacent tile — so a walk
-                // step that merely ends on a teleport's landing tile must not be mislabelled.
-                if (anywhereTeleports != null && pointEnd != null && point.distanceTo(pointEnd) > 1) {
-                    for (Transport teleport : anywhereTeleports) {
-                        if (!pointEnd.equals(teleport.getDestination())) {
-                            continue;
-                        }
-                        vertical_offset = drawTransportLabel(graphics, point, teleport.getDisplayInfo(), vertical_offset);
-                    }
+                    vertical_offset = drawTransportLabel(graphics, point, transport.getDisplayInfo(), vertical_offset);
                 }
             }
+        }
+    }
+
+    /**
+     * Labels the teleport-from-anywhere (spell/item) teleports the current path will use, drawn on
+     * the player so they are visible as soon as the path is calculated — not only once the player
+     * reaches the tile the pathfinder teleports from. These teleports have a null origin and live in
+     * usableTeleports, so the pathfinder emits them as a long jump path[i] -> path[i+1] where
+     * path[i+1] is the teleport destination. Collect those in path order and stack them on the player.
+     */
+    private void drawPreferredTeleports(Graphics2D graphics, List<WorldPoint> path) {
+        if (!plugin.showTeleportLabels || path == null || path.size() < 2) {
+            return;
+        }
+        Set<Transport> anywhereTeleports = ShortestPathPlugin.getUsableTeleports();
+        if (anywhereTeleports == null || anywhereTeleports.isEmpty()) {
+            return;
+        }
+        LocalPoint playerLp = client.getLocalPlayer() != null ? client.getLocalPlayer().getLocalLocation() : null;
+        if (playerLp == null) {
+            return;
+        }
+        Point p = Perspective.localToCanvas(client, playerLp, client.getPlane());
+        if (p == null) {
+            return;
+        }
+
+        List<String> labels = new ArrayList<>();
+        for (int i = 0; i + 1 < path.size(); i++) {
+            WorldPoint from = path.get(i);
+            WorldPoint to = path.get(i + 1);
+            // A teleport is always a long jump, never a step onto an adjacent tile — so a normal walk
+            // step that merely ends on a teleport's landing tile is not mistaken for a teleport.
+            if (from == null || to == null || from.distanceTo(to) <= 1) {
+                continue;
+            }
+            for (Transport teleport : anywhereTeleports) {
+                if (!to.equals(teleport.getDestination())) {
+                    continue;
+                }
+                String info = teleport.getDisplayInfo();
+                if (info != null && !info.isEmpty() && !labels.contains(info)) {
+                    labels.add(info);
+                }
+            }
+        }
+
+        int vertical_offset = 0;
+        for (String text : labels) {
+            Rectangle2D textBounds = graphics.getFontMetrics().getStringBounds(text, graphics);
+            double height = textBounds.getHeight();
+            int x = (int) (p.getX() - textBounds.getWidth() / 2);
+            int y = (int) (p.getY() - height) - vertical_offset;
+            graphics.setColor(Color.BLACK);
+            graphics.drawString(text, x + 1, y + 1);
+            graphics.setColor(plugin.colourText);
+            graphics.drawString(text, x, y);
+            vertical_offset += (int) height + TRANSPORT_LABEL_GAP;
         }
     }
 

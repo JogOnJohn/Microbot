@@ -602,8 +602,8 @@ public interface ShortestPathConfig extends Config {
     @ConfigItem(
             keyName = "showTeleportLabels",
             name = "Show teleport labels",
-            description = "Whether to draw the name of a teleport-from-anywhere (spell/item) teleport as text " +
-                    "at the tile on the path where it is used, e.g. on the player when a teleport is next.",
+            description = "Whether to draw the name of the teleport-from-anywhere (spell/item) teleport(s) the " +
+                    "current path will use as text on your player, shown as soon as the path is calculated.",
             position = 6,
             section = sectionDisplay
     )
