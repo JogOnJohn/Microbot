@@ -6502,12 +6502,20 @@ public class Rs2Walker {
                         if (destWait == null) {
                             return false;
                         }
+                        // Slow scene-object transports (e.g. the Tree Gnome Stronghold gate 190: guards
+                        // salute, gate swings, then a multi-tile auto-walk through) outlast the default
+                        // landing wait, and timing out here makes the walker re-click the object mid-
+                        // animation until the walk cancels on path-loop. Honor the transport's Duration
+                        // (game ticks, from transports.tsv) when it exceeds the default: 600ms/tick plus
+                        // headroom for the pre-walk animation. Duration <= 5 keeps the default wait.
+                        int landingWaitMs = Math.max(POST_HANDLE_OBJECT_LANDING_WAIT_MS,
+                                transport.getDuration() * 600 + 2000);
                         boolean landedAfterObject = sleepUntil(() -> isPlayerWithinChebyshevInclusive(destWait, maxInclusive),
-                                POST_HANDLE_OBJECT_LANDING_WAIT_MS);
+                                landingWaitMs);
                         if (!landedAfterObject) {
                             WebWalkLog.spWarn(
                                     "post-handleObject landing wait timed out ({}ms) dest={} at={}",
-                                    POST_HANDLE_OBJECT_LANDING_WAIT_MS,
+                                    landingWaitMs,
                                     compactWorldPoint(destWait),
                                     compactWorldPoint(Rs2Player.getWorldLocation()));
                         }
