@@ -38,6 +38,8 @@ import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.plugins.microbot.api.tileitem.Rs2TileItemQueryable;
 import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel;
 
@@ -1510,7 +1512,21 @@ public class QuestScript extends Script {
             if (!clicked)
                 return false;
 
-            sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating());
+            // The invoke click "succeeding" only means the menu entry was dispatched — a forged
+            // entry the server rejects produces NO response at all. The old code ignored this
+            // wait's result, so a dead click burned the 5s timeout and was still marked handled,
+            // and the step re-clicked forever (The Golem exam-centre bookcase). Verify a response
+            // (movement, animation, or a dialogue opening) and fall back to a genuine canvas
+            // click, which lets the client resolve the menu itself.
+            boolean responded = sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue(), 3000);
+            if (!responded && itemId == -1) {
+                responded = retryObjectClickViaCanvas(object, objectAction);
+            }
+            if (!responded) {
+                Microbot.log(Level.INFO, "[QuestHelper] object-step click produced no response (id=" + object.getId()
+                        + " action='" + objectAction + "'); leaving step unhandled for re-evaluation");
+                return false;
+            }
             sleep(100);
             sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Player.isAnimating());
             objectsHandeled.add(object.getHash());
@@ -1520,6 +1536,50 @@ public class QuestScript extends Script {
         }
 
         return true;
+    }
+
+    /**
+     * Fallback for object-step invoke clicks the server silently dropped: a GENUINE canvas click on
+     * the object's clickbox hull, so the client resolves the menu itself — immune to any bad scene
+     * coords / worldview id in a forged menu entry. A plain left click performs the DEFAULT option,
+     * so this only fires when the desired action is the object's first option (e.g. Search on the
+     * Golem bookcase); otherwise we leave the step unhandled and let it re-evaluate.
+     */
+    private boolean retryObjectClickViaCanvas(Rs2TileObjectModel object, String action) {
+        if (object == null || !isDefaultObjectAction(object, action)) {
+            return false;
+        }
+        Shape clickbox = Microbot.getClientThread().invoke(object::getClickbox);
+        if (clickbox == null) {
+            return false;
+        }
+        net.runelite.api.Point point = Rs2UiHelper.getClickingPoint(clickbox.getBounds(), true);
+        if (point == null || (point.getX() == 1 && point.getY() == 1)) {
+            return false;
+        }
+        Microbot.log(Level.INFO, "[QuestHelper] object-step invoke got no response; retrying '" + action
+                + "' on id=" + object.getId() + " with a genuine canvas click at " + point);
+        if (Rs2AntibanSettings.naturalMouse) {
+            Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
+        }
+        Microbot.getMouse().click(point);
+        return sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue(), 3000);
+    }
+
+    /** Whether {@code action} is the object's first (left-click/default) menu option. */
+    private boolean isDefaultObjectAction(Rs2TileObjectModel object, String action) {
+        if (action == null || action.isEmpty()) {
+            return false;
+        }
+        ObjectComposition comp = object.getObjectComposition();
+        if (comp == null) {
+            return false;
+        }
+        String[] actions = comp.getImpostorIds() != null && comp.getImpostor() != null
+                ? comp.getImpostor().getActions()
+                : comp.getActions();
+        return actions != null && actions.length > 0 && actions[0] != null
+                && action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[0]));
     }
 
     private boolean applyDigStep(DigStep step) {
