@@ -443,6 +443,7 @@ public class PathfinderConfig {
         // Scripts that must path immediately after unlock should trigger an explicit transport refresh / recalc.
         // Reviewers: do not "fix" staleness by calling leaguesContext() per transport — intentional batching; callers refresh explicitly when needed.
 
+        List<String> teleportAuditRejected = new ArrayList<>();
         for (Map.Entry<WorldPoint, Set<Transport>> entry : mergedList.entrySet()) {
             WorldPoint point = entry.getKey();
             Set<Transport> usableTransports = new HashSet<>(entry.getValue().size());
@@ -464,6 +465,13 @@ public class PathfinderConfig {
                 // stats[1] is incremented when useTransport() is true; isTransportAllowed may still reject below.
                 if (!usable) {
                     addBlockedTransportEdgeIfNeeded(transport);
+                    // Audit: an item teleport the player is actually carrying that we just rejected —
+                    // the "walker ignored my necklace/scroll" class of bug. Cheap (set lookup) and
+                    // only for null-origin item teleports; emitted (deduped) after the loop.
+                    if (point == null && type == TELEPORTATION_ITEM && hasRequiredItems(transport)) {
+                        teleportAuditRejected.add(describeTeleport(transport)
+                                + " <- " + describeTeleportRejection(transport));
+                    }
                     continue;
                 }
 
@@ -509,6 +517,8 @@ public class PathfinderConfig {
             filterSimilarTransports(target);
         }
         long similarTime = System.currentTimeMillis() - similarStart;
+
+        emitTeleportAudit(teleportAuditRejected);
 
         refreshAvailableItemIds = null;
         refreshBoostedLevels = null;
@@ -1234,6 +1244,68 @@ public class PathfinderConfig {
             return false;
 
         return hasRequiredItems(transport);
+    }
+
+    /** Dedupe for {@link #emitTeleportAudit}: hash of the last audit outcome logged. */
+    private volatile int lastTeleportAuditHash = 0;
+
+    /**
+     * Logs (INFO, deduped on change) the inventory-teleport availability picture after a refresh:
+     * item teleports the player is CARRYING that were rejected — with the first gate that rejected
+     * them — plus the item teleports that made it into usableTeleports. Together with the walker's
+     * path_teleports line this makes "it used the PoH instead of my necklace/scroll" diagnosable
+     * from client.log during normal play, without a debugger or probe.
+     */
+    private void emitTeleportAudit(List<String> rejected) {
+        Set<String> usableNames = new TreeSet<>();
+        for (Transport t : usableTeleports) {
+            if (t.getType() == TELEPORTATION_ITEM) {
+                usableNames.add(describeTeleport(t));
+            }
+        }
+        Collections.sort(rejected);
+        int hash = Objects.hash(rejected, usableNames);
+        if (hash == lastTeleportAuditHash) {
+            return;
+        }
+        lastTeleportAuditHash = hash;
+        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={}",
+                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames);
+    }
+
+    private String describeTeleport(Transport t) {
+        String name = t.getDisplayInfo();
+        if (name == null || name.isEmpty()) {
+            name = String.valueOf(t.getType());
+        }
+        WorldPoint d = t.getDestination();
+        return d == null ? name : name + "@" + d.getX() + "," + d.getY() + "," + d.getPlane();
+    }
+
+    /**
+     * Audit-only: re-runs {@link #useTransport}'s gates in order and names the first failing one.
+     * Never used for gating. Keep the order in sync with useTransport — "unknown" means the orders
+     * drifted or a gate this doesn't model (e.g. currency) rejected it.
+     */
+    private String describeTeleportRejection(Transport t) {
+        if (!isFeatureEnabled(t)) return "feature-toggle:" + t.getType();
+        if (t.isMembers() && !client.getWorldType().contains(WorldType.MEMBERS)) return "members-world";
+        if (!hasRequiredLevels(t)) return "skill-levels";
+        if (t.isQuestLocked() && !completedQuests(t)) return "quest";
+        if (!varbitChecks(t)) return "varbit";
+        if (!varplayerChecks(t)) return "varplayer";
+        if (!(t instanceof World330HostedHouseTransport)
+                && TransportType.isTeleport(t.getType(), t.getOrigin())
+                && Rs2Walker.disableTeleports) return "teleports-globally-disabled";
+        if (t instanceof World330HostedHouseTransport && !shouldUseWorld330MaxHouse()) {
+            return "w330-gate(target-too-close-or-no-tablet)";
+        }
+        if (useTeleportationItems == TeleportationItem.NONE) return "setting:useTeleportationItems=None";
+        if (useTeleportationItems == TeleportationItem.INVENTORY_NON_CONSUMABLE && t.isConsumable()) {
+            return "setting:useTeleportationItems=Inventory(perm)-excludes-consumable";
+        }
+        if (requiresChronicle(t) && !hasChronicleCharges()) return "chronicle-uncharged";
+        return "unknown(gate-order-drift-or-currency)";
     }
 
     /**

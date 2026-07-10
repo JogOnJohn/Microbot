@@ -96,6 +96,20 @@ public final class WebWalkLog {
         LOG.debug("[WebWalk] cfg | " + fmt, args);
     }
 
+    /**
+     * Inventory-teleport availability audit from PathfinderConfig refresh: item teleports the player
+     * carries that were rejected from usableTeleports, and why. INFO (visible in client.log, unlike
+     * cfg) but hash-deduped by the caller so it only logs when the outcome changes.
+     */
+    public static void teleportAudit(String fmt, Object... args) {
+        LOG.info("[WebWalk] tp_audit | " + fmt, args);
+    }
+
+    /** Which teleport transports a freshly computed path actually uses — choice vs availability. INFO, deduped by caller. */
+    public static void pathTeleports(String fmt, Object... args) {
+        LOG.info("[WebWalk] path_teleports | " + fmt, args);
+    }
+
     public static void leagues(String fmt, Object... args) {
         LOG.debug("[WebWalk] leagues | " + fmt, args);
     }

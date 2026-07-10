@@ -1164,6 +1164,7 @@ public class Rs2Walker {
             int rawSize = rawPath == null ? -1 : rawPath.size();
             int walkSize = path == null ? -1 : path.size();
             markStartupPhase("path_snapshot", target, "raw=" + rawSize + " walk=" + walkSize);
+            logPathTeleportsOnce(target, rawPath);
             final WorldPoint dst;
             if (path == null || path.isEmpty()) {
                 dst = Rs2Player.getWorldLocation();
@@ -6682,6 +6683,83 @@ public class Rs2Walker {
                 && transport.getDestination() != null
                 && transport.getOrigin().getPlane() == transport.getDestination().getPlane()
                 && transport.getOrigin().distanceTo(transport.getDestination()) <= 1;
+    }
+
+    /** Dedupe for {@link #logPathTeleportsOnce} — processWalk re-reads the path every loop iteration. */
+    private static volatile int lastPathTeleportsHash = 0;
+
+    /**
+     * One INFO line per newly adopted path naming the teleports it uses (or "none"). The choice
+     * side of PathfinderConfig's tp_audit availability line: together they make "why did it pick
+     * the PoH over my necklace/scroll" answerable from client.log during normal play.
+     */
+    private static void logPathTeleportsOnce(WorldPoint target, List<WorldPoint> rawPath) {
+        if (rawPath == null || rawPath.size() < 2) {
+            return;
+        }
+        String teleports = describePathTeleports(rawPath);
+        int hash = Objects.hash(target, teleports, rawPath.size(),
+                rawPath.get(0), rawPath.get(rawPath.size() - 1));
+        if (hash == lastPathTeleportsHash) {
+            return;
+        }
+        lastPathTeleportsHash = hash;
+        WebWalkLog.pathTeleports("goal={} len={} teleports={}",
+                compactWorldPoint(target), rawPath.size(), teleports);
+    }
+
+    private static String describePathTeleports(List<WorldPoint> rawPath) {
+        PathfinderConfig cfg = ShortestPathPlugin.getPathfinderConfig();
+        if (cfg == null) {
+            return "unknown";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < rawPath.size() - 1; i++) {
+            WorldPoint a = rawPath.get(i);
+            WorldPoint b = rawPath.get(i + 1);
+            if (a == null || b == null) {
+                continue;
+            }
+            if (a.getPlane() == b.getPlane() && a.distanceTo2D(b) <= 1) {
+                continue; // plain walking step
+            }
+            Transport match = findTeleportForHop(cfg, a, b);
+            if (match == null) {
+                continue; // non-teleport transport (stairs, gate, shortcut, ...)
+            }
+            if (sb.length() > 0) {
+                sb.append(" -> ");
+            }
+            sb.append(describeTransportShort(match));
+        }
+        return sb.length() == 0 ? "none" : sb.toString();
+    }
+
+    private static Transport findTeleportForHop(PathfinderConfig cfg, WorldPoint a, WorldPoint b) {
+        Set<Transport> atOrigin = cfg.getTransports().get(a);
+        if (atOrigin != null) {
+            for (Transport t : atOrigin) {
+                if (b.equals(t.getDestination()) && TransportType.isTeleport(t.getType(), t.getOrigin())) {
+                    return t;
+                }
+            }
+        }
+        // usableTeleports have no origin node — they attach anywhere, and are teleports by construction
+        for (Transport t : cfg.getUsableTeleports()) {
+            if (b.equals(t.getDestination())) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    private static String describeTransportShort(Transport t) {
+        String name = t.getDisplayInfo();
+        if (name == null || name.isEmpty()) {
+            name = String.valueOf(t.getType());
+        }
+        WorldPoint d = t.getDestination();
+        return d == null ? name : name + "@" + d.getX() + "," + d.getY() + "," + d.getPlane();
     }
 
     private static int[] mapSmoothedToRaw(List<WorldPoint> smoothed, List<WorldPoint> raw) {
