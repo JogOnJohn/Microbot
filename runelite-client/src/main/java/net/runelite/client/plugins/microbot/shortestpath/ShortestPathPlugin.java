@@ -625,6 +625,26 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                 }
             }
         }
+
+        // Stray-recalculation for routes NOT owned by an active walker walk (that case returned
+        // above; the walker recalcs itself via no_longer_near_path). Upstream recalculates the
+        // displayed route when the player strays beyond recalculateDistance, but this fork's
+        // isNearPath() had lost its only caller — so after e.g. a PoH/jewellery-box teleport the
+        // drawn path stayed stale forever. isNearPath self-throttles (only evaluates when the
+        // player has moved) and recalculateDistance=-1 disables it entirely.
+        if (ShortestPathPlugin.pathfinder != pathfinder) {
+            return; // arrival above (or a concurrent restart) replaced the route this tick
+        }
+        if (!isNearPath(myLoc)) {
+            if (config.cancelInstead()) {
+                log.info("[ShortestPath] player strayed from displayed path; cancelInstead=true, clearing target");
+                setTarget(null);
+                return;
+            }
+            log.info("[ShortestPath] player strayed from displayed path (recalculateDistance={}); recalculating from {}",
+                    config.recalculateDistance(), myLoc);
+            restartPathfinding(myLoc, pathfinder.getTargets());
+        }
     }
 
     @Subscribe
