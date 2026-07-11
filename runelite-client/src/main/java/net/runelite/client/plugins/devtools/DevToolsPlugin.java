@@ -183,6 +183,9 @@ public class DevToolsPlugin extends Plugin
 		}
 	};
 	@Inject
+	private GridCaptureOverlay gridCaptureOverlay;
+
+	@Inject
 	private MicrobotClickOverlay microbotClickOverlay;
 	@Inject
 	private MicrobotMouseOverlay microbotMouseOverlay;
@@ -221,7 +224,12 @@ public class DevToolsPlugin extends Plugin
 	private DevToolsButton mouseClick;
 	private DevToolsButton mouseMovement;
 	private DevToolsButton worldEntities;
+	private DevToolsButton gridCapture;
 	private NavigationButton navButton;
+
+	// Grid capture state: corners are instance-translated world points
+	private WorldPoint gridCorner1;
+	private WorldPoint gridCorner2;
 
 	//custom devtools from microbot
 	private DevToolsButton inventory;
@@ -283,6 +291,8 @@ public class DevToolsPlugin extends Plugin
 
 		worldEntities = new DevToolsButton("World Entities");
 
+		gridCapture = new DevToolsButton("Grid Capture");
+
 		overlayManager.add(overlay);
 		overlayManager.add(locationOverlay);
 		overlayManager.add(sceneOverlay);
@@ -290,6 +300,7 @@ public class DevToolsPlugin extends Plugin
 		overlayManager.add(worldMapLocationOverlay);
 		overlayManager.add(mapRegionOverlay);
 		overlayManager.add(soundEffectOverlay);
+		overlayManager.add(gridCaptureOverlay);
 		overlayManager.add(microbotClickOverlay);
 		overlayManager.add(microbotMouseOverlay);
 
@@ -322,6 +333,7 @@ public class DevToolsPlugin extends Plugin
 		overlayManager.remove(worldMapLocationOverlay);
 		overlayManager.remove(mapRegionOverlay);
 		overlayManager.remove(soundEffectOverlay);
+		overlayManager.remove(gridCaptureOverlay);
 		overlayManager.remove(microbotClickOverlay);
 		overlayManager.remove(microbotMouseOverlay);
 		clientToolbar.removeNavigation(navButton);
@@ -592,6 +604,11 @@ public class DevToolsPlugin extends Plugin
 	@Subscribe
 	public void onMenuEntryAdded(MenuEntryAdded event)
 	{
+		if (gridCapture != null && gridCapture.isActive())
+		{
+			addGridCaptureMenuEntries(event);
+		}
+
 		if (!examine.isActive())
 		{
 			return;
@@ -624,6 +641,102 @@ public class DevToolsPlugin extends Plugin
 
 			entry.setTarget(entry.getTarget() + " " + ColorUtil.prependColorTag("(" + info + ")", JagexColors.MENU_TARGET));
 		}
+	}
+
+	private void addGridCaptureMenuEntries(MenuEntryAdded event)
+	{
+		MenuAction menuAction = event.getMenuEntry().getType();
+		if (!client.isKeyPressed(KeyCode.KC_SHIFT)
+			|| (menuAction != MenuAction.WALK && menuAction != MenuAction.SET_HEADING))
+		{
+			return;
+		}
+
+		WorldView wv = client.getWorldView(event.getMenuEntry().getWorldViewId());
+		if (wv == null)
+		{
+			return;
+		}
+
+		final Tile selectedSceneTile = wv.getSelectedSceneTile();
+		if (selectedSceneTile == null)
+		{
+			return;
+		}
+
+		final WorldPoint worldPoint = WorldPoint.fromLocalInstance(client, selectedSceneTile.getLocalLocation());
+
+		client.createMenuEntry(-1)
+			.setOption(gridCorner1 == null || gridCorner2 != null ? "Set grid corner 1" : "Set grid corner 2")
+			.setTarget("Tile")
+			.setType(MenuAction.RUNELITE)
+			.onClick(e -> setGridCorner(worldPoint));
+
+		if (gridCorner1 != null)
+		{
+			client.createMenuEntry(-2)
+				.setOption("Clear grid corners")
+				.setTarget("Tile")
+				.setType(MenuAction.RUNELITE)
+				.onClick(e ->
+				{
+					gridCorner1 = null;
+					gridCorner2 = null;
+				});
+		}
+	}
+
+	private void setGridCorner(WorldPoint worldPoint)
+	{
+		if (gridCorner1 == null || gridCorner2 != null)
+		{
+			gridCorner1 = worldPoint;
+			gridCorner2 = null;
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"Grid corner 1 set: " + worldPoint.getX() + "," + worldPoint.getY() + "," + worldPoint.getPlane()
+					+ ". Shift right-click the opposite corner.", null);
+			return;
+		}
+
+		gridCorner2 = worldPoint;
+
+		if (gridCorner2.getPlane() != gridCorner1.getPlane())
+		{
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+				"Grid corners are on different planes; using plane " + gridCorner1.getPlane() + ".", null);
+		}
+
+		final String text = buildGridText(gridCorner1, gridCorner2);
+		final int tileCount = (Math.abs(gridCorner2.getX() - gridCorner1.getX()) + 1)
+			* (Math.abs(gridCorner2.getY() - gridCorner1.getY()) + 1);
+		SwingUtilities.invokeLater(() -> ClipboardUtil.copy(text));
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
+			"Grid copied to clipboard: " + tileCount + " tile" + (tileCount == 1 ? "" : "s") + ".", null);
+	}
+
+	static String buildGridText(WorldPoint c1, WorldPoint c2)
+	{
+		int minX = Math.min(c1.getX(), c2.getX());
+		int maxX = Math.max(c1.getX(), c2.getX());
+		int minY = Math.min(c1.getY(), c2.getY());
+		int maxY = Math.max(c1.getY(), c2.getY());
+		int plane = c1.getPlane();
+
+		StringBuilder sb = new StringBuilder();
+		sb.append(minX).append(',').append(minY).append(',').append(plane)
+			.append(" -> ")
+			.append(maxX).append(',').append(maxY).append(',').append(plane)
+			.append('\n');
+
+		for (int y = minY; y <= maxY; y++)
+		{
+			for (int x = minX; x <= maxX; x++)
+			{
+				sb.append(x).append(',').append(y).append(',').append(plane).append('\n');
+			}
+		}
+
+		return sb.toString();
 	}
 
 	private String getObjectType(MenuEntryAdded event)

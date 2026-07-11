@@ -139,6 +139,9 @@ class DevToolsPanel extends PluginPanel
 
 		container.add(plugin.getWorldMapLocation());
 		container.add(plugin.getTileLocation());
+
+		plugin.getGridCapture().setToolTipText("Shift right-click two tiles to copy the tile rectangle between them");
+		container.add(plugin.getGridCapture());
 		container.add(plugin.getCameraPosition());
 
 		container.add(plugin.getZoneBorders());
