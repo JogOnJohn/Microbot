@@ -1,4 +1,4 @@
-# Upstream Sync
+# QuestHelper and Upstream Sync
 
 Microbot tracks two upstreams:
 
