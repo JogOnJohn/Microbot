@@ -406,8 +406,13 @@ public class Rs2Walker {
             return false;
         }
         WorldPoint pl = Rs2Player.getWorldLocation();
-        return pl != null && pl.getPlane() == dest.getPlane()
-                && pl.distanceTo2D(dest) < maxChebyshevExclusive;
+        if (pl != null && pl.getPlane() == dest.getPlane()
+                && pl.distanceTo2D(dest) < maxChebyshevExclusive) {
+            return true;
+        }
+        WorldPoint translated = instanceTranslatedPlayerLocation();
+        return translated != null && translated.getPlane() == dest.getPlane()
+                && translated.distanceTo2D(dest) < maxChebyshevExclusive;
     }
 
     /**
@@ -418,8 +423,42 @@ public class Rs2Walker {
             return false;
         }
         WorldPoint pl = Rs2Player.getWorldLocation();
-        return pl != null && pl.getPlane() == dest.getPlane()
-                && pl.distanceTo2D(dest) <= maxInclusiveChebyshev;
+        if (pl != null && pl.getPlane() == dest.getPlane()
+                && pl.distanceTo2D(dest) <= maxInclusiveChebyshev) {
+            return true;
+        }
+        WorldPoint translated = instanceTranslatedPlayerLocation();
+        return translated != null && translated.getPlane() == dest.getPlane()
+                && translated.distanceTo2D(dest) <= maxInclusiveChebyshev;
+    }
+
+    /**
+     * The player's position translated OUT of instance-template space via
+     * {@link WorldPoint#fromLocalInstance} — null when not in an instance (or unavailable), so
+     * raw-coordinate behavior is untouched outside instances. Instances copy real map chunks (the
+     * RFD banquet room copies the Lumbridge dining room), so goal/landing/path comparisons must
+     * also consider the translated position: raw template coords read as ~1300 tiles from the real
+     * goal even when the player is standing on it, which made the walker recalc from garbage and
+     * "escape" quest rooms via from-anywhere teleports. COMPARISON ONLY — never use this for
+     * clicking; clicks need raw scene coordinates.
+     */
+    private static WorldPoint instanceTranslatedPlayerLocation() {
+        try {
+            return Microbot.getClientThread().invoke(() -> {
+                var client = Microbot.getClient();
+                var wv = client.getTopLevelWorldView();
+                if (wv == null || !wv.isInstance()) {
+                    return null;
+                }
+                var local = client.getLocalPlayer();
+                if (local == null || local.getLocalLocation() == null) {
+                    return null;
+                }
+                return WorldPoint.fromLocalInstance(client, local.getLocalLocation());
+            });
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     /**
@@ -1002,6 +1041,18 @@ public class Rs2Walker {
         boolean reachableTileCheck = distToTarget <= distance && Rs2Tile.getReachableTilesFromTile(playerLocWalk, distance).containsKey(target);
 
         if (reachableTileCheck || (!walkableCheck && distToTarget <= distance)) {
+            return WalkerState.ARRIVED;
+        }
+
+        // Inside an instance the raw location is template-space, so a player standing ON the goal
+        // (quest rooms copy real chunks — the RFD banquet room IS the Lumbridge dining room) read
+        // as ~1300 tiles away; the walker then recalculated from template coords and the resulting
+        // route "escaped" the room via a from-anywhere teleport, looping the quest step forever.
+        WorldPoint translatedEntry = instanceTranslatedPlayerLocation();
+        if (translatedEntry != null && translatedEntry.getPlane() == target.getPlane()
+                && translatedEntry.distanceTo(target) <= distance) {
+            WebWalkLog.spInfo("arrived via instance-translated position raw={} translated={} target={}",
+                    compactWorldPoint(playerLocWalk), compactWorldPoint(translatedEntry), compactWorldPoint(target));
             return WalkerState.ARRIVED;
         }
 
@@ -7487,7 +7538,11 @@ public class Rs2Walker {
             return true;
         }
 
-        if (config.usePoh() && PohTeleports.isInHouse()) {
+        // Any POH — own house (usePoh) OR the W330 hosted house. The house is an instance, so
+        // path tiles (overworld coords) are never "near"; recalcing from template coords here
+        // replaced good routes mid-house. Previously gated on config.usePoh(), which left W330
+        // users (usePoh=false) recalculating inside the hosted house.
+        if (PohTeleports.isInHouse()) {
             //Would be nice to have access to current node here and check if the current Node is a POH transport node.
             return true;
         }
@@ -7496,6 +7551,20 @@ public class Rs2Walker {
         for (WorldPoint point : path) {
             if (reachableTiles.containsKey(point)) {
                 return true;
+            }
+        }
+
+        // Inside other instances (quest rooms copy real map chunks — e.g. the RFD banquet room is
+        // the Lumbridge dining room), the raw location is template-space and never near the path.
+        // Accept proximity of the TRANSLATED position so the walker doesn't declare off-path and
+        // recalc from garbage coords the moment the player steps through an instance entrance.
+        WorldPoint translated = instanceTranslatedPlayerLocation();
+        if (translated != null) {
+            for (WorldPoint point : path) {
+                if (translated.getPlane() == point.getPlane()
+                        && translated.distanceTo2D(point) < config.recalculateDistance()) {
+                    return true;
+                }
             }
         }
 
