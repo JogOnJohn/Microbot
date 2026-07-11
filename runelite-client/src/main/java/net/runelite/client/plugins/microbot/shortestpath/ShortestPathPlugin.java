@@ -642,9 +642,27 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         // house traversal). Instances resolve themselves when the player exits or the walker acts.
         if (client.getTopLevelWorldView() != null && client.getTopLevelWorldView().getScene() != null
                 && client.getTopLevelWorldView().getScene().isInstance()) {
+            strayTicks = 0;
             return;
         }
+        // Log the display-side route's teleport chain once per computed path. Rs2Walker only logs
+        // path_teleports for script-driven walks, which left MANUAL walking (quest tooltips) a
+        // diagnostic blind spot — route flip-flops were invisible in client.log.
+        if (pathfinder != lastPathTeleportsLoggedPathfinder && pathfinder.getPath() != null) {
+            lastPathTeleportsLoggedPathfinder = pathfinder;
+            WorldPoint firstTarget = pathfinder.getTargets().stream().findFirst().orElse(null);
+            Rs2Walker.logPathTeleportsOnce(firstTarget, pathfinder.getPath());
+        }
         if (!isNearPath(myLoc)) {
+            // Debounce: require two consecutive strayed ticks. The instance flag can lag the player
+            // position by a tick during house/quest-room loads (live: recalcs fired from house
+            // template coords 1997,7105 DESPITE the instance gate above), and single-tick blips
+            // replaced good routes with garbage — the "tooltip flashes then disappears" churn.
+            strayTicks++;
+            if (strayTicks < 2) {
+                return;
+            }
+            strayTicks = 0;
             if (config.cancelInstead()) {
                 log.info("[ShortestPath] player strayed from displayed path; cancelInstead=true, clearing target");
                 setTarget(null);
@@ -653,8 +671,15 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             log.info("[ShortestPath] player strayed from displayed path (recalculateDistance={}); recalculating from {}",
                     config.recalculateDistance(), myLoc);
             restartPathfinding(myLoc, pathfinder.getTargets());
+        } else {
+            strayTicks = 0;
         }
     }
+
+    /** Consecutive strayed onGameTick evaluations — see the debounce above. */
+    private int strayTicks;
+    /** Last display-side pathfinder whose teleport chain was logged (path_teleports). */
+    private Pathfinder lastPathTeleportsLoggedPathfinder;
 
     @Subscribe
     public void onMenuEntryAdded(MenuEntryAdded event) {

@@ -6751,9 +6751,10 @@ public class Rs2Walker {
     /**
      * One INFO line per newly adopted path naming the teleports it uses (or "none"). The choice
      * side of PathfinderConfig's tp_audit availability line: together they make "why did it pick
-     * the PoH over my necklace/scroll" answerable from client.log during normal play.
+     * the PoH over my necklace/scroll" answerable from client.log during normal play. Public so
+     * ShortestPathPlugin can log display-side (manual walking) paths too, not just script walks.
      */
-    private static void logPathTeleportsOnce(WorldPoint target, List<WorldPoint> rawPath) {
+    public static void logPathTeleportsOnce(WorldPoint target, List<WorldPoint> rawPath) {
         if (rawPath == null || rawPath.size() < 2) {
             return;
         }
