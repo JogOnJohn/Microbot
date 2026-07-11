@@ -51,8 +51,11 @@ public class KeyringRequirement extends ItemRequirement
 	{
 		super(name, key.getItemID());
 		keyring = new ItemRequirement("Steel key ring", ItemID.FAVOUR_KEY_RING);
-		runeliteRequirement = new RuneliteRequirement(configManager, key.runeliteName(),
-			"true", key.toChatText());
+		if (configManager != null)
+		{
+			runeliteRequirement = new RuneliteRequirement(configManager, key.runeliteName(),
+				"true", key.toChatText());
+		}
 		this.keyringCollection = key;
 		this.configManager = configManager;
 	}
