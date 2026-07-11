@@ -635,6 +635,15 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         if (ShortestPathPlugin.pathfinder != pathfinder) {
             return; // arrival above (or a concurrent restart) replaced the route this tick
         }
+        // Never stray-recalculate from inside an instance: getWorldLocation() reports instance
+        // TEMPLATE coordinates there (PoH interiors ~2000,7000; the RFD banquet room 1861,5317),
+        // which are never near an overworld path — so this fired on every moved tick and replaced
+        // good routes with ones recalculated "from" template coords (live: 5 recalcs during one
+        // house traversal). Instances resolve themselves when the player exits or the walker acts.
+        if (client.getTopLevelWorldView() != null && client.getTopLevelWorldView().getScene() != null
+                && client.getTopLevelWorldView().getScene().isInstance()) {
+            return;
+        }
         if (!isNearPath(myLoc)) {
             if (config.cancelInstead()) {
                 log.info("[ShortestPath] player strayed from displayed path; cancelInstead=true, clearing target");
