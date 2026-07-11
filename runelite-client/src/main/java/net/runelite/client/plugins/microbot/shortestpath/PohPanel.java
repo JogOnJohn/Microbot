@@ -232,9 +232,11 @@ public class PohPanel extends PluginPanel {
                         .addAll(entry.getValue());
             }
         }
-        pohTransports.computeIfAbsent(exitPortal, p -> new HashSet<>()).addAll(pohTeleports.stream().map(
-                t -> new PohTransport(exitPortal, t)
-        ).collect(Collectors.toList()));
+        pohTransports.computeIfAbsent(exitPortal, p -> new HashSet<>()).addAll(pohTeleports.stream()
+                .filter(PohTeleport::isUnlockedForPlayer)
+                .filter(t -> !PohTeleports.isTeleportBlocked(t))
+                .map(t -> new PohTransport(exitPortal, t))
+                .collect(Collectors.toList()));
 
         return pohTransports;
     }
@@ -256,6 +258,11 @@ public class PohPanel extends PluginPanel {
         pohTeleports.addAll(Set.of(MountedXerics.values()));
 
         pohTransports.computeIfAbsent(anchor, p -> new HashSet<>()).addAll(pohTeleports.stream()
+                // Player-side locks: quest-gated destinations (Dondakan etc.) and teleports that
+                // recently FAILED to execute — otherwise the pathfinder keeps routing through an
+                // option the player can't click and never falls back to the next best route.
+                .filter(PohTeleport::isUnlockedForPlayer)
+                .filter(t -> !PohTeleports.isTeleportBlocked(t))
                 .map(t -> new PohTransport(anchor, t))
                 .collect(Collectors.toList()));
 

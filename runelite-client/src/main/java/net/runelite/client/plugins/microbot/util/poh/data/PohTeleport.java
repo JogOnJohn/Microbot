@@ -11,6 +11,16 @@ public interface PohTeleport {
      */
     boolean execute();
 
+    /**
+     * Whether THIS PLAYER can actually take this teleport. Some destinations are quest-locked
+     * player-side even when the facility offers them (e.g. the jewellery box lists Dondakan's
+     * Rock, but the game refuses it without Between a Rock). Transport assembly filters on this
+     * so the pathfinder never routes through an option the player can't click.
+     */
+    default boolean isUnlockedForPlayer() {
+        return true;
+    }
+
     WorldPoint getDestination();
 
     /**

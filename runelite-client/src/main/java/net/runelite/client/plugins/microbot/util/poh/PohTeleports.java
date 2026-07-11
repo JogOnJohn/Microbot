@@ -37,6 +37,37 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntilTrue;
  */
 @Slf4j
 public class PohTeleports {
+    // Runtime blocklist for POH teleports whose execute() FAILED (e.g. a jewellery box option the
+    // game refuses that the data layer didn't know was locked). Blocked teleports are filtered out
+    // of transport assembly (PohPanel) for a cooldown so the pathfinder falls back to the next
+    // best route instead of re-attempting a dead option on every recalc.
+    private static final Map<String, Long> failedTeleportBlockUntil = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long FAILED_TELEPORT_BLOCK_MS = 10 * 60_000L;
+
+    public static void blockFailedTeleport(net.runelite.client.plugins.microbot.util.poh.data.PohTeleport teleport, String reason) {
+        if (teleport == null) {
+            return;
+        }
+        failedTeleportBlockUntil.put(teleport.displayInfo(), System.currentTimeMillis() + FAILED_TELEPORT_BLOCK_MS);
+        Microbot.log("[W330POH] blocking teleport for " + (FAILED_TELEPORT_BLOCK_MS / 60_000) + "min: "
+                + teleport.displayInfo() + " (" + reason + ")");
+    }
+
+    public static boolean isTeleportBlocked(net.runelite.client.plugins.microbot.util.poh.data.PohTeleport teleport) {
+        if (teleport == null) {
+            return false;
+        }
+        Long until = failedTeleportBlockUntil.get(teleport.displayInfo());
+        if (until == null) {
+            return false;
+        }
+        if (System.currentTimeMillis() >= until) {
+            failedTeleportBlockUntil.remove(teleport.displayInfo());
+            return false;
+        }
+        return true;
+    }
+
     private static final long ORNATE_POOL_REUSE_COOLDOWN_MS = 60_000L;
     private static final int ORNATE_REJUVENATION_POOL = 29241;
     private static final int FIERY_ORNATE_REJUVENATION_POOL = 49993;
