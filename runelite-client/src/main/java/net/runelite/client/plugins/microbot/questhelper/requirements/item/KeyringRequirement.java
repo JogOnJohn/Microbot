@@ -57,6 +57,11 @@ public class KeyringRequirement extends ItemRequirement
 		this.configManager = configManager;
 	}
 
+	public KeyringRequirement(String name, KeyringCollection key)
+	{
+		this(name, null, key);
+	}
+
 	public KeyringRequirement(ConfigManager configManager, KeyringCollection key)
 	{
 		super(key.toChatText(), key.getItemID());
@@ -106,6 +111,11 @@ public class KeyringRequirement extends ItemRequirement
 
 	public boolean hasKeyOnKeyRing()
 	{
+		if (runeliteRequirement == null)
+		{
+			return false;
+		}
+
 		return runeliteRequirement.check();
 	}
 
