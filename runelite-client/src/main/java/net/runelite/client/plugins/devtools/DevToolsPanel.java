@@ -124,6 +124,19 @@ class DevToolsPanel extends PluginPanel
 		container.add(plugin.getProjectiles());
 
 		container.add(plugin.getLocation());
+
+		final JButton copyLocationBtn = new JButton("Copy Location");
+		copyLocationBtn.setToolTipText("Copy the Location overlay block (world/region/scene/chunk) to the clipboard");
+		copyLocationBtn.addActionListener(e -> clientThread.invoke(() ->
+		{
+			final String text = LocationOverlay.buildLocationText(client);
+			if (text != null)
+			{
+				SwingUtilities.invokeLater(() -> ClipboardUtil.copy(text));
+			}
+		}));
+		container.add(copyLocationBtn);
+
 		container.add(plugin.getWorldMapLocation());
 		container.add(plugin.getTileLocation());
 		container.add(plugin.getCameraPosition());

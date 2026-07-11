@@ -47,6 +47,53 @@ public class LocationOverlay extends OverlayPanel {
         setPosition(OverlayPosition.TOP_LEFT);
     }
 
+    /**
+     * Builds the same location block the overlay renders as plain text.
+     * Must be called on the client thread with a logged-in local player.
+     */
+    static String buildLocationText(Client client) {
+        if (client.getLocalPlayer() == null) {
+            return null;
+        }
+
+        WorldPoint worldPoint = client.getLocalPlayer().getWorldLocation();
+        LocalPoint localPoint = client.getLocalPlayer().getLocalLocation();
+
+        StringBuilder sb = new StringBuilder();
+
+        if (client.isInInstancedRegion()) {
+            worldPoint = WorldPoint.fromLocalInstance(client, localPoint);
+            sb.append("Instance\n");
+        }
+
+        sb.append("Local: ").append(localPoint.getX()).append(", ").append(localPoint.getY()).append('\n');
+        sb.append("World: ").append(worldPoint.getX()).append(", ").append(worldPoint.getY()).append(", ").append(worldPoint.getPlane()).append('\n');
+        sb.append("Region: ").append(worldPoint.getRegionX()).append(", ").append(worldPoint.getRegionY()).append(", ").append(worldPoint.getRegionID()).append('\n');
+        sb.append("Scene: ").append(localPoint.getSceneX()).append(", ").append(localPoint.getSceneY()).append('\n');
+
+        int[][][] instanceTemplateChunks = client.getInstanceTemplateChunks();
+        int z = client.getPlane();
+        int chunkData = instanceTemplateChunks[z][localPoint.getSceneX() / CHUNK_SIZE][localPoint.getSceneY() / CHUNK_SIZE];
+
+        int rotation = chunkData >> 1 & 0x3;
+        int chunkY = (chunkData >> 3 & 0x7FF) * CHUNK_SIZE;
+        int chunkX = (chunkData >> 14 & 0x3FF) * CHUNK_SIZE;
+
+        sb.append("Chunk ").append(localPoint.getSceneX() / CHUNK_SIZE).append(',').append(localPoint.getSceneY() / CHUNK_SIZE)
+                .append(": ").append(rotation).append(' ').append(chunkX).append(' ').append(chunkY).append('\n');
+        sb.append("Base: ").append(client.getBaseX()).append(", ").append(client.getBaseY()).append('\n');
+
+        for (int i = 0; i < client.getMapRegions().length; i++) {
+            int region = client.getMapRegions()[i];
+            int mx = region >> 8;
+            int my = region & 0xff;
+            sb.append(i == 0 ? "Map regions: " : "             ").append(mx).append(", ").append(my)
+                    .append(" (").append(region).append(')').append('\n');
+        }
+
+        return sb.toString();
+    }
+
     @Override
     public Dimension render(Graphics2D graphics) {
         if (!plugin.getLocation().isActive()) {
