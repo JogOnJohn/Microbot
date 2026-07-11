@@ -9,7 +9,7 @@ This is the documentation entry point. Keep it short: it should route readers to
 ## For Developers
 - Local setup and build commands: [development.md](development.md)
 - Runtime architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Upstream sync flow: [upstream-sync.md](upstream-sync.md)
+- QuestHelper and upstream sync flow: [questhelper-upstream-sync.md](questhelper-upstream-sync.md)
 - Queryable cache guide: [../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/QUERYABLE_API.md](../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/QUERYABLE_API.md)
 - Entity utility gotchas: [entity-guides/README.md](entity-guides/README.md)
 - Architecture decisions: [decisions/](decisions/)
