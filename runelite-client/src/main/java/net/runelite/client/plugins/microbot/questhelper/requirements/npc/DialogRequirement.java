@@ -40,7 +40,8 @@ public class DialogRequirement extends SimpleRequirement
 	@Setter
 	String talkerName;
 	final List<String> text = new ArrayList<>();
-	final boolean mustBeActive;
+	boolean mustBeActive;
+	boolean allowMesbox;
 
 	boolean hasSeenDialog = false;
 
@@ -77,7 +78,8 @@ public class DialogRequirement extends SimpleRequirement
 
 	public void validateCondition(ChatMessage chatMessage)
 	{
-		if (chatMessage.getType() != ChatMessageType.DIALOG) return;
+		if (chatMessage.getType() != ChatMessageType.DIALOG
+			&& (!allowMesbox || chatMessage.getType() != ChatMessageType.MESBOX)) return;
 
 		String dialogMessage = chatMessage.getMessage();
 		if (!hasSeenDialog)
@@ -96,5 +98,15 @@ public class DialogRequirement extends SimpleRequirement
 		String sanitisedMsg = Text.sanitize(dialogMessage);
 		if (talkerName != null && !sanitisedMsg.contains(talkerName + "|")) return false;
 		return text.stream().anyMatch(sanitisedMsg::contains);
+	}
+
+	public void setMustBeActive(boolean mustBeActive)
+	{
+		this.mustBeActive = mustBeActive;
+	}
+
+	public void setAllowMesbox(boolean allowMesbox)
+	{
+		this.allowMesbox = allowMesbox;
 	}
 }

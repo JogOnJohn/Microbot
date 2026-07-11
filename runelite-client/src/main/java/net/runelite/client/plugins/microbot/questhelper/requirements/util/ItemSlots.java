@@ -41,6 +41,7 @@ public enum ItemSlots
 	ANY_EQUIPPED_AND_INVENTORY(-3, "inventory or equipped", InventorySlots.EQUIPMENT_AND_INVENTORY_SLOTS),
 	ANY_INVENTORY(-2, "inventory slots", InventorySlots.INVENTORY_SLOTS),
 	ANY_EQUIPPED(-1, "equipped slots", InventorySlots.EQUIPMENT_SLOTS),
+	EMPTY_HANDS(-4, "weapon and shield slots"),
 	HEAD(0, "head slot"),
 	CAPE(1, "cape slot"),
 	AMULET(2, "amulet slot"),
@@ -80,6 +81,11 @@ public enum ItemSlots
 	 */
 	public boolean checkInventory(Client client, Predicate<Item> predicate)
 	{
+		if (this == EMPTY_HANDS)
+		{
+			return WEAPON.checkInventory(client, predicate) && SHIELD.checkInventory(client, predicate);
+		}
+
 		// if we're checking all the equipment slots, inventory slots, or both
 		if (getInventorySlots() != null)
 		{
@@ -110,6 +116,11 @@ public enum ItemSlots
 	 */
 	public boolean contains(Client client, Predicate<Item> predicate)
 	{
+		if (this == EMPTY_HANDS)
+		{
+			return WEAPON.contains(client, predicate) || SHIELD.contains(client, predicate);
+		}
+
 		// if we're checking all the equipment slots, inventory slots, or both
 		if (getInventorySlots() != null)
 		{

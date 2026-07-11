@@ -25,6 +25,7 @@
 package net.runelite.client.plugins.microbot.questhelper.steps.widget;
 
 import net.runelite.client.plugins.microbot.questhelper.QuestHelperPlugin;
+import net.runelite.client.plugins.microbot.questhelper.domain.QuetzalDestination;
 import lombok.Getter;
 import lombok.Setter;
 import net.runelite.api.Client;
@@ -135,6 +136,13 @@ public class WidgetHighlight extends AbstractWidgetHighlight
 	{
 		var w = new WidgetHighlight(InterfaceID.Shopmain.ITEMS, true);
 		w.itemIdRequirement = itemIdRequirement;
+		return w;
+	}
+
+	public static WidgetHighlight createQuetzalHighlight(QuetzalDestination destination)
+	{
+		var w = new WidgetHighlight(InterfaceID.QUETZAL_MENU, true);
+		w.modelIdRequirement = destination.modelID;
 		return w;
 	}
 

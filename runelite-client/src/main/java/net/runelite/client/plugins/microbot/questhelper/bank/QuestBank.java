@@ -43,7 +43,7 @@ import java.util.List;
 
 /// The QuestBank helps interface RuneLite's config system to save a player's bank.
 ///
-/// If you need to check the contents of a player's bank, utilize {@link net.runelite.client.plugins.microbot.questhelper.managers.QuestContainerManager} instead.
+/// If you need to check the contents of a player's bank, utilize {@link com.questhelper.managers.QuestContainerManager} instead.
 @Slf4j
 @Singleton
 public class QuestBank

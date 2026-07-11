@@ -82,4 +82,9 @@ public enum KeyringCollection
 	{
 		return new KeyringRequirement(configManager, this);
 	}
+
+	public boolean hasKeyOnKeyRing(ConfigManager configManager)
+	{
+		return getRequirement(configManager).hasKeyOnKeyRing();
+	}
 }
