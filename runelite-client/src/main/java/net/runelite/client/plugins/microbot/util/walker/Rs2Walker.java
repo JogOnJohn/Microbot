@@ -6259,6 +6259,15 @@ public class Rs2Walker {
                         boolean pohResult = attemptObserved(transport, () -> handlePohTransport(transport));
                         log.info("[W330POH] POH transport result display='{}' result={} player={}",
                                 transport.getDisplayInfo(), pohResult, Rs2Player.getWorldLocation());
+                        if (!pohResult && transport instanceof PohTransport) {
+                            // Execution failed (e.g. a quest-locked jewellery box option the data
+                            // layer missed): block this teleport for a cooldown and drop the
+                            // transport-refresh memo so the next recalc assembles routes without
+                            // it — the pathfinder then picks the next best option instead of
+                            // re-attempting the dead teleport forever.
+                            PohTeleports.blockFailedTeleport(((PohTransport) transport).getTeleport(), "execute failed");
+                            ShortestPathPlugin.getPathfinderConfig().invalidateTransportRefreshCache();
+                        }
                         if (pohResult) {
                             // Shares ship/NPC/boat 10s landing budget — intentional single timeout constant.
                             boolean pohNearDest = sleepUntil(
