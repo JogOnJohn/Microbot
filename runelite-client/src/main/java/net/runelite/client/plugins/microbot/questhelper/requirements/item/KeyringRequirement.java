@@ -59,7 +59,9 @@ public class KeyringRequirement extends ItemRequirement
 
 	public KeyringRequirement(String name, KeyringCollection key)
 	{
-		this(name, null, key);
+		super(name, key.getItemID());
+		keyring = new ItemRequirement("Steel key ring", ItemID.FAVOUR_KEY_RING);
+		this.keyringCollection = key;
 	}
 
 	public KeyringRequirement(ConfigManager configManager, KeyringCollection key)
