@@ -36,7 +36,9 @@ import java.text.DecimalFormat;
 import javax.annotation.Nullable;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
@@ -186,10 +188,30 @@ class InventoryDeltaPanel extends JPanel implements Scrollable
 				+ "<br/>Item ID: " + item.getId()
 				+ "<br/>Quantity: " + COMMA_FORMAT.format(item.getQuantity())
 				+ "</html>");
+			gridItem.setComponentPopupMenu(buildCopyMenu(inventoryItem));
 		}
 
 		panel.add(gridItem);
 		return gridItem;
+	}
+
+	private static JPopupMenu buildCopyMenu(final InventoryItem inventoryItem)
+	{
+		final Item item = inventoryItem.getItem();
+		final JPopupMenu menu = new JPopupMenu();
+
+		final JMenuItem copyId = new JMenuItem("Copy item ID (" + item.getId() + ")");
+		copyId.addActionListener(e -> ClipboardUtil.copy(Integer.toString(item.getId())));
+		menu.add(copyId);
+
+		final JMenuItem copyInfo = new JMenuItem("Copy item info");
+		copyInfo.addActionListener(e -> ClipboardUtil.copy(
+			inventoryItem.getName() + " id=" + item.getId()
+				+ " qty=" + item.getQuantity()
+				+ (inventoryItem.getSlot() >= 0 ? " slot=" + inventoryItem.getSlot() : "")));
+		menu.add(copyInfo);
+
+		return menu;
 	}
 
 	@Override
