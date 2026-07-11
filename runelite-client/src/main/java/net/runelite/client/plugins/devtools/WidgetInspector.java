@@ -33,6 +33,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.lang.reflect.Field;
 import java.util.Comparator;
 import java.util.Enumeration;
@@ -44,7 +46,9 @@ import java.util.stream.Stream;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -201,6 +205,44 @@ class WidgetInspector extends DevToolsFrame
 			}
 		});
 
+		widgetTree.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mousePressed(MouseEvent e)
+			{
+				maybeShowPopup(e);
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e)
+			{
+				maybeShowPopup(e);
+			}
+
+			private void maybeShowPopup(MouseEvent e)
+			{
+				if (!e.isPopupTrigger())
+				{
+					return;
+				}
+
+				TreePath path = widgetTree.getPathForLocation(e.getX(), e.getY());
+				if (path == null || !(path.getLastPathComponent() instanceof WidgetTreeNode))
+				{
+					return;
+				}
+
+				widgetTree.setSelectionPath(path);
+				final Widget widget = ((WidgetTreeNode) path.getLastPathComponent()).getWidget();
+
+				JPopupMenu menu = new JPopupMenu();
+				JMenuItem copy = new JMenuItem("Copy widget info");
+				copy.addActionListener(ev -> copyWidgetInfo(widget));
+				menu.add(copy);
+				menu.show(widgetTree, e.getX(), e.getY());
+			}
+		});
+
 		final JScrollPane treeScrollPane = new JScrollPane(widgetTree);
 		treeScrollPane.setPreferredSize(new Dimension(400, 800));
 
@@ -227,6 +269,11 @@ class WidgetInspector extends DevToolsFrame
 		hideHidden.setSelected(true);
 		hideHidden.addItemListener(ev -> refreshWidgets());
 		bottomPanel.add(hideHidden);
+
+		final JButton copyWidget = new JButton("Copy");
+		copyWidget.setToolTipText("Copy the selected widget's ids, bounds, text and actions to the clipboard");
+		copyWidget.addActionListener(ev -> copyWidgetInfo(selectedWidget));
+		bottomPanel.add(copyWidget);
 
 		final JButton revalidateWidget = new JButton("Revalidate");
 		revalidateWidget.addActionListener(ev -> clientThread.invokeLater(() ->
@@ -588,6 +635,89 @@ class WidgetInspector extends DevToolsFrame
 		}
 
 		return null;
+	}
+
+	private void copyWidgetInfo(Widget widget)
+	{
+		if (widget == null)
+		{
+			return;
+		}
+
+		clientThread.invoke(() ->
+		{
+			final String text = buildWidgetText(widget);
+			SwingUtilities.invokeLater(() -> ClipboardUtil.copy(text));
+		});
+	}
+
+	private static String buildWidgetText(Widget w)
+	{
+		int id = w.getId();
+		StringBuilder sb = new StringBuilder();
+		sb.append("Widget ").append(getWidgetIdentifier(w)).append('\n');
+		sb.append("Id: ").append(id)
+			.append(" (group ").append(WidgetUtil.componentToInterface(id))
+			.append(", child ").append(WidgetUtil.componentToId(id));
+		if (w.getIndex() != -1)
+		{
+			sb.append(", index ").append(w.getIndex());
+		}
+		sb.append(")\n");
+
+		java.awt.Rectangle bounds = w.getBounds();
+		if (bounds != null)
+		{
+			sb.append("Bounds: x=").append(bounds.x).append(" y=").append(bounds.y)
+				.append(" w=").append(bounds.width).append(" h=").append(bounds.height).append('\n');
+		}
+
+		sb.append("Hidden: ").append(w.isHidden()).append('\n');
+
+		String text = w.getText();
+		if (text != null && !text.isEmpty())
+		{
+			sb.append("Text: ").append(text).append('\n');
+		}
+
+		String name = w.getName();
+		if (name != null && !name.trim().isEmpty())
+		{
+			sb.append("Name: ").append(name.trim()).append('\n');
+		}
+
+		String[] actions = w.getActions();
+		if (actions != null)
+		{
+			StringBuilder actionsSb = new StringBuilder();
+			for (int i = 0; i < actions.length; i++)
+			{
+				if (actions[i] != null)
+				{
+					if (actionsSb.length() > 0)
+					{
+						actionsSb.append(", ");
+					}
+					actionsSb.append(i + 1).append('=').append(actions[i]);
+				}
+			}
+			if (actionsSb.length() > 0)
+			{
+				sb.append("Actions: ").append(actionsSb).append('\n');
+			}
+		}
+
+		if (w.getItemId() != -1)
+		{
+			sb.append("ItemId: ").append(w.getItemId()).append(" qty=").append(w.getItemQuantity()).append('\n');
+		}
+
+		if (w.getSpriteId() != -1)
+		{
+			sb.append("SpriteId: ").append(w.getSpriteId()).append('\n');
+		}
+
+		return sb.toString();
 	}
 
 	public static String getWidgetIdentifier(Widget widget)
