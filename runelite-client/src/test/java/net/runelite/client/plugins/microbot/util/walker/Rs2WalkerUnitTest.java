@@ -356,6 +356,61 @@ public class Rs2WalkerUnitTest {
     }
 
     @Test
+    public void stabilizeRouteProgressIndex_doesNotJumpBackToEarlierSwitchbackBranch() {
+        WorldPoint target = new WorldPoint(3200, 3201, 0);
+        List<WorldPoint> path = Arrays.asList(
+                new WorldPoint(3200, 3200, 0),
+                new WorldPoint(3201, 3200, 0),
+                new WorldPoint(3202, 3200, 0),
+                new WorldPoint(3203, 3200, 0),
+                new WorldPoint(3203, 3201, 0),
+                new WorldPoint(3202, 3201, 0),
+                new WorldPoint(3201, 3201, 0),
+                target);
+
+        assertEquals(5, Rs2Walker.stabilizeRouteProgressIndex(path, 5, target, new WorldPoint(3202, 3201, 0)));
+        assertEquals("nearby earlier branch must not become the active route index",
+                5,
+                Rs2Walker.stabilizeRouteProgressIndex(path, 2, target, new WorldPoint(3202, 3201, 0)));
+        assertEquals(6, Rs2Walker.stabilizeRouteProgressIndex(path, 6, target, new WorldPoint(3201, 3201, 0)));
+    }
+
+    @Test
+    public void findForwardRecoveryIndex_prefersLaterReachableSwitchbackBranch() {
+        WorldPoint player = new WorldPoint(1000, 1000, 0);
+        List<WorldPoint> path = Arrays.asList(
+                new WorldPoint(998, 1000, 0),
+                new WorldPoint(999, 1000, 0),
+                new WorldPoint(1000, 1001, 0),
+                new WorldPoint(1015, 1000, 0),
+                new WorldPoint(1016, 1001, 0),
+                new WorldPoint(1002, 1002, 0),
+                new WorldPoint(1003, 1001, 0));
+        Set<WorldPoint> reachable = new HashSet<>(Arrays.asList(
+                new WorldPoint(1002, 1002, 0),
+                new WorldPoint(1003, 1001, 0)));
+
+        int idx = Rs2Walker.findForwardRecoveryIndex(path, 3, player, 13, reachable, wp -> true);
+
+        assertEquals("recovery should scan forward before falling back to an earlier branch", 6, idx);
+    }
+
+    @Test
+    public void findFurthestClickableIndex_canReturnEarlierSwitchbackBranch() {
+        WorldPoint player = new WorldPoint(1000, 1000, 0);
+        List<WorldPoint> path = Arrays.asList(
+                new WorldPoint(998, 1000, 0),
+                new WorldPoint(999, 1000, 0),
+                new WorldPoint(1000, 1001, 0),
+                new WorldPoint(1015, 1000, 0),
+                new WorldPoint(1016, 1001, 0));
+
+        int idx = Rs2Walker.findFurthestClickableIndex(path, 3, player, wp -> false, 13);
+
+        assertEquals("generic fallback is allowed to backtrack; recovery clamps this at the call site", 2, idx);
+    }
+
+    @Test
     public void interpolateClickableTarget_usesInterpolatedPointWhenUsable() {
         WorldPoint player = new WorldPoint(3200, 3200, 0);
         WorldPoint fallback = new WorldPoint(3206, 3200, 0);
@@ -417,6 +472,20 @@ public class Rs2WalkerUnitTest {
     }
 
     @Test
+    public void wallDoorTouchesSegment_diagonalStepThroughGateCorner_returnsTrue() {
+        WallObject gate = mock(WallObject.class);
+        when(gate.getWorldLocation()).thenReturn(new WorldPoint(3240, 3302, 0));
+        when(gate.getOrientationA()).thenReturn(4); // gate blocks 3240,3302 <-> 3241,3302
+
+        assertTrue(Rs2Walker.wallDoorTouchesSegment(gate,
+                new WorldPoint(3240, 3301, 0),
+                new WorldPoint(3241, 3302, 0)));
+        assertTrue(Rs2Walker.wallDoorTouchesSegment(gate,
+                new WorldPoint(3241, 3302, 0),
+                new WorldPoint(3240, 3301, 0)));
+    }
+
+    @Test
     public void wallDoorTouchesSegment_startingBesideDoorAndMovingAway_returnsFalse() {
         WallObject door = mock(WallObject.class);
         when(door.getWorldLocation()).thenReturn(new WorldPoint(3123, 3361, 0));
@@ -426,6 +495,70 @@ public class Rs2WalkerUnitTest {
                 Rs2Walker.wallDoorTouchesSegment(door,
                         new WorldPoint(3123, 3360, 0),
                         new WorldPoint(3122, 3359, 0)));
+    }
+
+    @Test
+    public void isDoorEdgeNudgeResolved_movesToWrongNeighbor_returnsFalse() {
+        assertFalse(Rs2Walker.isDoorEdgeNudgeResolved(
+                new WorldPoint(3240, 3301, 0),
+                new WorldPoint(3239, 3302, 0),
+                new WorldPoint(3240, 3301, 0),
+                new WorldPoint(3241, 3302, 0)));
+    }
+
+    @Test
+    public void isDoorEdgeNudgeResolved_crossesToDoorTarget_returnsTrue() {
+        assertTrue(Rs2Walker.isDoorEdgeNudgeResolved(
+                new WorldPoint(3240, 3301, 0),
+                new WorldPoint(3241, 3302, 0),
+                new WorldPoint(3240, 3301, 0),
+                new WorldPoint(3241, 3302, 0)));
+    }
+
+    @Test
+    public void shouldClearInterimTarget_closeToCheckpoint_returnsTrue() {
+        assertTrue(Rs2Walker.shouldClearInterimTarget(
+                new WorldPoint(2890, 3396, 0),
+                new WorldPoint(2889, 3396, 0),
+                1_000L,
+                1_500L,
+                2_000L));
+    }
+
+    @Test
+    public void shouldClearInterimTarget_expiredCheckpoint_returnsTrue() {
+        assertTrue(Rs2Walker.shouldClearInterimTarget(
+                new WorldPoint(2890, 3396, 0),
+                new WorldPoint(2880, 3396, 0),
+                1_000L,
+                1_500L,
+                12_000L));
+    }
+
+    @Test
+    public void shouldClearInterimTarget_staleProgress_returnsTrue() {
+        assertTrue(Rs2Walker.shouldClearInterimTarget(
+                new WorldPoint(2890, 3396, 0),
+                new WorldPoint(2880, 3396, 0),
+                1_000L,
+                1_500L,
+                5_000L));
+    }
+
+    @Test
+    public void shouldClearInterimTarget_activeFarCheckpoint_returnsFalse() {
+        assertFalse(Rs2Walker.shouldClearInterimTarget(
+                new WorldPoint(2890, 3396, 0),
+                new WorldPoint(2880, 3396, 0),
+                1_000L,
+                4_500L,
+                5_000L));
+    }
+
+    @Test
+    public void interimPreclickTiles_runHandsOffEarlierThanWalk() {
+        assertEquals(6, Rs2Walker.interimPreclickTiles(false));
+        assertEquals(11, Rs2Walker.interimPreclickTiles(true));
     }
 
     @Test
