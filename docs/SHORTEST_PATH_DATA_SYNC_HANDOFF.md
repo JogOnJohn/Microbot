@@ -55,7 +55,20 @@ The foundation matches the plan. Verified directly against `Transport.java`'s pa
 | Golden routes (`ShortestPathGoldenRouteBaselineTest`, **20 routes**) | pass |
 | `TransportResourceLoadTest` | pass |
 | `:client:compileJava` | pass |
-| Jar build / live test | **not done** — a Microbot client was running both sessions (hard rule) |
+| Jar build | pass — built from `da72016108` after stopping the old spike client |
+| Live walker test | **not done** — Desktop package is ready for the next session |
+
+### Test artifact built by Codex
+
+- Source artifact: `runelite-client/build/libs/microbot-2.6.12.jar`
+- Desktop package: `C:\Users\Billy\Desktop\Microbot Shortest Path Data Sync`
+- Desktop jar: `microbot-shortest-path-data-sync-2.6.12-da72016108.jar`
+- Desktop launcher: `Launch Microbot - Shortest Path Data Sync.bat`
+- SHA-256: `2264E945A508FCD99BD5B3EB00D6A53331F1A034EBE20646ABBB00EF8D0BAA49`
+- The jar was inspected after build and contains the repaired Marim, Elemental Workshop,
+  Piscatoris, and gate-190 resource rows.
+- The prior `spike/shortest-path-upstream` client (PID 9116) was stopped before the build. The
+  new jar was deliberately not launched automatically.
 
 **Pre-existing failures, NOT caused by this branch** (reproduced identically with the base
 `spike/shortest-path-upstream` copy of `transports.tsv`):
@@ -95,9 +108,8 @@ deliberately accepted.
 
 ## Remaining work
 
-1. **Jar + live walker testing** (the only unfinished plan item that is currently actionable;
-   needs the running client closed first): `gradlew :client:microbotReleaseJar`, launch via
-   `launch-microbot-shortestpath-data-sync.bat`, walk the golden routes — prioritize the newly
+1. **Live walker testing** (the only unfinished plan item that is currently actionable): launch
+   the Desktop package via `Launch Microbot - Shortest Path Data Sync.bat`, walk the golden routes — prioritize the newly
    repaired transports (Marim stairs, Piscatoris gates, Elemental Workshop wall, gate 190) —
    capturing `[WebWalk]`, `tp_audit`, `path_teleports`.
 2. **Periodic pin re-check**: when upstream moves, run the refresh procedure above.
