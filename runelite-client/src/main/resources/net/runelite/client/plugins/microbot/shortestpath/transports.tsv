@@ -5119,14 +5119,14 @@
 2724 2747 0	2770 2793 0							10	
 									
 # Marim									
-2795 2793 0	2795 2797 1	Climb-up Staircase						1	
-2795 2797 1	2795 2793 0	Climb-down Staircase						1	
-2796 2793 0	2796 2797 1	Climb-up Staircase						1	
-2796 2797 1	2796 2793 0	Climb-down Staircase						1	
-2799 2793 0	2799 2797 1	Climb-up Staircase						1	
-2799 2797 1	2799 2793 0	Climb-down Staircase						1	
-2800 2793 0	2800 2797 1	Climb-up Staircase						1	
-2800 2797 1	2800 2793 0	Climb-down Staircase						1	
+2795 2793 0	2795 2797 1	Climb-up Stairs 4756						1	
+2795 2797 1	2795 2793 0	Climb-down Stairs 4755						1	
+2796 2793 0	2796 2797 1	Climb-up Stairs 4756						1	
+2796 2797 1	2796 2793 0	Climb-down Stairs 4755						1	
+2799 2793 0	2799 2797 1	Climb-up Stairs 4756						1	
+2799 2797 1	2799 2793 0	Climb-down Stairs 4755						1	
+2800 2793 0	2800 2797 1	Climb-up Stairs 4756						1	
+2800 2797 1	2800 2793 0	Climb-down Stairs 4755						1	
 									
 # Tomb of Bervirius									
 2762 2989 0	2760 9389 0	Search Well stacked rocks 2234						15	
@@ -5422,8 +5422,8 @@
 3246 9646 0	3232 9610 0	Cellar Dartog 997			Death to the Dorgeshuun			8	Cellar
 									
 # Elemental Workshop									
-2709 3495 0	2709 3496 0	Open Odd-looking wall		2887=1|4446=1				2	
-2709 3496 0	2709 3495 0	Open Odd-looking wall		2887=1|4446=1				2	
+2709 3495 0	2709 3496 0	Open Odd-looking wall 18505		2887=1||4446=1				2
+2709 3496 0	2709 3495 0	Open Odd-looking wall 18505		2887=1||4446=1				2
 2709 3498 0	2716 9888 0	Climb-down Staircase 3415						1	
 2716 9888 0	2709 3497 0	Climb-up Staircase 3416						1	
 									
@@ -5448,10 +5448,10 @@
 # Piscatoris Fishing Colony									
 2344 3650 0	2344 3655 0	Enter Hole 12656			Swan Song				
 2344 3655 0	2344 3650 0	Enter Hole 12656			Swan Song				
-2344 3662 0	2344 3663 0	Open Colony gate			Swan Song			2	
-2343 3662 0	2343 3663 0	Open Colony gate			Swan Song			2	
-2344 3663 0	2344 3662 0	Open Colony gate			Swan Song			2	
-2343 3663 0	2343 3662 0	Open Colony gate			Swan Song			2	
+2344 3662 0	2344 3663 0	Open Colony gate 12725			Swan Song			2
+2343 3662 0	2343 3663 0	Open Colony gate 12723			Swan Song			2
+2344 3663 0	2344 3662 0	Open Colony gate 12725			Swan Song			2
+2343 3663 0	2343 3662 0	Open Colony gate 12723			Swan Song			2
 									
 # Socerer's Tower									
 2701 3407 0	2701 3407 1	Climb-up Ladder 16683							
