@@ -4,10 +4,12 @@ from pathlib import Path
 
 from scripts.transport_sync.sync import (
     SyncError,
+    Table,
     apply_overrides,
     identity,
     parse_action,
     read_tsv,
+    semantic_diff,
     write_tsv,
 )
 
@@ -50,6 +52,58 @@ class TransportSyncTest(unittest.TestCase):
         }
         apply_overrides({"transports.tsv": table}, [override])
         self.assertEqual("Open Gate 190 190", table.rows[0]["menuOption menuTarget objectID"])
+
+    def test_fields_with_quotes_round_trip_verbatim(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "quotes.tsv"
+            content = '# Origin\tDestination\tDisplay info\n1 2 0\t3 4 0\tSay "hello" twice\n'
+            source.write_text(content, encoding="utf-8")
+            table = read_tsv(source)
+            self.assertEqual('Say "hello" twice', table.rows[0]["Display info"])
+            output = Path(temp_dir) / "out.tsv"
+            write_tsv(output, table)
+            self.assertEqual(content, output.read_text(encoding="utf-8"))
+
+    def test_write_rejects_unrepresentable_fields(self):
+        table = Table(["Origin"], [{"Origin": "tab\tinside"}])
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with self.assertRaisesRegex(SyncError, "not representable"):
+                write_tsv(Path(temp_dir) / "bad.tsv", table)
+
+    def _diff(self, baseline_lines, generated_rows, headers):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline = Path(temp_dir) / "transports.tsv"
+            baseline.write_text("\n".join(baseline_lines) + "\n", encoding="utf-8")
+            generated = {"transports.tsv": Table(list(headers), generated_rows)}
+            return semantic_diff(Path(temp_dir), generated, {"transports.tsv": "TRANSPORT"})
+
+    def test_requirement_change_reports_as_changed_not_add_remove(self):
+        headers = ["Origin", "Destination", "menuOption menuTarget objectID", "Skills", "Duration"]
+        baseline = ["# " + "\t".join(headers), "1 1 0\t1 2 0\tOpen Door 123\t10 Agility\t2"]
+        generated_rows = [{
+            "Origin": "1 1 0", "Destination": "1 2 0",
+            "menuOption menuTarget objectID": "Open Door 123",
+            "Skills": "20 Agility", "Duration": "2",
+        }]
+        diff = self._diff(baseline, generated_rows, headers)
+        self.assertEqual(0, diff["summary"]["added"])
+        self.assertEqual(0, diff["summary"]["removed"])
+        self.assertEqual(1, diff["summary"]["changed"])
+        self.assertEqual(1, diff["summary"]["requirement_deltas"])
+
+    def test_endpoint_move_reports_adjacency_flip(self):
+        headers = ["Origin", "Destination", "menuOption menuTarget objectID"]
+        baseline = ["# " + "\t".join(headers), "1 1 0\t1 2 0\tOpen Door 123"]
+        generated_rows = [{
+            "Origin": "1 1 0", "Destination": "1 9 0",
+            "menuOption menuTarget objectID": "Open Door 123",
+        }]
+        diff = self._diff(baseline, generated_rows, headers)
+        self.assertEqual(0, diff["summary"]["added"])
+        self.assertEqual(0, diff["summary"]["removed"])
+        self.assertEqual(1, diff["summary"]["changed"])
+        self.assertEqual(1, diff["summary"]["endpoint_moves"])
+        self.assertEqual(1, diff["summary"]["adjacency_deltas"])
 
     def test_output_is_deterministic(self):
         table = read_tsv(FIXTURES / "upstream" / "transports.tsv")

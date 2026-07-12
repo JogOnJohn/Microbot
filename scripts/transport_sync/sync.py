@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import json
 import re
@@ -85,14 +84,15 @@ def read_tsv(path: Path) -> Table:
     if not header_line.startswith("#"):
         raise SyncError(f"TSV header must start with '#': {path}")
     header_text = header_line[1:].lstrip(" ")
-    headers = next(csv.reader([header_text], delimiter="\t"))
+    # Split raw on tabs: the Java parser never interprets CSV quoting, so neither may we.
+    headers = header_text.split("\t")
     if not headers or any(not header for header in headers):
         raise SyncError(f"Invalid header in {path}")
     rows: list[dict[str, str]] = []
     for line_number, line in enumerate(lines[1:], start=2):
         if not line.strip() or line.startswith("#"):
             continue
-        fields = next(csv.reader([line], delimiter="\t"))
+        fields = line.split("\t")
         if len(fields) > len(headers):
             raise SyncError(
                 f"{path}:{line_number}: {len(fields)} fields for {len(headers)} headers"
@@ -106,9 +106,12 @@ def write_tsv(path: Path, table: Table) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
         handle.write("# " + "\t".join(table.headers) + "\n")
-        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
         for row in table.rows:
-            writer.writerow([row.get(header, "") for header in table.headers])
+            fields = [row.get(header, "") for header in table.headers]
+            for field in fields:
+                if "\t" in field or "\n" in field or "\r" in field:
+                    raise SyncError(f"Field not representable in TSV: {field!r} in {path}")
+            handle.write("\t".join(fields) + "\n")
 
 
 def parse_action(value: str) -> tuple[str, str, str]:
@@ -331,6 +334,28 @@ def adjacency(row: dict[str, str]) -> str:
     return "adjacent" if max(abs(origin[0] - destination[0]), abs(origin[1] - destination[1])) <= 1 else "non-adjacent"
 
 
+def changed_entry(
+    transport_type: str, key: tuple[str, ...], before: dict[str, str], after: dict[str, str]
+) -> dict[str, object]:
+    fields = {
+        field: {"before": before.get(field, ""), "after": after.get(field, "")}
+        for field in sorted(set(before) | set(after))
+        if before.get(field, "") != after.get(field, "")
+    }
+    return {
+        "type": transport_type,
+        "identity": list(key),
+        "fields": fields,
+        "duration_delta": fields.get("Duration"),
+        "requirements_changed": any(
+            field in fields
+            for field in ("Skills", "Items", "Quests", "Varbits", "VarPlayers", "Currency")
+        ),
+        "adjacency_before": adjacency(before),
+        "adjacency_after": adjacency(after),
+    }
+
+
 def semantic_diff(
     baseline_root: Path,
     generated: dict[str, Table],
@@ -341,6 +366,7 @@ def semantic_diff(
     changed: list[dict[str, object]] = []
     counts: dict[str, dict[str, int]] = {}
     duplicates: dict[str, list[list[str]]] = {}
+    identity_width = len(IDENTITY_COLUMNS) + 3  # comparison_key prefix: category+origin+dest+action+target+id
     for filename, transport_type in categories.items():
         baseline = read_tsv(baseline_root / filename)
         candidate = generated[filename]
@@ -350,34 +376,49 @@ def semantic_diff(
         old = semantic_map(filename, baseline)
         new = semantic_map(filename, candidate)
         counts[filename] = {"baseline": len(old), "generated": len(new)}
-        for key in sorted(new.keys() - old.keys()):
-            added.append({"type": transport_type, "identity": list(key), "row": new[key]})
-        for key in sorted(old.keys() - new.keys()):
-            removed.append({"type": transport_type, "identity": list(key), "row": old[key]})
         for key in sorted(old.keys() & new.keys()):
-            before = old[key]
-            after = new[key]
-            if before == after:
-                continue
-            fields = {
-                field: {"before": before.get(field, ""), "after": after.get(field, "")}
-                for field in sorted(set(before) | set(after))
-                if before.get(field, "") != after.get(field, "")
-            }
-            changed.append(
-                {
-                    "type": transport_type,
-                    "identity": list(key),
-                    "fields": fields,
-                    "duration_delta": fields.get("Duration"),
-                    "requirements_changed": any(
-                        field in fields
-                        for field in ("Skills", "Items", "Quests", "Varbits", "VarPlayers", "Currency")
-                    ),
-                    "adjacency_before": adjacency(before),
-                    "adjacency_after": adjacency(after),
-                }
-            )
+            if old[key] != new[key]:
+                changed.append(changed_entry(transport_type, key, old[key], new[key]))
+
+        # A row whose requirement fields changed moves between comparison keys while its
+        # stable identity stays put; pair those as CHANGES, not an unrelated removal+addition,
+        # so the requirement-delta counter actually fires.
+        removed_by_identity: dict[tuple[str, ...], list[tuple[str, ...]]] = defaultdict(list)
+        for key in sorted(old.keys() - new.keys()):
+            removed_by_identity[key[:identity_width]].append(key)
+        unmatched_added: list[tuple[str, ...]] = []
+        for key in sorted(new.keys() - old.keys()):
+            candidates = removed_by_identity.get(key[:identity_width])
+            if candidates:
+                changed.append(changed_entry(transport_type, key, old[candidates.pop(0)], new[key]))
+            else:
+                unmatched_added.append(key)
+        unmatched_removed = [key for keys in removed_by_identity.values() for key in keys]
+
+        # An interaction that is unique on both sides but moved endpoints is a relocation —
+        # the case where adjacency (handler dispatch) can silently flip.
+        def interaction_key(key: tuple[str, ...]) -> tuple[str, ...]:
+            return (key[0], key[3], key[4], key[5])
+
+        removed_moves: dict[tuple[str, ...], list[tuple[str, ...]]] = defaultdict(list)
+        for key in unmatched_removed:
+            removed_moves[interaction_key(key)].append(key)
+        still_added: list[tuple[str, ...]] = []
+        for key in unmatched_added:
+            ikey = interaction_key(key)
+            rkeys = removed_moves.get(ikey, [])
+            movable = ikey[1] and ikey[3] not in ("", "0")
+            if movable and len(rkeys) == 1 and sum(1 for a in unmatched_added if interaction_key(a) == ikey) == 1:
+                entry = changed_entry(transport_type, key, old[rkeys.pop(0)], new[key])
+                entry["endpoint_moved"] = True
+                changed.append(entry)
+            else:
+                still_added.append(key)
+        for key in still_added:
+            added.append({"type": transport_type, "identity": list(key), "row": new[key]})
+        for keys in removed_moves.values():
+            for key in keys:
+                removed.append({"type": transport_type, "identity": list(key), "row": old[key]})
     return {
         "counts": counts,
         "added": added,
@@ -393,6 +434,7 @@ def semantic_diff(
             "adjacency_deltas": sum(
                 1 for item in changed if item["adjacency_before"] != item["adjacency_after"]
             ),
+            "endpoint_moves": sum(1 for item in changed if item.get("endpoint_moved")),
         },
     }
 
@@ -419,6 +461,7 @@ def write_summary(
         f"- Duration deltas: **{summary['duration_deltas']}**",
         f"- Requirement deltas: **{summary['requirement_deltas']}**",
         f"- Adjacency deltas: **{summary['adjacency_deltas']}**",
+        f"- Endpoint moves: **{summary['endpoint_moves']}**",
         "",
         "## Known unsupported upstream semantics",
         "",
