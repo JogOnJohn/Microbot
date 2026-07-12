@@ -1,5 +1,8 @@
 package net.runelite.client.plugins.microbot.shortestpath;
 
+import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.shortestpath.pathfinder.CollisionMap;
+import net.runelite.client.plugins.microbot.shortestpath.pathfinder.SplitFlagMap;
 import org.junit.Assume;
 import org.junit.Test;
 
@@ -72,6 +75,7 @@ public class TransportSyncGeneratedResourcesTest
 		Path generatedRoot = Paths.get(generatedProperty);
 		assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
 
+		CollisionMap collisionMap = new CollisionMap(SplitFlagMap.fromResources());
 		int totalRows = 0;
 		for (Map.Entry<String, TransportType> category : CATEGORIES.entrySet())
 		{
@@ -84,9 +88,63 @@ public class TransportSyncGeneratedResourcesTest
 				countParserInertInteractions(baseline), countParserInertInteractions(generated));
 			assertTrue(filename + " suspicious row reduction: generated=" + generatedRows +
 				" baseline=" + baselineRows, generatedRows >= Math.floor(baselineRows * 0.9));
+			// Ratchet against the shipped collision map: a sync must not introduce transports
+			// whose endpoints land on fully blocked tiles (door-into-wall = incompatible
+			// transport/collision revisions). Existing offenders are tolerated but not added to.
+			int generatedBlocked = countBlockedEndpoints(generated, category.getValue(), collisionMap);
+			int baselineBlocked = countBlockedEndpoints(baseline, category.getValue(), collisionMap);
+			assertTrue(filename + " added transports with collision-blocked endpoints: generated=" +
+				generatedBlocked + " baseline=" + baselineBlocked, generatedBlocked <= baselineBlocked);
 			totalRows += generatedRows;
 		}
 		assertTrue("expected the full transport catalog, parsed only " + totalRows + " rows", totalRows > 7_000);
+	}
+
+	private static int countBlockedEndpoints(List<String> lines, TransportType type, CollisionMap collisionMap)
+	{
+		int blocked = 0;
+		for (Transport transport : parseRows(lines, type))
+		{
+			blocked += blockedEndpoint(transport.getOrigin(), collisionMap);
+			blocked += blockedEndpoint(transport.getDestination(), collisionMap);
+		}
+		return blocked;
+	}
+
+	private static int blockedEndpoint(WorldPoint point, CollisionMap collisionMap)
+	{
+		// Null = originless teleport; negative coordinates = permutation sentinel.
+		if (point == null || point.getX() < 0)
+		{
+			return 0;
+		}
+		return collisionMap.isBlocked(point.getX(), point.getY(), point.getPlane()) ? 1 : 0;
+	}
+
+	private static List<Transport> parseRows(List<String> lines, TransportType type)
+	{
+		List<Transport> transports = new java.util.ArrayList<>();
+		if (lines.isEmpty())
+		{
+			return transports;
+		}
+		String[] headers = lines.get(0).replaceFirst("^#\\s?", "").split("\\t", -1);
+		for (int i = 1; i < lines.size(); i++)
+		{
+			String line = lines.get(i);
+			if (line.isBlank() || line.startsWith("#"))
+			{
+				continue;
+			}
+			String[] fields = line.split("\\t", -1);
+			Map<String, String> fieldMap = new HashMap<>();
+			for (int j = 0; j < headers.length; j++)
+			{
+				fieldMap.put(headers[j], j < fields.length ? fields[j] : "");
+			}
+			transports.add(new Transport(fieldMap, type));
+		}
+		return transports;
 	}
 
 	private static int validateRows(String filename, List<String> lines, TransportType expectedType)
