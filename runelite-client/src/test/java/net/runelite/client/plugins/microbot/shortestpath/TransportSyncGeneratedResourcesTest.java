@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.shortestpath;
 
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -65,7 +66,9 @@ public class TransportSyncGeneratedResourcesTest
 	public void generatedCatalogParsesWithoutCapabilityCollapse() throws IOException
 	{
 		String generatedProperty = System.getProperty("microbot.transport.generated.dir");
-		assertNotNull("validateTransportSync must provide microbot.transport.generated.dir", generatedProperty);
+		// Staged output only exists after running the converter; generic test sweeps
+		// (runUnitTests etc.) must skip this, not fail. validateTransportSync sets the property.
+		Assume.assumeTrue("skipped: run via :client:validateTransportSync", generatedProperty != null);
 		Path generatedRoot = Paths.get(generatedProperty);
 		assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
 
