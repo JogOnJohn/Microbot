@@ -213,7 +213,7 @@ public class CollisionMap {
                     if (isMoa) moaIgnored++;
                     continue;
                 }
-                int cost = config.getDistanceBeforeUsingTeleport() + transport.getDuration();
+                int cost = config.getDistanceBeforeUsingTeleport() + config.getTransportTravelCost(transport);
                 neighbors.add(new TransportNode(transport.getDestination(), node, cost));
                 if (isMoa) {
                     moaAddedHere++;
@@ -221,7 +221,7 @@ public class CollisionMap {
                     moaCosts.add(cost);
                 }
             } else {
-                neighbors.add(new TransportNode(transport.getDestination(), node, transport.getDuration()));
+                neighbors.add(new TransportNode(transport.getDestination(), node, config.getTransportTravelCost(transport)));
             }
             //END microbot variables
         }
@@ -321,9 +321,9 @@ public class CollisionMap {
                     if (config.isIgnoreTeleportAndItems()) {
                         continue;
                     }
-                    neighbors.add(new TransportNode(origin, node, config.getDistanceBeforeUsingTeleport() + transport.getDuration()));
+                    neighbors.add(new TransportNode(origin, node, config.getDistanceBeforeUsingTeleport() + config.getTransportTravelCost(transport)));
                 } else {
-                    neighbors.add(new TransportNode(origin, node, transport.getDuration()));
+                    neighbors.add(new TransportNode(origin, node, config.getTransportTravelCost(transport)));
                 }
             }
         }

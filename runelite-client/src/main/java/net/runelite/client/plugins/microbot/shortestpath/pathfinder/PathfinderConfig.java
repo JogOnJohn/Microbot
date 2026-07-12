@@ -42,6 +42,12 @@ import static net.runelite.client.plugins.microbot.shortestpath.TransportType.TE
 @Slf4j
 public class PathfinderConfig {
     private static final int WORLD330_MIN_TARGET_DISTANCE = 150;
+    /**
+     * Strong preference for an already-castable spellbook teleport over entering the W330 hosted
+     * house. The hosted house remains available when it saves more than this many walking-cost
+     * units, or when no spell transport passed the normal level/rune/spellbook checks.
+     */
+    static final int WORLD330_CASTABLE_SPELL_PENALTY = 200;
     private static final WorldArea WILDERNESS_ABOVE_GROUND = new WorldArea(2944, 3525, 448, 448, 0);
     private static final WorldArea WILDERNESS_ABOVE_GROUND_LEVEL_20 = new WorldArea(2944, 3680, 448, 448, 0);
     private static final WorldArea WILDERNESS_ABOVE_GROUND_LEVEL_30 = new WorldArea(2944, 3760, 448, 448, 0);
@@ -213,6 +219,20 @@ public class PathfinderConfig {
 
     public CollisionMap getMap() {
         return map.get();
+    }
+
+    int getTransportTravelCost(Transport transport) {
+        int cost = transport.getDuration();
+        if (transport instanceof World330HostedHouseTransport && hasCastableSpellbookTeleport()) {
+            cost += WORLD330_CASTABLE_SPELL_PENALTY;
+        }
+        return cost;
+    }
+
+    private boolean hasCastableSpellbookTeleport() {
+        Set<Transport> available = usableTeleports;
+        return available != null && available.stream()
+                .anyMatch(transport -> transport.getType() == TELEPORTATION_SPELL);
     }
 
     public void refresh(WorldPoint target) {
@@ -1258,19 +1278,23 @@ public class PathfinderConfig {
      */
     private void emitTeleportAudit(List<String> rejected) {
         Set<String> usableNames = new TreeSet<>();
+        Set<String> usableSpellNames = new TreeSet<>();
         for (Transport t : usableTeleports) {
             if (t.getType() == TELEPORTATION_ITEM) {
                 usableNames.add(describeTeleport(t));
+            } else if (t.getType() == TELEPORTATION_SPELL) {
+                usableSpellNames.add(describeTeleport(t));
             }
         }
         Collections.sort(rejected);
-        int hash = Objects.hash(rejected, usableNames);
+        int hash = Objects.hash(rejected, usableNames, usableSpellNames);
         if (hash == lastTeleportAuditHash) {
             return;
         }
         lastTeleportAuditHash = hash;
-        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={}",
-                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames);
+        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={} usableSpellTeleports({})={}",
+                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames,
+                usableSpellNames.size(), usableSpellNames);
     }
 
     private String describeTeleport(Transport t) {

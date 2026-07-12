@@ -10,8 +10,9 @@ import java.util.Set;
 
 public class World330HostedHouseTransport extends Transport {
     public World330HostedHouseTransport(WorldPoint destination) {
-        super(destination, "W330 hosted house: Teleport to house tablet", TransportType.TELEPORTATION_ITEM, true, 19,
-                Set.of(Set.of(ItemID.POH_TABLET_TELEPORTTOHOUSE)));
+        super(null, destination, "W330 hosted house: Teleport to house tablet",
+                TransportType.TELEPORTATION_ITEM, true, 19);
+        setItemIdRequirements(Set.of(Set.of(ItemID.POH_TABLET_TELEPORTTOHOUSE)));
     }
 
     public boolean execute() {
