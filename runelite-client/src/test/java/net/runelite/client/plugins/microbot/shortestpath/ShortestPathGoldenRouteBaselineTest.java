@@ -51,7 +51,31 @@ public class ShortestPathGoldenRouteBaselineTest
 			new RouteCase("elemental-workshop-wall", point(2709, 3495, 0), point(2709, 3496, 0),
 				1, 10, TransportType.TRANSPORT, "TRANSPORT:Open:Odd-looking wall:18505"),
 			new RouteCase("piscatoris-colony-gate", point(2343, 3662, 0), point(2343, 3663, 0),
-				1, 10, TransportType.TRANSPORT, "TRANSPORT:Open:Colony gate:12723")
+				1, 10, TransportType.TRANSPORT, "TRANSPORT:Open:Colony gate:12723"),
+			new RouteCase("falador-crumbling-wall", point(2936, 3355, 0), point(2934, 3355, 0),
+				1, 15, TransportType.AGILITY_SHORTCUT, "AGILITY_SHORTCUT:Climb-over:Crumbling wall:24222"),
+			new RouteCase("port-sarim-to-musa-point", point(3029, 3217, 0), point(2956, 3146, 0),
+				1, 60, TransportType.SHIP, "SHIP:Musa:Point Captain Tobias:14979"),
+			new RouteCase("lumbridge-to-musa-point-multi-leg", point(3222, 3218, 0), point(2956, 3146, 0),
+				80, 400, TransportType.SHIP, "SHIP:Musa:Point Captain Tobias:14979"),
+			new RouteCase("edgeville-canoe-to-champions-guild", point(3132, 3510, 0), point(3199, 3344, 0),
+				1, 150, TransportType.CANOE, "CANOE:Paddle:Canoe Canoe Station:12166"),
+			new RouteCase("ge-minecart-to-keldagrim", point(3141, 3504, 0), point(2909, 10174, 0),
+				1, 40, TransportType.MINECART, "MINECART:Travel:Trapdoor:16168"),
+			new RouteCase("phasmatys-energy-barrier", point(3659, 3509, 0), point(3659, 3507, 0),
+				1, 10, TransportType.TRANSPORT, "TRANSPORT:Pay-toll(2-Ecto):Energy Barrier:16105"),
+			new RouteCase("village-spirit-tree-to-grand-exchange", point(2543, 3167, 0), point(3185, 3508, 0),
+				1, 30, TransportType.SPIRIT_TREE, "SPIRIT_TREE:Travel:Spirit tree:26261"),
+			new RouteCase("fairy-ring-to-zanaris", point(2700, 3247, 0), point(2412, 4434, 0),
+				1, 30, TransportType.FAIRY_RING, "FAIRY_RING:Configure:Fairy ring:29495"),
+			new RouteCase("grand-tree-glider-to-al-kharid", point(2465, 3501, 3), point(3284, 3210, 0),
+				1, 30, TransportType.GNOME_GLIDER, "GNOME_GLIDER:Glider:Captain Errdo:10467"),
+			new RouteCase("ardougne-lever-to-deep-wilderness", point(2561, 3311, 0), point(3154, 3924, 0),
+				1, 30, TransportType.TELEPORTATION_LEVER, "TELEPORTATION_LEVER:Pull:Lever:1814"),
+			new RouteCase("sea-slug-boat-to-fishing-platform", point(2720, 3301, 0), point(2782, 3273, 0),
+				1, 40, TransportType.BOAT, "BOAT:Travel:Holgart:7789"),
+			new RouteCase("lumbridge-to-al-kharid-toll-gate", point(3222, 3218, 0), point(3269, 3167, 0),
+				40, 250, TransportType.TRANSPORT, "TRANSPORT:Open:Gate:4405")
 		);
 
 		for (RouteCase route : routes)
