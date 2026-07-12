@@ -211,6 +211,26 @@ tasks.register<Test>("runUnitTests") {
     }
 }
 
+tasks.register<Test>("validateTransportSync") {
+    group = "verification"
+    description = "Validate staged transport-sync TSVs with the real Microbot parser"
+
+    dependsOn("testClasses")
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    include("**/TransportSyncGeneratedResourcesTest.class")
+    systemProperty(
+        "microbot.transport.generated.dir",
+        rootProject.layout.projectDirectory.dir("build/transport-sync/generated").asFile.absolutePath
+    )
+    useJUnit()
+
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}
+
 tasks.register<Test>("regenerateClientThreadGuardrailBaseline") {
     group = "verification"
     description = "Regenerate src/test/resources/threadsafety/client-thread-guardrail-baseline.txt from current sources"
@@ -519,7 +539,7 @@ tasks.checkstyleMain {
 }
 
 tasks.withType<Test> {
-    if (name != "runIntegrationTest" && name != "runTests" && name != "runDebugTests" && name != "runUnitTests" && name != "runClientThreadScanner" && name != "regenerateClientThreadGuardrailBaseline" && name != "regenerateQueryableTerminalBaseline") {
+    if (name != "runIntegrationTest" && name != "runTests" && name != "runDebugTests" && name != "runUnitTests" && name != "validateTransportSync" && name != "runClientThreadScanner" && name != "regenerateClientThreadGuardrailBaseline" && name != "regenerateQueryableTerminalBaseline") {
         enabled = false
     }
     systemProperty("glslang.path", providers.gradleProperty("glslangPath").getOrElse(""))

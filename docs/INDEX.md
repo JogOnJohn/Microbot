@@ -2,6 +2,8 @@
 - [Decision Records](decisions/)
 - [Development Setup](development.md)
 - [QuestHelper and Upstream Sync](questhelper-upstream-sync.md)
+- [Transport Schema and Upstream Mapping](TRANSPORT_SCHEMA.md)
+- [Shortest-Path Data Sync Plan](SHORTEST_PATH_DATA_SYNC_PLAN.md)
 - [Installation](installation.md)
 - [API Overview](../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/README.md)
 - [Queryable API Guide](../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/QUERYABLE_API.md)

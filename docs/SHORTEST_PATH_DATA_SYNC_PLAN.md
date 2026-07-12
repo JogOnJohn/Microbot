@@ -1,6 +1,8 @@
 # Shortest-Path Upstream Data Sync — Plan
 
-Status: **planned, not started**. Authored 2026-07-11 by Billy + Claude after a week of live
+Status: **in progress on `spike/shortest-path-data-sync`**. Foundation started 2026-07-12:
+schema inventory, pinned converter, local override layer, semantic report, and real-parser validator
+are implemented. Category adoption and golden-route testing remain. Authored 2026-07-11 by Billy + Claude after a week of live
 walker debugging on `spike/shortest-path-upstream`. Intended to be executed in its own worktree
 session with this file as the primary context.
 
