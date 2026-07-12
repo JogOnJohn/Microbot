@@ -37,6 +37,20 @@ class TransportSyncTest(unittest.TestCase):
         with self.assertRaisesRegex(SyncError, "matched 2 rows"):
             apply_overrides({"transports.tsv": table}, overrides)
 
+    def test_patch_can_replace_parser_inert_interaction_identity(self):
+        table = read_tsv(FIXTURES / "upstream" / "transports.tsv")
+        override = {
+            "Category": "transports.tsv",
+            "Match interaction": "Open Gate 190",
+            "Origin": "2461 3385 0",
+            "Destination": "2461 3382 0",
+            "menuOption menuTarget objectID": "Open Gate 190 190",
+            "Operation": "PATCH",
+            "Reason": "Fixture object ID repair.",
+        }
+        apply_overrides({"transports.tsv": table}, [override])
+        self.assertEqual("Open Gate 190 190", table.rows[0]["menuOption menuTarget objectID"])
+
     def test_output_is_deterministic(self):
         table = read_tsv(FIXTURES / "upstream" / "transports.tsv")
         with tempfile.TemporaryDirectory() as temp_dir:

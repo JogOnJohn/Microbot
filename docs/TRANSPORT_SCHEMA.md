@@ -114,6 +114,8 @@ Its stable identity is:
 Operations are:
 
 - `PATCH`: exactly one upstream row must match; nonblank non-identity fields replace upstream values.
+- `Match interaction`: when an object ID is being repaired, this optional field identifies the old
+  interaction while `menuOption menuTarget objectID` supplies its replacement.
 - `UPSERT`: update one match or add a complete new row.
 - `DELETE`: exactly one upstream row must match and is removed.
 

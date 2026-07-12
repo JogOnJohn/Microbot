@@ -47,7 +47,11 @@ public class ShortestPathGoldenRouteBaselineTest
 			new RouteCase("rimmington-to-aldarin-charter", point(2957, 3214, 0), point(1455, 2968, 0),
 				20, 500, TransportType.CHARTER_SHIP, "CHARTER_SHIP:Charter:Trader Crewmember:1330"),
 			new RouteCase("paterdomus-holy-barrier", point(3440, 9887, 0), point(3423, 3485, 0),
-				1, 30, TransportType.TRANSPORT, "TRANSPORT:Pass-through:Holy barrier:3443")
+				1, 30, TransportType.TRANSPORT, "TRANSPORT:Pass-through:Holy barrier:3443"),
+			new RouteCase("elemental-workshop-wall", point(2709, 3495, 0), point(2709, 3496, 0),
+				1, 10, TransportType.TRANSPORT, "TRANSPORT:Open:Odd-looking wall:18505"),
+			new RouteCase("piscatoris-colony-gate", point(2343, 3662, 0), point(2343, 3663, 0),
+				1, 10, TransportType.TRANSPORT, "TRANSPORT:Open:Colony gate:12723")
 		);
 
 		for (RouteCase route : routes)

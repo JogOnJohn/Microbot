@@ -48,7 +48,7 @@ PARSER_COLUMNS = {
     "VarPlayers",
 }
 IDENTITY_COLUMNS = ("Origin", "Destination", "menuOption menuTarget objectID")
-OVERRIDE_METADATA = {"Category", "Operation", "Reason"}
+OVERRIDE_METADATA = {"Category", "Match interaction", "Operation", "Reason"}
 
 
 class SyncError(RuntimeError):
@@ -248,7 +248,11 @@ def apply_overrides(
         if category not in tables:
             raise SyncError(f"Override references unknown category: {category}")
         table = tables[category]
-        key = identity(category, override)
+        match_row = dict(override)
+        match_interaction = override.get("Match interaction", "").strip()
+        if match_interaction:
+            match_row["menuOption menuTarget objectID"] = match_interaction
+        key = identity(category, match_row)
         matches = [row for row in table.rows if identity(category, row) == key]
         operation = override["Operation"].strip().upper() or "PATCH"
         if operation == "DELETE":
@@ -260,7 +264,9 @@ def apply_overrides(
                 raise SyncError(f"PATCH override matched {len(matches)} rows: {key}")
             target = matches[0]
             for raw_header, value in override.items():
-                if raw_header in OVERRIDE_METADATA or raw_header in IDENTITY_COLUMNS:
+                if raw_header in OVERRIDE_METADATA or raw_header in ("Origin", "Destination"):
+                    continue
+                if raw_header == "menuOption menuTarget objectID" and not match_interaction:
                     continue
                 if not value.strip():
                     continue
@@ -499,7 +505,21 @@ def run(args: argparse.Namespace) -> int:
                 )
         tables[filename] = table
 
+    upstream_parser_inert = list(parser_inert)
     overrides = apply_overrides(tables, load_overrides(SCRIPT_DIR / "local_overrides.tsv"))
+    parser_inert = []
+    for filename, table in tables.items():
+        for row in table.rows:
+            interaction = row.get("menuOption menuTarget objectID", "").strip()
+            if interaction and parse_action(interaction)[2] == "0":
+                parser_inert.append(
+                    {
+                        "file": filename,
+                        "origin": row.get("Origin", "").strip(),
+                        "destination": row.get("Destination", "").strip(),
+                        "interaction": interaction,
+                    }
+                )
     for filename, table in tables.items():
         table.rows.sort(key=lambda row, name=filename: sort_key(name, row))
         # Conditional variants may intentionally share a stable identity (for example, the
@@ -524,6 +544,7 @@ def run(args: argparse.Namespace) -> int:
         "collision_map_sha256": collision_hash,
         "overrides": overrides,
         "known_unsupported": unsupported,
+        "upstream_parser_inert_interactions": upstream_parser_inert,
         "parser_inert_interactions": parser_inert,
         **diff,
     }
