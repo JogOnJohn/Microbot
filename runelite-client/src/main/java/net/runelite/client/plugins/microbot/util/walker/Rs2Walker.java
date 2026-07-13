@@ -1414,6 +1414,7 @@ public class Rs2Walker {
             primeExpectedTransportDestinations(path, indexOfStartPoint);
 
             lastPosition = Rs2Player.getWorldLocation();
+            logWalkIdleIfStalled(processWalkTail, target, lastPosition);
             boolean clearedInterimTarget = clearInterimTargetIfReachedOrExpired(lastPosition, path, System.currentTimeMillis());
             WorldPoint plImmediate = lastPosition;
 
@@ -8955,6 +8956,35 @@ public class Rs2Walker {
             }
         }
         return false;
+    }
+
+    /** Throttle for {@link #logWalkIdleIfStalled}. */
+    private static long lastWalkIdleLogAtMs = 0;
+
+    /**
+     * INFO visibility for the "walk active but nothing happens" failure mode: live Wintertodt run
+     * spun 62 processWalk iterations over 78s at the same tile without one click, stall recalc, or
+     * log line (walkerDiag is DEBUG; startup tmarks stop after the first click). Logs at most every
+     * 4s while the player has been stationary >4s mid-walk, with the decision state needed to name
+     * the guilty gate: stall threshold vs elapsed, the stall-accounting skip flag, interim target,
+     * and the raw-scan door focus.
+     */
+    private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc) {
+        long now = System.currentTimeMillis();
+        if (lastMovedTimeMs <= 0 || now - lastMovedTimeMs < 4_000 || now - lastWalkIdleLogAtMs < 4_000) {
+            return;
+        }
+        lastWalkIdleLogAtMs = now;
+        WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={}",
+                iteration,
+                now - lastMovedTimeMs,
+                stallThresholdMs(),
+                isStuckTooLong(),
+                Rs2WalkerStallPolicy.shouldSkipStallAccounting(LEAGUES_AREA_PENDING_STALL_MAX_AGE_MS),
+                interimTargetWp == null ? "none" : compactWorldPoint(interimTargetWp),
+                rawScanFocusedDoorIdx,
+                compactWorldPoint(playerLoc),
+                compactWorldPoint(target));
     }
 
     private static long stallThresholdMs() {
