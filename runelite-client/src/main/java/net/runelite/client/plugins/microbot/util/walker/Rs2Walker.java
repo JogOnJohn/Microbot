@@ -300,6 +300,22 @@ public class Rs2Walker {
         WebWalkLog.tmark(phase, System.currentTimeMillis() - startedAt, target, Rs2Player.getWorldLocation(), detail);
     }
 
+    /**
+     * Per-loop-iteration startup trace for the dead zone between path_snapshot and
+     * click_candidate_found (live: median 11.7s, worst 40s, with NOTHING logged in between).
+     * markStartupPhase dedupes by name, so encoding the iteration into the phase name keeps
+     * repeated processWalk passes visible until the first movement click; capped so a
+     * long-stalled walk can't flood the log.
+     */
+    private static final int STARTUP_LOOP_TRACE_MAX_ITERS = 6;
+
+    private static void markStartupLoopPhase(int iteration, String stage, WorldPoint target, String detail) {
+        if (iteration >= STARTUP_LOOP_TRACE_MAX_ITERS) {
+            return;
+        }
+        markStartupPhase("iter" + iteration + "_" + stage, target, detail);
+    }
+
     private static void tmarkPostTransport(String phase, WorldPoint target, String detail) {
         long handledAt = lastTransportHandledAtMs;
         if (handledAt <= 0L) {
@@ -1423,6 +1439,7 @@ public class Rs2Walker {
             }
 
             manageRunEnergy(path.size());
+            markStartupLoopPhase(processWalkTail, "run_energy_done", target, "-");
 
             // Edgeville/ardy wilderness lever warning
             if (Rs2Widget.isWidgetVisible(229, 1)) {
@@ -1459,6 +1476,7 @@ public class Rs2Walker {
             if (Rs2Widget.enterWilderness()) {
                 sleepUntil(Rs2Player::isAnimating);
             }
+            markStartupLoopPhase(processWalkTail, "widgets_done", target, "-");
 
             boolean doorOrTransportResult = false;
             boolean inInstance = Microbot.getClient().getTopLevelWorldView().isInstance();
@@ -1516,8 +1534,12 @@ public class Rs2Walker {
             }
 
             WorldPoint currentPlayerLoc = Rs2Player.getWorldLocation();
+            long segScanBfsStartMs = System.currentTimeMillis();
             reachableTilesCache = Rs2Tile.getReachableTilesFromTile(currentPlayerLoc, HANDLER_RANGE * 3);
             reachableTilesCacheOrigin = currentPlayerLoc;
+            markStartupLoopPhase(processWalkTail, "segment_scan_enter", target,
+                    "bfsMs=" + (System.currentTimeMillis() - segScanBfsStartMs)
+                            + " idxStart=" + indexOfStartPoint + " pathLen=" + path.size());
             final int currentPlayerPlane = currentPlayerLoc != null ? currentPlayerLoc.getPlane() : -1;
 
             for (int i = indexOfStartPoint; !doorOrTransportResult && i < path.size(); i++) {
@@ -7088,6 +7110,9 @@ public class Rs2Walker {
         interimLastBestPathIdx = -1;
         interimLastRetargetAtMs = 0L;
         ShortestPathPlugin.setLastLocation(start);
+        // Was completely silent — mid-walk pathfinder restarts appeared in logs only as orphan
+        // tp_candidates/tp_queue lines with no visible trigger (Wintertodt stall investigation).
+        WebWalkLog.recalc("recalculate_path from=" + compactWorldPoint(start) + " goal=" + compactWorldPoint(goal));
         Rs2WalkerLifecycleRuntime.restartPathfinding(start, goal);
     }
 
