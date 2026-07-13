@@ -299,6 +299,7 @@ public class PathfinderConfig {
      */
     public void refreshTeleports(int packedLocation, int wildernessLevel) {
         Set<Transport> usableWildyTeleports = new HashSet<>(usableTeleports.size());
+        emitTeleportCandidates(packedLocation, wildernessLevel);
         if (ignoreTeleportAndItems) return;
 
         for (Transport teleport : usableTeleports) {
@@ -1248,6 +1249,7 @@ public class PathfinderConfig {
 
     /** Dedupe for {@link #emitTeleportAudit}: hash of the last audit outcome logged. */
     private volatile int lastTeleportAuditHash = 0;
+    private volatile int lastTeleportCandidateHash = 0;
 
     /**
      * Logs (INFO, deduped on change) the inventory-teleport availability picture after a refresh:
@@ -1258,19 +1260,50 @@ public class PathfinderConfig {
      */
     private void emitTeleportAudit(List<String> rejected) {
         Set<String> usableNames = new TreeSet<>();
+        Set<String> usableSpellNames = new TreeSet<>();
         for (Transport t : usableTeleports) {
             if (t.getType() == TELEPORTATION_ITEM) {
                 usableNames.add(describeTeleport(t));
+            } else if (t.getType() == TELEPORTATION_SPELL) {
+                usableSpellNames.add(describeTeleport(t));
             }
         }
         Collections.sort(rejected);
-        int hash = Objects.hash(rejected, usableNames);
+        int hash = Objects.hash(rejected, usableNames, usableSpellNames);
         if (hash == lastTeleportAuditHash) {
             return;
         }
         lastTeleportAuditHash = hash;
-        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={}",
-                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames);
+        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={} usableSpellTeleports({})={}",
+                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames,
+                usableSpellNames.size(), usableSpellNames);
+    }
+
+    private void emitTeleportCandidates(int packedLocation, int wildernessLevel) {
+        Set<String> focused = new TreeSet<>();
+        for (Transport teleport : usableTeleports) {
+            if (teleport.getType() != TELEPORTATION_SPELL
+                    && !(teleport instanceof World330HostedHouseTransport)) {
+                continue;
+            }
+            boolean allowed = !ignoreTeleportAndItems
+                    && wildernessLevel <= teleport.getMaxWildernessLevel();
+            focused.add(describeTeleport(teleport)
+                    + " type=" + teleport.getType()
+                    + " duration=" + teleport.getDuration()
+                    + " maxWild=" + teleport.getMaxWildernessLevel()
+                    + " initialCost=" + (distanceBeforeUsingTeleport + teleport.getDuration())
+                    + " allowed=" + allowed);
+        }
+        int hash = Objects.hash(packedLocation, wildernessLevel, ignoreTeleportAndItems,
+                distanceBeforeUsingTeleport, focused);
+        if (hash == lastTeleportCandidateHash) {
+            return;
+        }
+        lastTeleportCandidateHash = hash;
+        WebWalkLog.teleportCandidates("attach={} wilderness={} globallyDisabled={} distanceBefore={} focused({})={}",
+                WorldPointUtil.toString(packedLocation), wildernessLevel, ignoreTeleportAndItems,
+                distanceBeforeUsingTeleport, focused.size(), focused);
     }
 
     private String describeTeleport(Transport t) {

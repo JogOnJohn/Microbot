@@ -7,6 +7,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
 import net.runelite.client.plugins.microbot.shortestpath.WorldPointUtil;
+import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
 import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 
 import java.util.*;
@@ -81,6 +82,8 @@ public class Pathfinder implements Runnable {
     private volatile boolean pathNeedsUpdate = false;
     private volatile boolean smoothed = false;
     private volatile Node bestLastNode;
+    private int focusedTeleportsEnqueued;
+    private int focusedTeleportsExpanded;
     /** When set, {@link #getPath()} returns this list (bidirectional join or early exact hit). */
     private volatile List<WorldPoint> joinedPath;
     /**
@@ -215,12 +218,48 @@ public class Pathfinder implements Runnable {
             if (neighbor instanceof TransportNode) {
                 pending.add(neighbor);
                 ++stats.transportsChecked;
+                logFocusedTeleportQueue("enqueued", node, neighbor,
+                        boundary.peek() == null ? null : boundary.peek().cost);
             } else {
                 neighbor.heuristic = afterTransport ? 0 : heuristicToNearestTarget(neighbor.packedPosition);
                 boundary.add(neighbor);
                 ++stats.nodesChecked;
             }
         }
+    }
+
+    private void logFocusedTeleportQueue(String event, Node from, Node to, Integer walkFrontierCost) {
+        if (from == null || to == null) {
+            return;
+        }
+        WorldPoint fromPoint = WorldPointUtil.unpackWorldPoint(from.packedPosition);
+        List<Transport> matches = config.getTransports().getOrDefault(fromPoint, Collections.emptySet()).stream()
+                .filter(transport -> transport.getOrigin() == null)
+                .filter(transport -> transport.getDestination() != null
+                        && WorldPointUtil.packWorldPoint(transport.getDestination()) == to.packedPosition)
+                .filter(transport -> transport.getType() == TransportType.TELEPORTATION_SPELL
+                        || transport instanceof World330HostedHouseTransport)
+                .sorted(Comparator.comparing(Transport::getDisplayInfo,
+                        Comparator.nullsLast(String::compareTo)))
+                .collect(Collectors.toList());
+        if (matches.isEmpty()) {
+            return;
+        }
+        if ("enqueued".equals(event)) {
+            focusedTeleportsEnqueued++;
+        } else if ("expanded".equals(event)) {
+            focusedTeleportsExpanded++;
+        }
+        List<String> descriptions = matches.stream()
+                .map(transport -> transport.getDisplayInfo()
+                        + " type=" + transport.getType()
+                        + " duration=" + transport.getDuration()
+                        + " maxWild=" + transport.getMaxWildernessLevel())
+                .collect(Collectors.toList());
+        WebWalkLog.teleportQueue("event={} goal={} from={} to={} nodeCost={} walkFrontierCost={} candidates={}",
+                event, WorldPointUtil.toString(targets), WorldPointUtil.toString(from.packedPosition),
+                WorldPointUtil.toString(to.packedPosition), to.cost,
+                walkFrontierCost == null ? "none" : walkFrontierCost, descriptions);
     }
 
     // Admissible A* heuristic: Chebyshev 2D to the nearest target, with a modulo-6400
@@ -457,6 +496,8 @@ public class Pathfinder implements Runnable {
             if (neighbor instanceof TransportNode) {
                 pending.add(neighbor);
                 ++stats.transportsChecked;
+                logFocusedTeleportQueue("enqueued", node, neighbor,
+                        boundary.peek() == null ? null : boundary.peek().cost);
             } else {
                 neighbor.heuristic = afterTransport ? 0 : heuristicToNearestTarget(neighbor.packedPosition);
                 boundary.add(neighbor);
@@ -513,8 +554,10 @@ public class Pathfinder implements Runnable {
             Node b = boundary.peek();
             Node p = pending.peek();
             Node node;
-            if (p != null && (b == null || p.cost < b.cost)) {
+            boolean expandingTransport = p != null && (b == null || p.cost < b.cost);
+            if (expandingTransport) {
                 node = pending.poll();
+                logFocusedTeleportQueue("expanded", node.previous, node, b == null ? null : b.cost);
             } else {
                 node = boundary.poll();
             }
@@ -587,6 +630,10 @@ public class Pathfinder implements Runnable {
         WebWalkLog.pf("uni_loop_exit cancelled={} bEmpty={} pEmpty={} bestLast={}",
                 cancelled, boundary.isEmpty(), pending.isEmpty(),
                 bestLastNode == null ? "null" : WorldPointUtil.toString(bestLastNode.packedPosition));
+        WebWalkLog.teleportQueue("exit mode=uni goal={} reason={} nodes={} transports={} focusedEnqueued={} focusedExpanded={} pending={} bestLast={}",
+                WorldPointUtil.toString(targets), uniExit, stats.getNodesChecked(), stats.getTransportsChecked(),
+                focusedTeleportsEnqueued, focusedTeleportsExpanded, pending.size(),
+                bestLastNode == null ? "null" : WorldPointUtil.toString(bestLastNode.packedPosition));
     }
 
     private void runBidirectional() {
@@ -628,8 +675,10 @@ public class Pathfinder implements Runnable {
                 Node b = boundary.peek();
                 Node p = pending.peek();
                 Node node;
-                if (p != null && (b == null || p.cost < b.cost)) {
+                boolean expandingTransport = p != null && (b == null || p.cost < b.cost);
+                if (expandingTransport) {
                     node = pending.poll();
+                    logFocusedTeleportQueue("expanded", node.previous, node, b == null ? null : b.cost);
                 } else {
                     node = boundary.poll();
                 }
@@ -728,6 +777,11 @@ public class Pathfinder implements Runnable {
         WebWalkLog.pf("bidir_exit joined={} meetCost={}",
                 joinedPath == null ? "null" : Integer.toString(joinedPath.size()),
                 bestMeetingCost[0] == Long.MAX_VALUE ? "n/a" : Long.toString(bestMeetingCost[0]));
+        WebWalkLog.teleportQueue("exit mode=bidir goal={} joined={} meetCost={} nodes={} transports={} focusedEnqueued={} focusedExpanded={} pending={}",
+                WorldPointUtil.toString(targets), joinedPath == null ? "null" : joinedPath.size(),
+                bestMeetingCost[0] == Long.MAX_VALUE ? "n/a" : bestMeetingCost[0],
+                stats.getNodesChecked(), stats.getTransportsChecked(), focusedTeleportsEnqueued,
+                focusedTeleportsExpanded, pending.size());
     }
 
     @Override
