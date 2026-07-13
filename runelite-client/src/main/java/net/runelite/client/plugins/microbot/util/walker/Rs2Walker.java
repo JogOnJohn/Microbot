@@ -4119,6 +4119,7 @@ public class Rs2Walker {
         long rockfallMs = 0;
         long transportsMs = 0;
         int tilesScanned = 0;
+        pinDoorScanSnapshot();
         try {
             for (int i = start; i < endExclusive; i++) {
                 WorldPoint currentWorldPoint = rawPath.get(i);
@@ -4173,6 +4174,7 @@ public class Rs2Walker {
 
             return false;
         } finally {
+            unpinDoorScanSnapshot();
             long scanTotalMs = System.currentTimeMillis() - scanStartMs;
             if (scanTotalMs > 750) {
                 WebWalkLog.spInfo("raw_scene_scan_slow totalMs={} tiles={} doorsMs={} doorCandidateMs={} rockfallMs={} transportsMs={} at={}",
@@ -4645,14 +4647,59 @@ public class Rs2Walker {
     private static List<GameObject> doorScanGameObjectSnapshot = Collections.emptyList();
     private static long doorScanSnapshotAtMs = 0;
 
+    /**
+     * While a scan pass holds a pin, the snapshot is NOT re-walked even past its TTL: a 3s raw
+     * scene scan was re-snapshotting every 600ms (2 scene walks each), ~1s of the residual
+     * doorsMs after the snapshot landed. Pins are per-pass (try/finally), so freshness between
+     * passes is unchanged.
+     */
+    private static int doorScanSnapshotPinDepth = 0;
+
+    private static void pinDoorScanSnapshot() {
+        refreshDoorScanSnapshotIfStale();
+        doorScanSnapshotPinDepth++;
+    }
+
+    private static void unpinDoorScanSnapshot() {
+        doorScanSnapshotPinDepth = Math.max(0, doorScanSnapshotPinDepth - 1);
+    }
+
     private static void refreshDoorScanSnapshotIfStale() {
         long now = System.currentTimeMillis();
+        if (doorScanSnapshotPinDepth > 0 && doorScanSnapshotAtMs > 0) {
+            return;
+        }
         if (now - doorScanSnapshotAtMs < DOOR_SCAN_SNAPSHOT_TTL_MS) {
             return;
         }
         doorScanSnapshotAtMs = now;
         doorScanWallSnapshot = Rs2GameObject.getWallObjects();
         doorScanGameObjectSnapshot = Rs2GameObject.getGameObjects();
+    }
+
+    /**
+     * Base + probe-resolved composition in ONE client-thread hop, replicating exactly
+     * convertToObjectComposition(object) (single impostor hop) and
+     * resolveCompositionForDoorProbe (impostor walk to depth 4, falling back to base).
+     * handleDoors previously paid three separate invokes per probe-hit object for the same
+     * reads; with walls near every Wintertodt path tile this was the other big chunk of
+     * doorsMs. Impostor resolution stays live — door open/close flips impostors — only the
+     * round-trips are batched.
+     */
+    private static ObjectComposition[] resolveDoorProbeCompositionsBatched(int objectId) {
+        ObjectComposition[] result = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            ObjectComposition raw = Microbot.getClient().getObjectDefinition(objectId);
+            if (raw == null) {
+                return new ObjectComposition[]{null, null};
+            }
+            ObjectComposition base = raw.getImpostorIds() == null ? raw : raw.getImpostor();
+            ObjectComposition resolved = base;
+            for (int depth = 0; depth < 4 && resolved != null && resolved.getImpostorIds() != null; depth++) {
+                resolved = resolved.getImpostor();
+            }
+            return new ObjectComposition[]{base, resolved != null ? resolved : base};
+        }).orElse(null);
+        return result != null ? result : new ObjectComposition[]{null, null};
     }
 
     private static WallObject findDoorScanWallObject(Predicate<WallObject> predicate) {
@@ -4781,8 +4828,11 @@ public class Rs2Walker {
                     continue;
                 }
 
-                ObjectComposition baseComp = Rs2GameObject.convertToObjectComposition(object);
-                ObjectComposition comp = resolveCompositionForDoorProbe(object);
+                // One batched client-thread hop instead of three (base comp + base again + impostor
+                // walk) — see resolveDoorProbeCompositionsBatched.
+                ObjectComposition[] doorComps = resolveDoorProbeCompositionsBatched(object.getId());
+                ObjectComposition baseComp = doorComps[0];
+                ObjectComposition comp = doorComps[1];
                 if (comp == null) {
                     Telemetry.recordDoorReject("composition-null");
                     continue;
@@ -4929,19 +4979,27 @@ public class Rs2Walker {
         }
 
         final int searchDistance = 10;
-        return Rs2GameObject.getAll(o -> {
+        // Snapshot-backed (was Rs2GameObject.getAll — a client-thread invoke + full scene walk per
+        // call, with a composition invoke inside the predicate; measured 0.6-0.8s per raw scan as
+        // doorCandidateMs). Predicate order unchanged; the composition check stays live and LAST,
+        // so it only runs for objects already matching the segment.
+        refreshDoorScanSnapshotIfStale();
+        List<TileObject> doorCandidates = new ArrayList<>(doorScanWallSnapshot.size() + doorScanGameObjectSnapshot.size());
+        doorCandidates.addAll(doorScanWallSnapshot);
+        doorCandidates.addAll(doorScanGameObjectSnapshot);
+        return doorCandidates.stream()
+                .filter(o -> {
                     if (o == null || o.getWorldLocation() == null) return false;
                     WorldPoint loc = o.getWorldLocation();
                     if (loc.getPlane() != playerLoc.getPlane()) return false;
                     if (loc.distanceTo2D(playerLoc) > searchDistance) return false;
                     if (sessionBlacklistedDoors.contains(loc)) return false;
-                    if (!(o instanceof WallObject) && !(o instanceof GameObject)) return false;
                     if (isCatalogTransportObject(o) && !isDoorLikeSceneObject(o)) return false;
                     if (!isDoorOnSegment(o, fromWp, toWp)) return false;
                     ObjectComposition comp = Rs2GameObject.convertToObjectComposition(o);
                     if (!isDoorComposition(comp, doorActions)) return false;
                     return true;
-                }, playerLoc, searchDistance).stream()
+                })
                 .min(Comparator.comparingInt(o -> o.getWorldLocation().distanceTo2D(playerLoc)))
                 .orElse(null);
     }
