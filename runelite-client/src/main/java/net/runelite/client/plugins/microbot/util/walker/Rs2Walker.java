@@ -48,6 +48,7 @@ import net.runelite.client.plugins.microbot.util.leaguetransport.SeasonalTranspo
 import net.runelite.client.plugins.microbot.util.leaguetransport.SeasonalTransportHandlers;
 import net.runelite.client.plugins.microbot.util.logging.Rs2LogRateLimit;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 import org.slf4j.event.Level;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
@@ -4630,6 +4631,49 @@ public class Rs2Walker {
         return false;
     }
 
+    // --- door-scan scene snapshot ---------------------------------------------------------------
+    // Every Rs2GameObject.getWallObject/getGameObject lookup does a client-thread invoke PLUS a
+    // full 104x104xplanes scene walk (getSceneObjects) — per call. handleDoors runs up to ~24 such
+    // lookups per path tile (2 offsets x ~3 probes x 4 lookups), which measured at ~600ms/tile:
+    // doorsMs=8700 of totalMs=10036 on live Wintertodt walks, the bulk of the 12-14s first-click
+    // stall. The scene cannot meaningfully change within one sub-second scan pass, so snapshot the
+    // wall/game object lists once and serve every probe from memory; the TTL keeps reads fresh
+    // enough that a door opened by an interaction (followed by its own settle sleeps) is re-read.
+    private static final long DOOR_SCAN_SNAPSHOT_TTL_MS = 600;
+    private static List<WallObject> doorScanWallSnapshot = Collections.emptyList();
+    private static List<GameObject> doorScanGameObjectSnapshot = Collections.emptyList();
+    private static long doorScanSnapshotAtMs = 0;
+
+    private static void refreshDoorScanSnapshotIfStale() {
+        long now = System.currentTimeMillis();
+        if (now - doorScanSnapshotAtMs < DOOR_SCAN_SNAPSHOT_TTL_MS) {
+            return;
+        }
+        doorScanSnapshotAtMs = now;
+        doorScanWallSnapshot = Rs2GameObject.getWallObjects();
+        doorScanGameObjectSnapshot = Rs2GameObject.getGameObjects();
+    }
+
+    private static WallObject findDoorScanWallObject(Predicate<WallObject> predicate) {
+        refreshDoorScanSnapshotIfStale();
+        for (WallObject o : doorScanWallSnapshot) {
+            if (o != null && predicate.test(o)) {
+                return o;
+            }
+        }
+        return null;
+    }
+
+    private static GameObject findDoorScanGameObject(Predicate<GameObject> predicate) {
+        refreshDoorScanSnapshotIfStale();
+        for (GameObject o : doorScanGameObjectSnapshot) {
+            if (o != null && predicate.test(o)) {
+                return o;
+            }
+        }
+        return null;
+    }
+
     private static boolean handleDoors(List<WorldPoint> path, int index) {
         return handleDoors(path, index, false);
     }
@@ -4708,17 +4752,23 @@ public class Rs2Walker {
 
                 // WallObjects can report their world location as an adjacent tile depending on
                 // orientation / scene representation. Use exact match first, then allow a small
-                // adjacency fallback so door handling triggers reliably.
-                WallObject wall = Rs2GameObject.getWallObject(o -> o.getWorldLocation().equals(probe), probe, 3);
+                // adjacency fallback so door handling triggers reliably. Lookups go through the
+                // door-scan snapshot (see above) — the direct Rs2GameObject getters cost a client
+                // thread invoke + full scene walk EACH, which stalled first clicks for 7-8s.
+                WallObject wall = findDoorScanWallObject(o -> probe.equals(o.getWorldLocation()));
                 if (wall == null) {
-                    wall = Rs2GameObject.getWallObject(o -> o.getWorldLocation().distanceTo2D(probe) <= 1, probe, 3);
+                    wall = findDoorScanWallObject(o -> o.getWorldLocation() != null
+                            && o.getWorldLocation().getPlane() == probe.getPlane()
+                            && o.getWorldLocation().distanceTo2D(probe) <= 1);
                 }
 
                 TileObject object = (wall != null)
                         ? wall
-                        : Rs2GameObject.getGameObject(o -> o.getWorldLocation().equals(probe), probe, 3);
+                        : findDoorScanGameObject(o -> probe.equals(o.getWorldLocation()));
                 if (object == null) {
-                    object = Rs2GameObject.getGameObject(o -> o.getWorldLocation().distanceTo2D(probe) <= 1, probe, 3);
+                    object = findDoorScanGameObject(o -> o.getWorldLocation() != null
+                            && o.getWorldLocation().getPlane() == probe.getPlane()
+                            && o.getWorldLocation().distanceTo2D(probe) <= 1);
                 }
                 if (object == null) continue;
                 if (!isDoorInteractionWithinRange(object, probe, fromWp, toWp, playerLoc, HANDLER_RANGE)) {
