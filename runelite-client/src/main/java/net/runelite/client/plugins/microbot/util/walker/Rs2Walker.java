@@ -1510,6 +1510,11 @@ public class Rs2Walker {
                     && handleNearbyRawPathSceneObjects(rawPath, HANDLER_RANGE, target, !postTransportWindow);
             tmarkPostTransport("post_transport_raw_scene_scan", target,
                     "handled=" + rawSceneHandled + " ms=" + (System.currentTimeMillis() - rawSceneStartAt));
+            // tmarkPostTransport is mute outside a post-transport window, which hid this scan's cost
+            // entirely on transportless walks (Wintertodt: 7-8s of the ~12s first-click delay).
+            markStartupLoopPhase(processWalkTail, "raw_scene_scan_done", target,
+                    "handled=" + rawSceneHandled + " ms=" + (System.currentTimeMillis() - rawSceneStartAt)
+                            + " allowed=" + allowRawSceneScan);
             if (rawSceneHandled) {
                 doorOrTransportResult = true;
                 exitReason = "raw-path-scene-object-handled";
@@ -1520,6 +1525,8 @@ public class Rs2Walker {
                     && startupPolicy.allowBroadRawHandlers()
                     && handleCurrentTileTransportTowardPath(rawPath, path, target);
             tmarkPostTransport("post_transport_current_tile_transport", target,
+                    "handled=" + currentTileTransportHandled + " ms=" + (System.currentTimeMillis() - currentTileTransportStartAt));
+            markStartupLoopPhase(processWalkTail, "cur_tile_transport_done", target,
                     "handled=" + currentTileTransportHandled + " ms=" + (System.currentTimeMillis() - currentTileTransportStartAt));
             if (currentTileTransportHandled) {
                 doorOrTransportResult = true;
@@ -4101,45 +4108,76 @@ public class Rs2Walker {
 
         int start = Math.max(0, rawStart - 2);
         int endExclusive = Math.min(rawPath.size() - 1, rawStart + 12);
-        for (int i = start; i < endExclusive; i++) {
-            WorldPoint currentWorldPoint = rawPath.get(i);
-            if (currentWorldPoint == null
-                    || currentWorldPoint.getPlane() != playerLoc.getPlane()
-                    || currentWorldPoint.distanceTo2D(playerLoc) > handlerRange) {
-                continue;
-            }
+        // Per-handler cost breakdown for slow scans: this loop was measured at 7-8s on transportless
+        // 20-tile Wintertodt walks (~500ms/tile of handler work) with zero visibility into which
+        // handler burns it. Logged only when the whole scan is slow, so normal walks stay quiet.
+        long scanStartMs = System.currentTimeMillis();
+        long doorsMs = 0;
+        long doorCandidateMs = 0;
+        long rockfallMs = 0;
+        long transportsMs = 0;
+        int tilesScanned = 0;
+        try {
+            for (int i = start; i < endExclusive; i++) {
+                WorldPoint currentWorldPoint = rawPath.get(i);
+                if (currentWorldPoint == null
+                        || currentWorldPoint.getPlane() != playerLoc.getPlane()
+                        || currentWorldPoint.distanceTo2D(playerLoc) > handlerRange) {
+                    continue;
+                }
+                tilesScanned++;
 
-            if (allowTransportHandlers && hasExplicitTransportStep(rawPath, i)) {
-                WorldPoint before = Rs2Player.getWorldLocation();
-                WorldPoint expectedDestination = i + 1 < rawPath.size() ? rawPath.get(i + 1) : null;
-                if (handleTransports(rawPath, i)) {
-                    if (!didCurrentTileTransportProgress(before, expectedDestination, target)) {
-                        WebWalkLog.spInfo("raw_path_transport_no_progress",
-                                "at=%s expected=%s target=%s",
-                                before, expectedDestination, target);
-                    } else {
-                        log.info("[Walker] Raw path transport handler resolved obstacle near {}", playerLoc);
-                        return true;
+                if (allowTransportHandlers && hasExplicitTransportStep(rawPath, i)) {
+                    WorldPoint before = Rs2Player.getWorldLocation();
+                    WorldPoint expectedDestination = i + 1 < rawPath.size() ? rawPath.get(i + 1) : null;
+                    long t0 = System.currentTimeMillis();
+                    boolean transportHandled = handleTransports(rawPath, i);
+                    transportsMs += System.currentTimeMillis() - t0;
+                    if (transportHandled) {
+                        if (!didCurrentTileTransportProgress(before, expectedDestination, target)) {
+                            WebWalkLog.spInfo("raw_path_transport_no_progress",
+                                    "at=%s expected=%s target=%s",
+                                    before, expectedDestination, target);
+                        } else {
+                            log.info("[Walker] Raw path transport handler resolved obstacle near {}", playerLoc);
+                            return true;
+                        }
                     }
+                }
+
+                long t1 = System.currentTimeMillis();
+                boolean doorHandled = handleDoors(rawPath, i, true);
+                doorsMs += System.currentTimeMillis() - t1;
+                if (doorHandled) {
+                    log.info("[Walker] Raw path door handler resolved obstacle near {}", playerLoc);
+                    return true;
+                }
+                long t2 = System.currentTimeMillis();
+                boolean doorCandidate = hasDoorCandidateOnRawSegment(rawPath, i);
+                doorCandidateMs += System.currentTimeMillis() - t2;
+                if (doorCandidate) {
+                    setRawScanDoorFocus(i);
+                    return false;
+                }
+
+                long t3 = System.currentTimeMillis();
+                boolean rockfallHandled = handleRockfall(rawPath, i);
+                rockfallMs += System.currentTimeMillis() - t3;
+                if (rockfallHandled) {
+                    log.info("[Walker] Raw path rockfall handler resolved obstacle near {}", playerLoc);
+                    return true;
                 }
             }
 
-            if (handleDoors(rawPath, i, true)) {
-                log.info("[Walker] Raw path door handler resolved obstacle near {}", playerLoc);
-                return true;
-            }
-            if (hasDoorCandidateOnRawSegment(rawPath, i)) {
-                setRawScanDoorFocus(i);
-                return false;
-            }
-
-            if (handleRockfall(rawPath, i)) {
-                log.info("[Walker] Raw path rockfall handler resolved obstacle near {}", playerLoc);
-                return true;
+            return false;
+        } finally {
+            long scanTotalMs = System.currentTimeMillis() - scanStartMs;
+            if (scanTotalMs > 750) {
+                WebWalkLog.spInfo("raw_scene_scan_slow totalMs={} tiles={} doorsMs={} doorCandidateMs={} rockfallMs={} transportsMs={} at={}",
+                        scanTotalMs, tilesScanned, doorsMs, doorCandidateMs, rockfallMs, transportsMs,
+                        compactWorldPoint(playerLoc));
             }
         }
-
-        return false;
     }
 
     private static boolean hasDoorCandidateOnRawSegment(List<WorldPoint> rawPath, int index) {
