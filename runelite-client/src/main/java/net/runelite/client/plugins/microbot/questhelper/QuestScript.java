@@ -101,6 +101,15 @@ public class QuestScript extends Script {
     private long dialogueCooldownEndsAt = 0;
     /** Throttle for the dialogue space-step diagnostic line. */
     private long lastDialogueSpaceDiagAtMs = 0;
+    /** Last game-response chat line (GAMEMESSAGE/SPAM/MESBOX/DIALOG) — see onChatMessage. */
+    private volatile long lastGameMessageAtMs = 0;
+
+    /** Cheap inventory content hash so an item appearing/disappearing counts as a click response. */
+    private static int inventoryFingerprint() {
+        return Rs2Inventory.all().stream()
+                .mapToInt(i -> i == null ? 0 : (i.getId() * 31 + i.getQuantity()))
+                .sum();
+    }
 
 
 
@@ -1534,9 +1543,15 @@ public class QuestScript extends Script {
             // entry the server rejects produces NO response at all. The old code ignored this
             // wait's result, so a dead click burned the 5s timeout and was still marked handled,
             // and the step re-clicked forever (The Golem exam-centre bookcase). Verify a response
-            // (movement, animation, or a dialogue opening) and fall back to a genuine canvas
-            // click, which lets the client resolve the menu itself.
-            boolean responded = sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue(), 3000);
+            // and fall back to a genuine canvas click, which lets the client resolve the menu
+            // itself. Response = movement, animation, dialogue, a game chat line, or an inventory
+            // change — Search-style interactions respond with ONLY the last two (live: cupboard
+            // 5157 looped six re-clicks because chat/inventory responses were invisible here).
+            final long objectClickAtMs = System.currentTimeMillis();
+            final int invBeforeClick = inventoryFingerprint();
+            boolean responded = sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue()
+                    || lastGameMessageAtMs >= objectClickAtMs
+                    || inventoryFingerprint() != invBeforeClick, 3000);
             if (!responded && itemId == -1) {
                 responded = retryObjectClickViaCanvas(object, objectAction);
             }
@@ -1580,8 +1595,12 @@ public class QuestScript extends Script {
         if (Rs2AntibanSettings.naturalMouse) {
             Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
         }
+        final long retryClickAtMs = System.currentTimeMillis();
+        final int invBeforeRetry = inventoryFingerprint();
         Microbot.getMouse().click(point);
-        return sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue(), 3000);
+        return sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue()
+                || lastGameMessageAtMs >= retryClickAtMs
+                || inventoryFingerprint() != invBeforeRetry, 3000);
     }
 
     /** Whether {@code action} is the object's first (left-click/default) menu option. */
@@ -1788,5 +1807,19 @@ public class QuestScript extends Script {
     public void onChatMessage(ChatMessage chatMessage) {
         if (chatMessage.getMessage().equalsIgnoreCase("I can't reach that!"))
             unreachableTarget = true;
+        // Game-response timestamp for the object-step click verification: Search-style interactions
+        // respond ONLY with a chat line ("You search the cupboard..."), no movement/animation/
+        // dialogue — the old predicate read those as "no response" and re-clicked forever
+        // (Creature of Fenkenstrain cupboard 5157, six re-click cycles in the live log).
+        switch (chatMessage.getType()) {
+            case GAMEMESSAGE:
+            case SPAM:
+            case MESBOX:
+            case DIALOG:
+                lastGameMessageAtMs = System.currentTimeMillis();
+                break;
+            default:
+                break;
+        }
     }
 }
