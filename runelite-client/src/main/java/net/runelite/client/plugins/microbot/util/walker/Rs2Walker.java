@@ -7652,7 +7652,17 @@ public class Rs2Walker {
                             log.debug("[Walker] skip spirit tree transport — setting is off");
                             continue;
                         }
-                        if (attemptObserved(transport, () -> handleSpiritTree(transport))) {
+                        boolean spiritHandled = attemptObserved(transport, () -> handleSpiritTree(transport));
+                        if (!spiritHandled) {
+                            // e.g. a farmable destination (Brimhaven / Port Sarim / Etceteria...)
+                            // whose tree the player hasn't grown: the tree's menu simply doesn't
+                            // offer it and the data layer can't know. Block it and rebuild
+                            // transports so the next recalc genuinely routes another way instead
+                            // of re-picking the same dead tree forever.
+                            PathfinderConfig.blockTransportTemporarily(transport, "spirit tree execute failed");
+                            ShortestPathPlugin.getPathfinderConfig().invalidateTransportRefreshCache();
+                        }
+                        if (spiritHandled) {
                             sleepUntil(() -> !Rs2Player.isAnimating());
                             boolean spiritLanded = Rs2WalkerRuntimeAwaits.awaitCondition(
                                     () -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),

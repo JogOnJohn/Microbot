@@ -968,7 +968,48 @@ public class PathfinderConfig {
                 .orElse(0);
     }
 
+    // --- runtime transport blocklist ------------------------------------------------------------
+    // Transports whose EXECUTION failed at the object (spirit tree offering no such destination
+    // because the player's farmable tree isn't grown, glider/canoe menus refusing, ...). The data
+    // layer cannot model per-player farming states, so the first attempt may legitimately fail —
+    // but re-picking the same dead transport on every recalc strands the walker (live: Karamja
+    // routes kept selecting the ungrown Brimhaven spirit tree). Blocked entries are rejected by
+    // useTransport for a cooldown, mirroring PohTeleports' failed-teleport blocklist.
+    private static final Map<String, Long> runtimeBlockedTransports = new ConcurrentHashMap<>();
+    private static final long RUNTIME_TRANSPORT_BLOCK_MS = 10 * 60_000L;
+
+    private static String runtimeBlockKey(Transport t) {
+        WorldPoint d = t.getDestination();
+        return t.getType() + "@" + (d == null ? "null" : d.getX() + "," + d.getY() + "," + d.getPlane());
+    }
+
+    public static void blockTransportTemporarily(Transport t, String reason) {
+        if (t == null) {
+            return;
+        }
+        runtimeBlockedTransports.put(runtimeBlockKey(t), System.currentTimeMillis() + RUNTIME_TRANSPORT_BLOCK_MS);
+        Microbot.log("[Walker] blocking transport for " + (RUNTIME_TRANSPORT_BLOCK_MS / 60_000) + "min: "
+                + (t.getDisplayInfo() == null || t.getDisplayInfo().isEmpty() ? runtimeBlockKey(t) : t.getDisplayInfo())
+                + " (" + reason + ")");
+    }
+
+    private static boolean isTransportRuntimeBlocked(Transport t) {
+        Long until = runtimeBlockedTransports.get(runtimeBlockKey(t));
+        if (until == null) {
+            return false;
+        }
+        if (System.currentTimeMillis() >= until) {
+            runtimeBlockedTransports.remove(runtimeBlockKey(t));
+            return false;
+        }
+        return true;
+    }
+
     private boolean useTransport(Transport transport) {
+        if (isTransportRuntimeBlocked(transport)) {
+            log.debug("Transport ( O: {} D: {} ) is runtime-blocked after a failed execution", transport.getOrigin(), transport.getDestination());
+            return false;
+        }
         // Check if the feature flag is disabled
         if (!isFeatureEnabled(transport)) {
             log.debug("Transport Type {} is disabled by feature flag", transport.getType());
@@ -1321,6 +1362,7 @@ public class PathfinderConfig {
      * drifted or a gate this doesn't model (e.g. currency) rejected it.
      */
     private String describeTeleportRejection(Transport t) {
+        if (isTransportRuntimeBlocked(t)) return "runtime-blocked-after-failed-execution";
         if (!isFeatureEnabled(t)) return "feature-toggle:" + t.getType();
         if (t.isMembers() && !client.getWorldType().contains(WorldType.MEMBERS)) return "members-world";
         if (!hasRequiredLevels(t)) return "skill-levels";
