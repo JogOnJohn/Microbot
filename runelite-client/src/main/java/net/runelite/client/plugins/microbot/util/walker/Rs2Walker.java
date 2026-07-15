@@ -1213,6 +1213,18 @@ public class Rs2Walker {
             Pathfinder pathfinder = ShortestPathPlugin.getPathfinder();
             if (pathfinder == null) {
                 markStartupPhase("pf_wait_enter", target, "reason=pathfinder_null");
+                // Kick FIRST, then wait. Nothing reliably starts a pathfinder before this loop on
+                // cold walks, and the old order waited the full 2s for one to appear before the
+                // recalculatePath fallback below finally started it — every cold walkTo paid
+                // 2.0-2.1s of dead air ahead of a ~100ms compute (live traces: pf_wait_enter at
+                // 0ms -> recalculate_path at ~2.0s -> pf_ready at ~2.1s, on every first walk).
+                // Same guard and same call as the fallback, just 2 seconds earlier; if a restart
+                // from setTarget was already in flight, restartPathfinding coalesces the double
+                // kick into a redundant background compute.
+                if (currentTarget != null && currentTarget.equals(target)) {
+                    walkerDiag("pathfinder null; kicking recalculatePath immediately");
+                    recalculatePath();
+                }
                 walkerDiag("pathfinder null; waiting up to 2000ms");
                 pathfinder = sleepUntilNotNull(ShortestPathPlugin::getPathfinder, 2_000);
                 if (walkCancelledDiag(target, "processWalk:after-wait-pathfinder", processWalkTail)) {
