@@ -99,6 +99,8 @@ public class QuestScript extends Script {
      * transition from in-dialogue to not-in-dialogue; zero means no cooldown.
      */
     private long dialogueCooldownEndsAt = 0;
+    /** Throttle for the dialogue space-step diagnostic line. */
+    private long lastDialogueSpaceDiagAtMs = 0;
 
 
 
@@ -190,10 +192,15 @@ public class QuestScript extends Script {
                         getQuestHelperPlugin().getSelectedQuest().isCompleted()).orElse(null)) {
                     if (Rs2Widget.isWidgetVisible(ComponentID.DIALOG_OPTION_OPTIONS) && getQuestHelperPlugin().getSelectedQuest().getQuest().getId() != Quest.COOKS_ASSISTANT.getId() && !Rs2Bank.isOpen()) {
                         boolean hasOption = Rs2Dialogue.handleQuestOptionDialogueSelection();
+                        // This whole block was previously silent — a Creature of Fenkenstrain start
+                        // spun 70s of dialogue-space-steps with no way to tell which branch ran.
+                        Microbot.log(Level.INFO, "[QuestHelper] dialogue options visible; questOptionSelected=" + hasOption
+                                + " options=" + Rs2Dialogue.getDialogueOptions().stream().map(w -> w == null ? "null" : w.getText()).collect(java.util.stream.Collectors.toList()));
                         //if there is no quest option in the dialogue, just click player location to remove
                         // the dialogue to avoid getting stuck in an infinite loop of dialogues
                         if (!hasOption) {
                             if (Rs2Dialogue.acceptQuestStartDialogue()) {
+                                Microbot.log(Level.INFO, "[QuestHelper] accepted quest-start dialogue option");
                                 return;
                             }
                             if (getQuestHelperPlugin().getSelectedQuest() != null &&
@@ -202,6 +209,7 @@ public class QuestScript extends Script {
                                 Rs2Dialogue.keyPressForDialogueOption(1); // presses option 1
                                 sleep(1200,1800);
                             }
+                            Microbot.log(Level.INFO, "[QuestHelper] no matching dialogue option; dismissing dialogue via canvas click");
                             Rs2Walker.walkFastCanvas(Rs2Player.getWorldLocation());
                         }
                         return;
@@ -221,6 +229,16 @@ public class QuestScript extends Script {
 
                     if (Rs2Dialogue.isInDialogue() && dialogueStartedStep == questStep) {
                         Rs2Walker.clearWalkingRoute("quest-helper:dialogue-space-step");
+                        // Space only advances click-to-continue dialogue. When this branch repeats
+                        // without progress, the throttled state line below shows WHY space isn't
+                        // working (e.g. an option menu the options branch didn't recognise).
+                        long nowDialogue = System.currentTimeMillis();
+                        if (nowDialogue - lastDialogueSpaceDiagAtMs > 5_000) {
+                            lastDialogueSpaceDiagAtMs = nowDialogue;
+                            Microbot.log(Level.INFO, "[QuestHelper] dialogue space-step state: hasContinue=" + Rs2Dialogue.hasContinue()
+                                    + " optionsWidgetVisible=" + Rs2Widget.isWidgetVisible(ComponentID.DIALOG_OPTION_OPTIONS)
+                                    + " text='" + Rs2Dialogue.getDialogueText() + "'");
+                        }
                         Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
                         return;
                     } else {
