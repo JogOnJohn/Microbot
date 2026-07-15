@@ -117,6 +117,27 @@ public class Pathfinder implements Runnable {
         );
     }
 
+    /**
+     * The start node's actual wilderness band, using the same ratchet checks as the search loop.
+     * Searches previously seeded {@code refreshTeleports(start, 31)} ("assume deepest wilderness")
+     * and immediately re-refreshed at the real level on the first expanded node — a wasted double
+     * teleport refresh on EVERY pathfind, and the confusing tp_candidates wilderness=31
+     * allowed=false -> wilderness=0 allowed=true log pairs on all non-wilderness walks. Computing
+     * the start band once up front is identical to what the loop's first iteration produced.
+     */
+    private int initialWildernessLevel(int startPacked) {
+        if (!PathfinderConfig.isInWilderness(startPacked)) {
+            return 0;
+        }
+        if (!config.isInLevel20Wilderness(startPacked)) {
+            return 20;
+        }
+        if (!config.isInLevel30Wilderness(startPacked)) {
+            return 30;
+        }
+        return 31;
+    }
+
     public Pathfinder(PathfinderConfig config, WorldPoint start, Set<WorldPoint> targets) {
         this(config, WorldPointUtil.packWorldPoint(start), targets.stream().map(WorldPointUtil::packWorldPoint).collect(Collectors.toSet()));
     }
@@ -547,7 +568,8 @@ public class Pathfinder implements Runnable {
         long bestHeuristic = Integer.MAX_VALUE;
         long cutoffDurationMillis = config.getCalculationCutoffMillis();
         long cutoffTimeMillis = System.currentTimeMillis() + cutoffDurationMillis;
-        config.refreshTeleports(start, 31);
+        wildernessLevel = initialWildernessLevel(start);
+        config.refreshTeleports(start, wildernessLevel);
         boolean reachedGoal = false;
         boolean timedOut = false;
         while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty())) {
@@ -668,7 +690,8 @@ public class Pathfinder implements Runnable {
         long bestHeuristic = Integer.MAX_VALUE;
         long cutoffDurationMillis = config.getCalculationCutoffMillis();
         long cutoffTimeMillis = System.currentTimeMillis() + cutoffDurationMillis;
-        config.refreshTeleports(start, 31);
+        wildernessLevel = initialWildernessLevel(start);
+        config.refreshTeleports(start, wildernessLevel);
 
         while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty() || !boundaryBackward.isEmpty() || !pendingBackward.isEmpty())) {
             if (!boundary.isEmpty() || !pending.isEmpty()) {
