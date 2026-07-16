@@ -3,8 +3,9 @@
 Status: **implemented on `spike/shortest-path-data-sync`; awaiting live jar testing**. As of
 2026-07-12: schema inventory, pinned converter, local override layer (20 overrides), semantic
 report with change/move classification, real-parser validator with collision endpoint ratchet,
-20 golden routes, and zero parser-inert transports. Upstream is exactly at the pin, so category
-adoption activates when upstream moves. See
+20 golden routes, and zero parser-inert transports. The first upstream refresh was completed on
+2026-07-16: a collision-only revision was adopted with zero transport semantic drift and all
+validation gates green. See
 [SHORTEST_PATH_DATA_SYNC_HANDOFF.md](SHORTEST_PATH_DATA_SYNC_HANDOFF.md) for current state and
 the remaining-work queue. Authored 2026-07-11 by Billy + Claude after a week of live
 walker debugging on `spike/shortest-path-upstream`. Intended to be executed in its own worktree

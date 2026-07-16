@@ -80,21 +80,29 @@ task/session against the base branch; do not chase them here.
 
 ## Upstream pin status
 
-Checked 2026-07-12 via `git fetch` in the pinned checkout: **both upstream repos are exactly at
-the pinned commits** — tooling `5956e5b2` == origin HEAD, data `d12cd0f6` == origin master.
-There is nothing to adopt yet; the category-adoption workflow (plan step 10) activates the first
-time upstream moves. The refresh procedure then is: bump `data_commit` (and `tooling_commit` if
-needed) in `sync_manifest.json`, checkout those commits in the tooling clone, run the converter,
-review `build/transport-sync/report/summary.md`, adopt one category per reviewed commit
-(doors/`transports.tsv` first), golden routes after each. Duration deltas: local wins unless
-deliberately accepted.
+Refreshed 2026-07-16. Upstream advanced to tooling `86fbe219` and data `7e7e5bf9`.
+The data revision changes only `collision-map.zip`; all 25 transport TSVs are unchanged from the
+previous pin. Microbot adopted the new collision archive
+(`3e1658cf4bd1ad34832b42c3896df61a7fe6421f96758d046e4a8aa39cbbc40a`).
+
+Archive comparison found the same 2,724 mapsquares with one changed entry (`46_123`, 67
+directional collision flags). No transport endpoint lies in that mapsquare. The converter reports
+0 added / 0 removed / 0 changed after 20 overrides; the JVM collision endpoint ratchet, all 20
+golden routes, and resource loading pass.
+
+For the next refresh: bump `data_commit` (and `tooling_commit` if needed) in
+`sync_manifest.json`, checkout those commits in the tooling clone, run the converter, review
+`build/transport-sync/report/summary.md`, and adopt one changed category per reviewed commit.
+Duration deltas remain protected: local wins unless deliberately accepted.
 
 ## Environment notes
 
-- The pinned upstream checkout lives at
-  `C:\Users\Billy\AppData\Local\Temp\shortest-path-tooling-5956e5b` — **fragile** (Temp cleanup
-  will delete it). To recreate: clone `https://github.com/osrs-pathfinding/shortest-path-tooling`,
-  `git checkout 5956e5b2`, init the `shortest-path` submodule at `d12cd0f6`.
+- The pinned upstream checkout currently lives at
+  `C:\Users\Billy\AppData\Local\Temp\shortest-path-tooling-5956e5b` — the directory retains its
+  original name but is checked out at tooling `86fbe219` / data `7e7e5bf9`. It is **fragile**
+  because Temp cleanup can delete it. To recreate: clone
+  `https://github.com/osrs-pathfinding/shortest-path-tooling`, checkout `86fbe219`, then run
+  `git submodule update --init --recursive`.
 - Converter invocation:
   `python scripts/transport_sync/sync.py --upstream-root <tooling checkout>`
 - Do NOT combine `:client:validateTransportSync` with `--tests`-filtered tasks in one Gradle
