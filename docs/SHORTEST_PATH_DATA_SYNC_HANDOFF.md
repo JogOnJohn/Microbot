@@ -4,6 +4,11 @@ Written 2026-07-12 by Claude after reviewing, amending, and extending Codex's fo
 Read alongside [SHORTEST_PATH_DATA_SYNC_PLAN.md](SHORTEST_PATH_DATA_SYNC_PLAN.md) (the
 authoritative plan) and [TRANSPORT_SCHEMA.md](TRANSPORT_SCHEMA.md) (the contract inventory).
 
+The reusable converter and one-command upstream checkout workflow now live in the public
+[`JogOnJohn/microbot-shortest-path-sync`](https://github.com/JogOnJohn/microbot-shortest-path-sync)
+repository. `scripts/transport_sync/` remains a vendored integration snapshot so Microbot can pin
+the exact converter, overrides, JVM validator inputs, and resource adoption in the same commit.
+
 ## Review verdict (of Codex's foundation, commits `ccda6..a499a`)
 
 The foundation matches the plan. Verified directly against `Transport.java`'s parse code:
