@@ -8,13 +8,14 @@ from the pinned upstream data. Runtime truth remains the parser in
 
 | Component | Repository | Commit |
 |---|---|---|
-| Tooling | `osrs-pathfinding/shortest-path-tooling` | `5956e5b218c16cd88a959f490171ba5b92c97e7b` |
-| Data submodule | `Skretzo/shortest-path` | `d12cd0f6752c4a1289453e286720a08d969e39df` |
+| Tooling | `osrs-pathfinding/shortest-path-tooling` | `86fbe2197c2dd192db33896c7ca47ab5cef14929` |
+| Data submodule | `Skretzo/shortest-path` | `7e7e5bf94bbb155c2454bcdf8c1036dec0fd9a79` |
 
 The paired Microbot `collision-map.zip` SHA-256 is
-`494b526ef70feb5db2985345f7fe4f2b52fb0b17e98c6672d7358a2e86b8cdb0`. Upstream tooling does
-not ship a collision artifact at this pin, so the converter verifies this local hash and leaves the
-collision pipeline separate.
+`3e1658cf4bd1ad34832b42c3896df61a7fe6421f96758d046e4a8aa39cbbc40a`. This upstream revision
+changes only the collision archive: all 25 transport TSVs are unchanged from the previous pin.
+The converter verifies the paired local hash while collision compatibility remains independently
+validated by the endpoint ratchet and golden routes.
 
 At this pin, upstream uses the combined `menuOption menuTarget objectID` column. The earlier split
 column format mentioned in the planning document is not present in this revision. All 25
