@@ -11,11 +11,20 @@ branch `spike/shortest-path-upstream`. Gradle module is **`:client`** (NOT `:run
 ## HARD BUILD RULES
 - **NEVER run `:client:microbotReleaseJar` while the client is running.** It overwrites the live
   launcher jar and corrupts the running JVM (`ZipException: invalid LOC header`,
-  `NoClassDefFoundError`, questhelper iconBackground NPE). Close the client first.
+  `NoClassDefFoundError` in the render loop, then a `runOnClientThreadOptional` TimeoutException
+  cascade across every script thread). Close the client first — verify with a process check
+  (java/javaw with "microbot" in the command line), never by assumption.
+- **The launch-mid-rebuild race is just as fatal**: launching the client while a rebuild is still
+  running lands the new jar UNDER the live client minutes later (live crash 2026-07-15: launch at
+  11:01:47, `--rerun-tasks` rebuild from ~11:00 wrote the jar 11:04:37, NoClassDefFoundError at
+  11:05:22). Billy's desktop `Rebuild Microbot - Shortest Path Spike.bat` now refuses to run while
+  a client is up; still wait for "Rebuild complete." before launching.
 - `./gradlew :client:compileJava --console=plain` is SAFE while the client runs (writes classes,
-  not the jar). Use it to validate changes early; build the jar when the user closes the client.
+  not the jar — verified by `--dry-run` task graph after the 2026-07-15 crash falsely implicated
+  it). Use it to validate changes early; build the jar when the user closes the client.
 - Launcher bat reads `microbot.version` from `gradle.properties` → launches
-  `runelite-client/build/libs/microbot-<version>.jar`.
+  `runelite-client/build/libs/microbot-<version>.jar`. The version bumps on local/development
+  merges — verify rebuilds by globbing `microbot-*.jar` mtimes, never a hardcoded version.
 
 ## Regression history — walk carefully
 The core walker has repeatedly regressed from well-intentioned patches. Do NOT patch
