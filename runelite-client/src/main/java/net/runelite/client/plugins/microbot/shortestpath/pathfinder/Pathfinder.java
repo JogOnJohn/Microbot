@@ -46,6 +46,15 @@ public class Pathfinder implements Runnable {
     // Primitive view of targets — iterated on every popped node in run().
     // Avoids autoboxing vs. iterating Set<Integer>.
     private final int[] targetsPacked;
+    // Parallel to targetsPacked: Chebyshev radius at which a target counts as reached. 0 for
+    // walkable goals (exact tile required). Goals on blocked tiles (object/NPC tiles — no cardinal
+    // exit in the collision map) can never be popped by the search, so exact-match-only made every
+    // such pathfind flood the entire reachable map until time-cutoff (observed: 1.4-2.1M nodes with
+    // bestLast already adjacent to the goal), and let teleport-chain partials beat the trivial
+    // walk-up. For those goals the radius is the smallest ring around the goal containing any
+    // walkable tile, so the search exits the moment it genuinely stands next to the target.
+    private final int[] targetAcceptRadius;
+    private static final int MAX_BLOCKED_TARGET_ACCEPT_RADIUS = 3;
 
     private final PathfinderConfig config;
     private final CollisionMap map;
@@ -103,8 +112,10 @@ public class Pathfinder implements Runnable {
         this.start = start;
         this.targets = targets;
         this.targetsPacked = new int[targets.size()];
+        this.targetAcceptRadius = new int[targets.size()];
         int idx = 0;
         for (Integer t : targets) {
+            this.targetAcceptRadius[idx] = computeTargetAcceptRadius(t);
             this.targetsPacked[idx++] = t;
         }
         visited = new VisitedTiles(map);
@@ -136,6 +147,39 @@ public class Pathfinder implements Runnable {
             return 30;
         }
         return 31;
+    }
+
+    /**
+     * 0 when the goal tile is walkable (exact match required). For blocked goal tiles, the
+     * smallest Chebyshev ring around the goal containing at least one walkable same-plane tile,
+     * capped at {@link #MAX_BLOCKED_TARGET_ACCEPT_RADIUS} (multi-tile objects put the clicked
+     * tile up to a ring or two inside the footprint). Acceptance only fires on tiles the search
+     * actually pops, so a walkable-but-unreachable ring tile can never produce a false arrival.
+     */
+    private int computeTargetAcceptRadius(int targetPacked) {
+        int tx = WorldPointUtil.unpackWorldX(targetPacked);
+        int ty = WorldPointUtil.unpackWorldY(targetPacked);
+        int tz = WorldPointUtil.unpackWorldPlane(targetPacked);
+        if (!map.isBlocked(tx, ty, tz)) {
+            return 0;
+        }
+        for (int r = 1; r <= MAX_BLOCKED_TARGET_ACCEPT_RADIUS; r++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dy = -r; dy <= r; dy++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) != r) {
+                        continue;
+                    }
+                    if (!map.isBlocked(tx + dx, ty + dy, tz)) {
+                        WebWalkLog.pf("goal_tile_blocked target={} acceptRadius={}",
+                                WorldPointUtil.toString(targetPacked), r);
+                        return r;
+                    }
+                }
+            }
+        }
+        WebWalkLog.pf("goal_tile_blocked target={} no walkable ring within r={}; exact match required",
+                WorldPointUtil.toString(targetPacked), MAX_BLOCKED_TARGET_ACCEPT_RADIUS);
+        return 0;
     }
 
     public Pathfinder(PathfinderConfig config, WorldPoint start, Set<WorldPoint> targets) {
@@ -606,8 +650,11 @@ public class Pathfinder implements Runnable {
 
             final int nodePos = node.packedPosition;
             boolean reached = false;
-            for (int target : targetsPacked) {
-                if (nodePos == target) {
+            for (int i = 0; i < targetsPacked.length; i++) {
+                int target = targetsPacked[i];
+                if (nodePos == target
+                        || (targetAcceptRadius[i] > 0
+                        && WorldPointUtil.distanceBetween(nodePos, target) <= targetAcceptRadius[i])) {
                     bestLastNode = node;
                     pathNeedsUpdate = true;
                     reached = true;
@@ -726,7 +773,9 @@ public class Pathfinder implements Runnable {
                 }
 
                 final int nodePos = node.packedPosition;
-                if (nodePos == goalPacked) {
+                if (nodePos == goalPacked
+                        || (targetAcceptRadius[0] > 0
+                        && WorldPointUtil.distanceBetween(nodePos, goalPacked) <= targetAcceptRadius[0])) {
                     joinedPath = node.getPath();
                     pathNeedsUpdate = false;
                     bestLastNode = null;
