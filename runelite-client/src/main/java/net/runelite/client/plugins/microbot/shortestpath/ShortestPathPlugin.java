@@ -420,7 +420,14 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             "bankTripWhenCacheUnavailable",
             "preferNonConsumableTeleportAndSpells",
             "preferTransportToTarget",
-            "maxSimilarTransportDistance"
+            "maxSimilarTransportDistance",
+            // per-destination spirit tree toggles (SpiritTreeDestinationsPanel) — a toggle must
+            // rebuild transports immediately or the old route keeps using the disabled tree
+            "spiritTreeEtceteria",
+            "spiritTreeBrimhaven",
+            "spiritTreePortSarim",
+            "spiritTreeHosidius",
+            "spiritTreeFarmingGuild"
     );
     private static final String RELOAD_TRANSPORT_DEFINITIONS_KEY = "reloadTransportDefinitions";
     private final Pattern TRANSPORT_OPTIONS_REGEX = Pattern.compile("^use\\w+$");

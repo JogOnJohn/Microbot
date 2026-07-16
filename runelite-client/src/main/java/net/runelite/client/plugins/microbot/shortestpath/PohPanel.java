@@ -8,6 +8,7 @@ import net.runelite.client.plugins.microbot.shortestpath.components.CheckboxPane
 import net.runelite.client.plugins.microbot.shortestpath.components.EnumListPanel;
 import net.runelite.client.plugins.microbot.shortestpath.components.ExitTilePanel;
 import net.runelite.client.plugins.microbot.shortestpath.components.JewelleryBoxPanel;
+import net.runelite.client.plugins.microbot.shortestpath.components.SpiritTreeDestinationsPanel;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
 import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
@@ -108,6 +109,11 @@ public class PohPanel extends PluginPanel {
         gbc.gridy++;
         checkboxPanel = new CheckboxPanel();
         root.add(checkboxPanel, gbc);
+
+        // Spirit tree destination toggles (farmable patches) — the Microbot client hides the
+        // RuneLite config panel where these have always lived, so surface them here.
+        gbc.gridy++;
+        root.add(new SpiritTreeDestinationsPanel(), gbc);
 
         // Dropdowns section
         gbc.gridy++;
