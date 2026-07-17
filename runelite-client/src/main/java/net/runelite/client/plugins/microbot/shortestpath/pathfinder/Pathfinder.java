@@ -182,6 +182,26 @@ public class Pathfinder implements Runnable {
         return 0;
     }
 
+    /**
+     * True when the tile and its entire Chebyshev-1 ring are blocked in the collision map — i.e.
+     * nothing can ever walk out of or into it, not even via the puzzleAllow reverse-entry
+     * exception. Raw instance coordinates (e.g. a POH start at (13211,285,1)) are off-map, so
+     * every probe returns blocked and the tile reads as isolated.
+     */
+    private boolean isIsolatedInCollisionMap(int packed) {
+        int x = WorldPointUtil.unpackWorldX(packed);
+        int y = WorldPointUtil.unpackWorldY(packed);
+        int z = WorldPointUtil.unpackWorldPlane(packed);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (!map.isBlocked(x + dx, y + dy, z)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public Pathfinder(PathfinderConfig config, WorldPoint start, Set<WorldPoint> targets) {
         this(config, WorldPointUtil.packWorldPoint(start), targets.stream().map(WorldPointUtil::packWorldPoint).collect(Collectors.toSet()));
     }
@@ -740,7 +760,26 @@ public class Pathfinder implements Runnable {
         wildernessLevel = initialWildernessLevel(start);
         config.refreshTeleports(start, wildernessLevel);
 
+        // Once one side's frontier is dead and its anchor tile is isolated in the collision map,
+        // no join can ever form — the other side would flood to time-cutoff for nothing (live:
+        // POH instance start (13211,285,1) with no usable teleports left the backward search
+        // expanding 785k nodes before giving up with an empty path).
+        final boolean startIsolated = isIsolatedInCollisionMap(start);
+        final boolean goalIsolated = isIsolatedInCollisionMap(goalPacked);
+
         while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty() || !boundaryBackward.isEmpty() || !pendingBackward.isEmpty())) {
+            if (bestMeetingCost[0] == Long.MAX_VALUE) {
+                if (startIsolated && boundary.isEmpty() && pending.isEmpty()) {
+                    WebWalkLog.pf("bidir_abort reason=forward-dead-isolated-start start={} nodes={}",
+                            WorldPointUtil.toString(start), stats.getNodesChecked());
+                    break;
+                }
+                if (goalIsolated && boundaryBackward.isEmpty() && pendingBackward.isEmpty()) {
+                    WebWalkLog.pf("bidir_abort reason=backward-dead-isolated-goal goal={} nodes={}",
+                            WorldPointUtil.toString(goalPacked), stats.getNodesChecked());
+                    break;
+                }
+            }
             if (!boundary.isEmpty() || !pending.isEmpty()) {
                 Node b = boundary.peek();
                 Node p = pending.peek();

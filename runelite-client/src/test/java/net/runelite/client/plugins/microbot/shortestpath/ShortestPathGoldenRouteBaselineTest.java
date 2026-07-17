@@ -128,6 +128,30 @@ public class ShortestPathGoldenRouteBaselineTest
 			pathfinder.getStats().getNodesChecked() < 20_000);
 	}
 
+	/**
+	 * Live incident 2026-07-17 18:10-18:12: quest helper posted a path request while the player
+	 * stood inside their POH, so the pathfind started from a raw instance coordinate that is
+	 * off the collision map. The forward frontier died instantly, but the bidirectional backward
+	 * search flooded 617k-785k nodes to time-cutoff before returning an empty path. A dead
+	 * frontier anchored on an isolated tile now aborts the search immediately.
+	 */
+	@Test
+	public void isolatedInstanceStartAbortsBidirectionalSearchInsteadOfFlooding()
+	{
+		PathfinderConfig config = configFor(TransportType.TRANSPORT);
+		WorldPoint instanceStart = point(13211, 285, 1);
+		WorldPoint goal = point(3491, 3230, 0);
+
+		Pathfinder pathfinder = new Pathfinder(config, instanceStart, goal);
+		pathfinder.run();
+		String evidence = "nodes=" + pathfinder.getStats().getNodesChecked()
+			+ " path=" + pathfinder.getPath().size();
+
+		assertTrue(evidence, pathfinder.isDone());
+		assertTrue("isolated-start bidir search should abort, not flood the map: " + evidence,
+			pathfinder.getStats().getNodesChecked() < 10_000);
+	}
+
 	private static PathfinderConfig configFor(TransportType focusType)
 	{
 		HashMap<WorldPoint, Set<Transport>> all = Transport.loadAllFromResources();
