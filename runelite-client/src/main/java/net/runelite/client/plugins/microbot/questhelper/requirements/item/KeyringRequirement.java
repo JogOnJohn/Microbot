@@ -51,10 +51,20 @@ public class KeyringRequirement extends ItemRequirement
 	{
 		super(name, key.getItemID());
 		keyring = new ItemRequirement("Steel key ring", ItemID.FAVOUR_KEY_RING);
-		runeliteRequirement = new RuneliteRequirement(configManager, key.runeliteName(),
-			"true", key.toChatText());
+		if (configManager != null)
+		{
+			runeliteRequirement = new RuneliteRequirement(configManager, key.runeliteName(),
+				"true", key.toChatText());
+		}
 		this.keyringCollection = key;
 		this.configManager = configManager;
+	}
+
+	public KeyringRequirement(String name, KeyringCollection key)
+	{
+		super(name, key.getItemID());
+		keyring = new ItemRequirement("Steel key ring", ItemID.FAVOUR_KEY_RING);
+		this.keyringCollection = key;
 	}
 
 	public KeyringRequirement(ConfigManager configManager, KeyringCollection key)
@@ -106,6 +116,11 @@ public class KeyringRequirement extends ItemRequirement
 
 	public boolean hasKeyOnKeyRing()
 	{
+		if (runeliteRequirement == null)
+		{
+			return false;
+		}
+
 		return runeliteRequirement.check();
 	}
 

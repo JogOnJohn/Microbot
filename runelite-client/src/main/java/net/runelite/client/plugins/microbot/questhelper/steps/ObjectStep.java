@@ -66,6 +66,7 @@ public class ObjectStep extends DetailedQuestStep
 	private int lastPlane;
 	@Setter
 	private boolean revalidateObjects;
+	private boolean forceClickboxHighlight;
 
 	public ObjectStep(QuestHelper questHelper, int objectID, WorldPoint worldPoint, String text, Requirement... requirements)
 	{
@@ -352,7 +353,7 @@ public class ObjectStep extends DetailedQuestStep
 
 			Color configColor = getQuestHelper().getConfig().targetOverlayColor();
 
-			QuestHelperConfig.ObjectHighlightStyle highlightStyle = visibilityHelper.isObjectVisible(tileObject)
+			QuestHelperConfig.ObjectHighlightStyle highlightStyle = !forceClickboxHighlight && visibilityHelper.isObjectVisible(tileObject)
 				? questHelper.getConfig().highlightStyleObjects()
 				: CLICK_BOX;
 
@@ -392,6 +393,11 @@ public class ObjectStep extends DetailedQuestStep
 					null);
 			}
 		}
+	}
+
+	public void setForceClickboxHighlight(boolean forceClickboxHighlight)
+	{
+		this.forceClickboxHighlight = forceClickboxHighlight;
 	}
 
 	@Override

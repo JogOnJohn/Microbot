@@ -53,7 +53,7 @@ public class VarbitRequirement extends AbstractRequirement
 	@Setter
 	private int requiredValue;
 	private final Operation operation;
-	private final String displayText;
+	private String displayText;
 
 	// bit positions
 	private boolean bitIsSet = false;
@@ -107,6 +107,12 @@ public class VarbitRequirement extends AbstractRequirement
 	public VarbitRequirement(int varbitID, int value)
 	{
 		this(varbitID, Operation.EQUAL, value, null);
+	}
+
+	public VarbitRequirement setDisplayText(String displayText)
+	{
+		this.displayText = displayText;
+		return this;
 	}
 
 	/**

@@ -124,6 +124,16 @@ public enum ItemCollections
 		ItemID.BRONZE_AXE_2H
 	)),
 
+	BOAT_REPAIR_KITS(ImmutableList.of(
+		ItemID.BOAT_REPAIR_KIT_ROSEWOOD,
+		ItemID.BOAT_REPAIR_KIT_IRONWOOD,
+		ItemID.BOAT_REPAIR_KIT_CAMPHOR,
+		ItemID.BOAT_REPAIR_KIT_MAHOGANY,
+		ItemID.BOAT_REPAIR_KIT_TEAK,
+		ItemID.BOAT_REPAIR_KIT_OAK,
+		ItemID.BOAT_REPAIR_KIT
+	)),
+
 	PICKAXES("Pickaxe", ImmutableList.of(
 		ItemID.TRAILBLAZER_PICKAXE,
 		ItemID.LEAGUE_TRAILBLAZER_PICKAXE,
@@ -2256,6 +2266,50 @@ public enum ItemCollections
 		ItemID.MOTHERLODE_REWARD_HAT,
 		ItemID.FOSSIL_MOTHERLODE_REWARD_HAT,
 		ItemID.MOTHERLODE_REWARD_HAT_GOLD
+	)),
+
+	SLASH_WEB_KNIFE("Knife or slash weapon", ImmutableList.of(
+		ItemID.KNIFE,
+		ItemID.BRONZE_KNIFE,
+		ItemID.IRON_KNIFE,
+		ItemID.STEEL_KNIFE,
+		ItemID.BLACK_KNIFE,
+		ItemID.MITHRIL_KNIFE,
+		ItemID.ADAMANT_KNIFE,
+		ItemID.RUNE_KNIFE,
+		ItemID.DRAGON_KNIFE
+	)),
+
+	ARDOUGNE_CLOAK("Ardougne cloak", ImmutableList.of(13121, 13122, 13123, 13124)),
+
+	THROWING_KNIVES("Throwing knives", ImmutableList.of(
+		ItemID.BRONZE_KNIFE,
+		ItemID.IRON_KNIFE,
+		ItemID.STEEL_KNIFE,
+		ItemID.BLACK_KNIFE,
+		ItemID.MITHRIL_KNIFE,
+		ItemID.ADAMANT_KNIFE,
+		ItemID.RUNE_KNIFE,
+		ItemID.DRAGON_KNIFE
+	)),
+
+	DARTS("Darts", ImmutableList.of(
+		ItemID.BRONZE_DART,
+		ItemID.IRON_DART,
+		ItemID.STEEL_DART,
+		ItemID.BLACK_DART,
+		ItemID.MITHRIL_DART,
+		ItemID.ADAMANT_DART,
+		ItemID.RUNE_DART,
+		ItemID.DRAGON_DART,
+		ItemID.AMETHYST_DART
+	)),
+
+	THROWING_AXES("Throwing axes", ImmutableList.of(
+		ItemID.BRONZE_THROWNAXE,
+		ItemID.MITHRIL_THROWNAXE,
+		ItemID.RUNE_THROWNAXE,
+		ItemID.DRAGON_THROWNAXE
 	));
 
 	private final List<Integer> items;
