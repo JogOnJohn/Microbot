@@ -57,6 +57,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionPayloads;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionRecordType;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActorSnapshot;
+import net.runelite.client.plugins.microbot.actionrecorder.model.CaptureSettingsSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.GraphicSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ItemDelta;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ItemSnapshot;
@@ -98,6 +99,7 @@ public class ActionRecorderPlugin extends Plugin
 
 	private final Map<Integer, ContainerState> containerStates = new HashMap<>();
 	private volatile ActionRecorderSession session;
+	private volatile CaptureSettingsSnapshot captureSettings;
 	private volatile boolean pluginActive;
 	private volatile boolean initialContainerSnapshotPending;
 
@@ -170,8 +172,12 @@ public class ActionRecorderPlugin extends Plugin
 		String notes = requestedNotes == null ? "" : requestedNotes.trim();
 		try
 		{
-			session = new ActionRecorderSession(RECORDINGS_DIR, name, notes);
+			CaptureSettingsSnapshot nextSettings = captureSettingsFromConfig();
+			ActionRecorderSession nextSession = new ActionRecorderSession(RECORDINGS_DIR, name, notes, nextSettings);
+			containerStates.clear();
+			captureSettings = nextSettings;
 			initialContainerSnapshotPending = true;
+			session = nextSession;
 			return getRecorderStatus(null);
 		}
 		catch (IOException e)
@@ -222,13 +228,15 @@ public class ActionRecorderPlugin extends Plugin
 			current == null ? 0 : current.getAcceptedCount(),
 			current == null ? 0 : current.getDroppedCount(),
 			current == null ? 0 : current.getPendingCount(),
+			captureSettings,
 			message);
 	}
 
 	@Subscribe
 	public void onMenuOptionClicked(MenuOptionClicked event)
 	{
-		if (!isRecording())
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null || !settings.isCaptureInteractions())
 		{
 			return;
 		}
@@ -262,14 +270,28 @@ public class ActionRecorderPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		if (initialContainerSnapshotPending && isRecording())
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null)
+		{
+			return;
+		}
+		if (initialContainerSnapshotPending)
 		{
 			initialContainerSnapshotPending = false;
-			recordInitialContainer(InventoryID.INV);
-			recordInitialContainer(InventoryID.WORN);
-			recordInitialContainer(InventoryID.BANK);
+			if (settings.isCaptureInventory())
+			{
+				recordInitialContainer(InventoryID.INV);
+			}
+			if (settings.isCaptureEquipment())
+			{
+				recordInitialContainer(InventoryID.WORN);
+			}
+			if (settings.isCaptureBank())
+			{
+				recordInitialContainer(InventoryID.BANK);
+			}
 		}
-		if (config.captureGameTicks())
+		if (settings.isCaptureGameTicks() && client.getTickCount() % settings.getGameTickInterval() == 0)
 		{
 			record(ActionRecordType.GAME_TICK, new ActionPayloads.GameTick(playerSnapshot()));
 		}
@@ -277,6 +299,10 @@ public class ActionRecorderPlugin extends Plugin
 
 	private void recordInitialContainer(int containerId)
 	{
+		if (containerStates.containsKey(containerId))
+		{
+			return;
+		}
 		ItemContainer itemContainer = client.getItemContainer(containerId);
 		if (itemContainer == null)
 		{
@@ -304,14 +330,14 @@ public class ActionRecorderPlugin extends Plugin
 		{
 			return;
 		}
-
-		ContainerState previous = containerStates.get(containerId);
-		ContainerState current = snapshotContainer(event.getItemContainer().getItems());
-		containerStates.put(containerId, current);
-		if (!isRecording())
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null || !isContainerCaptureEnabled(settings, containerId))
 		{
 			return;
 		}
+		ContainerState previous = containerStates.get(containerId);
+		ContainerState current = snapshotContainer(event.getItemContainer().getItems());
+		containerStates.put(containerId, current);
 
 		List<ItemDelta> deltas = ContainerState.diff(previous, current);
 		if (previous != null && deltas.isEmpty())
@@ -333,9 +359,10 @@ public class ActionRecorderPlugin extends Plugin
 	@Subscribe
 	public void onAnimationChanged(AnimationChanged event)
 	{
-		if (event.getActor() == client.getLocalPlayer())
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		Player player = client.getLocalPlayer();
+		if (settings != null && settings.isCaptureAnimations() && player != null && event.getActor() == player)
 		{
-			Player player = client.getLocalPlayer();
 			record(ActionRecordType.ANIMATION_CHANGE,
 				new ActionPayloads.AnimationChange(player.getAnimation(), player.getPoseAnimation()));
 		}
@@ -344,31 +371,42 @@ public class ActionRecorderPlugin extends Plugin
 	@Subscribe
 	public void onGraphicChanged(GraphicChanged event)
 	{
-		if (event.getActor() == client.getLocalPlayer())
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		Player player = client.getLocalPlayer();
+		if (settings != null && settings.isCaptureGraphics() && player != null && event.getActor() == player)
 		{
 			record(ActionRecordType.GRAPHIC_CHANGE,
-				new ActionPayloads.GraphicChange(graphicSnapshots(client.getLocalPlayer())));
+				new ActionPayloads.GraphicChange(graphicSnapshots(player)));
 		}
 	}
 
 	@Subscribe
 	public void onWidgetLoaded(WidgetLoaded event)
 	{
-		record(ActionRecordType.WIDGET_LOADED,
-			new ActionPayloads.WidgetLifecycle(event.getGroupId(), null, null));
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings != null && settings.isCaptureWidgets())
+		{
+			record(ActionRecordType.WIDGET_LOADED,
+				new ActionPayloads.WidgetLifecycle(event.getGroupId(), null, null));
+		}
 	}
 
 	@Subscribe
 	public void onWidgetClosed(WidgetClosed event)
 	{
-		record(ActionRecordType.WIDGET_CLOSED,
-			new ActionPayloads.WidgetLifecycle(event.getGroupId(), event.getModalMode(), event.isUnload()));
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings != null && settings.isCaptureWidgets())
+		{
+			record(ActionRecordType.WIDGET_CLOSED,
+				new ActionPayloads.WidgetLifecycle(event.getGroupId(), event.getModalMode(), event.isUnload()));
+		}
 	}
 
 	@Subscribe
 	public void onVarbitChanged(VarbitChanged event)
 	{
-		if (config.captureVarbits())
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings != null && settings.isCaptureVarbits())
 		{
 			record(ActionRecordType.VARBIT_CHANGE,
 				new ActionPayloads.VarbitChange(event.getVarpId(), event.getVarbitId(), event.getValue()));
@@ -378,14 +416,19 @@ public class ActionRecorderPlugin extends Plugin
 	@Subscribe
 	public void onStatChanged(StatChanged event)
 	{
-		record(ActionRecordType.STAT_CHANGE, new ActionPayloads.StatChange(
-			event.getSkill().name(), event.getXp(), event.getLevel(), event.getBoostedLevel()));
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings != null && settings.isCaptureStats())
+		{
+			record(ActionRecordType.STAT_CHANGE, new ActionPayloads.StatChange(
+				event.getSkill().name(), event.getXp(), event.getLevel(), event.getBoostedLevel()));
+		}
 	}
 
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
-		if (config.captureGameMessages() && isSafeGameMessage(event.getType()))
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings != null && settings.isCaptureGameMessages() && isSafeGameMessage(event.getType()))
 		{
 			record(ActionRecordType.CHAT_MESSAGE,
 				new ActionPayloads.ChatMessage(event.getType().name(), sanitizeText(event.getMessage())));
@@ -395,8 +438,12 @@ public class ActionRecorderPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
-		record(ActionRecordType.GAME_STATE_CHANGE,
-			new ActionPayloads.GameStateChange(event.getGameState().name()));
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings != null && settings.isCaptureGameState())
+		{
+			record(ActionRecordType.GAME_STATE_CHANGE,
+				new ActionPayloads.GameStateChange(event.getGameState().name()));
+		}
 	}
 
 	@Subscribe
@@ -413,13 +460,14 @@ public class ActionRecorderPlugin extends Plugin
 
 	private void recordGameObject(String change, GameObject object)
 	{
-		if (!isRecording() || client.getLocalPlayer() == null)
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null || !settings.isCaptureGameObjects() || client.getLocalPlayer() == null)
 		{
 			return;
 		}
 		WorldPoint player = client.getLocalPlayer().getWorldLocation();
 		WorldPoint location = object.getWorldLocation();
-		if (player.getPlane() != location.getPlane() || player.distanceTo(location) > config.nearbyObjectRadius())
+		if (player.getPlane() != location.getPlane() || player.distanceTo(location) > settings.getNearbyObjectRadius())
 		{
 			return;
 		}
@@ -429,7 +477,7 @@ public class ActionRecorderPlugin extends Plugin
 			object.getId(),
 			composition == null ? null : sanitizeText(composition.getName()),
 			locationSnapshot(location, object.getWorldView()),
-			composition == null ? null : composition.getActions()));
+			composition == null || composition.getActions() == null ? null : composition.getActions().clone()));
 	}
 
 	private ContainerState snapshotContainer(Item[] items)
@@ -467,6 +515,39 @@ public class ActionRecorderPlugin extends Plugin
 	{
 		ActionRecorderSession current = session;
 		return current != null && current.isAccepting();
+	}
+
+	private CaptureSettingsSnapshot activeCaptureSettings()
+	{
+		return isRecording() ? captureSettings : null;
+	}
+
+	private CaptureSettingsSnapshot captureSettingsFromConfig()
+	{
+		return new CaptureSettingsSnapshot(
+			config.captureInteractions(),
+			config.captureGameTicks(),
+			config.gameTickInterval(),
+			config.captureInventory(),
+			config.captureEquipment(),
+			config.captureBank(),
+			config.captureAnimations(),
+			config.captureGraphics(),
+			config.captureWidgets(),
+			config.captureVarbits(),
+			config.captureStats(),
+			config.captureGameMessages(),
+			config.captureGameState(),
+			config.captureGameObjects(),
+			config.nearbyObjectRadius(),
+			config.flushEveryRecords());
+	}
+
+	private static boolean isContainerCaptureEnabled(CaptureSettingsSnapshot settings, int containerId)
+	{
+		return containerId == InventoryID.INV && settings.isCaptureInventory()
+			|| containerId == InventoryID.WORN && settings.isCaptureEquipment()
+			|| containerId == InventoryID.BANK && settings.isCaptureBank();
 	}
 
 	private LocationSnapshot currentLocation()
@@ -520,9 +601,10 @@ public class ActionRecorderPlugin extends Plugin
 			return null;
 		}
 		LocalPoint destinationLocal = client.getLocalDestinationLocation();
+		WorldView destinationView = destinationLocal == null ? null : client.getWorldView(destinationLocal.getWorldView());
 		LocationSnapshot destination = destinationLocal == null
 			? null
-			: locationSnapshot(WorldPoint.fromLocal(client, destinationLocal), client.getTopLevelWorldView());
+			: locationSnapshot(WorldPoint.fromLocal(client, destinationLocal), destinationView);
 		return new PlayerSnapshot(
 			player.getAnimation(),
 			player.getPoseAnimation(),
@@ -562,14 +644,18 @@ public class ActionRecorderPlugin extends Plugin
 
 	private LocationSnapshot resolveInteractionTarget(MenuEntry entry)
 	{
+		WorldView view = client.getWorldView(entry.getWorldViewId());
+		if (view == null)
+		{
+			view = client.getTopLevelWorldView();
+		}
 		if (isNpcAction(entry.getType()))
 		{
-			WorldView topLevel = client.getTopLevelWorldView();
-			if (topLevel == null)
+			if (view == null)
 			{
 				return null;
 			}
-			for (NPC npc : topLevel.npcs())
+			for (NPC npc : view.npcs())
 			{
 				if (npc.getIndex() == entry.getIdentifier())
 				{
@@ -579,10 +665,9 @@ public class ActionRecorderPlugin extends Plugin
 		}
 		if (isSceneAction(entry.getType()))
 		{
-			WorldView view = client.getWorldView(entry.getWorldViewId());
 			if (view == null)
 			{
-				view = client.getTopLevelWorldView();
+				return null;
 			}
 			WorldPoint target = WorldPoint.fromScene(view, entry.getParam0(), entry.getParam1(), view.getPlane());
 			return locationSnapshot(target, view);
@@ -632,7 +717,6 @@ public class ActionRecorderPlugin extends Plugin
 		return type == ChatMessageType.GAMEMESSAGE
 			|| type == ChatMessageType.ENGINE
 			|| type == ChatMessageType.SPAM
-			|| type == ChatMessageType.PLAYERRELATED
 			|| type == ChatMessageType.DIALOG
 			|| type == ChatMessageType.MESBOX
 			|| type == ChatMessageType.LEVELUPMESSAGE;
@@ -712,6 +796,7 @@ public class ActionRecorderPlugin extends Plugin
 		long acceptedEventCount;
 		long droppedEventCount;
 		int pendingEventCount;
+		CaptureSettingsSnapshot captureSettings;
 		String message;
 	}
 }

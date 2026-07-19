@@ -24,12 +24,13 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionPayloads;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionRecord;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionRecordType;
+import net.runelite.client.plugins.microbot.actionrecorder.model.CaptureSettingsSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.LocationSnapshot;
 
 @Slf4j
 final class ActionRecorderSession
 {
-	private static final int SCHEMA_VERSION = 1;
+	private static final int SCHEMA_VERSION = 2;
 	private static final int MAX_PENDING_RECORDS = 8192;
 	private static final DateTimeFormatter DIRECTORY_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -38,6 +39,7 @@ final class ActionRecorderSession
 	private final String sessionId = UUID.randomUUID().toString();
 	private final String name;
 	private final String notes;
+	private final CaptureSettingsSnapshot captureSettings;
 	private final long startedAtEpochMs = System.currentTimeMillis();
 	private final Path outputDirectory;
 	private final Path eventsPath;
@@ -55,10 +57,11 @@ final class ActionRecorderSession
 	private volatile String stopReason = "operator_stop";
 	private volatile long stoppedAtEpochMs;
 
-	ActionRecorderSession(Path recordingsRoot, String name, String notes) throws IOException
+	ActionRecorderSession(Path recordingsRoot, String name, String notes, CaptureSettingsSnapshot captureSettings) throws IOException
 	{
 		this.name = name;
 		this.notes = notes;
+		this.captureSettings = captureSettings;
 		String directoryName = DIRECTORY_TIME.format(Instant.ofEpochMilli(startedAtEpochMs).atZone(ZoneId.systemDefault()))
 			+ "-" + ActionRecorderFiles.safeName(name) + "-" + sessionId.substring(0, 8);
 		this.outputDirectory = recordingsRoot.resolve(directoryName);
@@ -70,7 +73,8 @@ final class ActionRecorderSession
 		writerThread.start();
 
 		offer(ActionRecordType.SESSION_START, -1, null,
-			new ActionPayloads.SessionStart(name, notes, startedAtEpochMs, outputDirectory.getFileName().toString()));
+			new ActionPayloads.SessionStart(name, notes, startedAtEpochMs,
+				outputDirectory.getFileName().toString(), captureSettings));
 	}
 
 	synchronized boolean offer(ActionRecordType type, int gameTick, LocationSnapshot location, Object payload)
@@ -135,6 +139,7 @@ final class ActionRecorderSession
 		try (BufferedWriter writer = Files.newBufferedWriter(eventsPath, StandardCharsets.UTF_8,
 			StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE))
 		{
+			int recordsSinceFlush = 0;
 			while (accepting || !queue.isEmpty())
 			{
 				ActionRecord record = queue.poll(250, TimeUnit.MILLISECONDS);
@@ -144,6 +149,14 @@ final class ActionRecorderSession
 				}
 				writer.write(JSONL_GSON.toJson(record));
 				writer.newLine();
+				recordsSinceFlush++;
+				if (recordsSinceFlush >= captureSettings.getFlushEveryRecords()
+					|| record.getType() == ActionRecordType.SESSION_START
+					|| record.getType() == ActionRecordType.OPERATOR_MARKER)
+				{
+					writer.flush();
+					recordsSinceFlush = 0;
+				}
 			}
 
 			stoppedAtEpochMs = System.currentTimeMillis();
@@ -205,6 +218,7 @@ final class ActionRecorderSession
 			droppedCount.get(),
 			counts,
 			markerCopy,
+			captureSettings,
 			"events.jsonl",
 			"handoff.md");
 		Files.write(outputDirectory.resolve("manifest.json"), GSON.toJson(manifest).getBytes(StandardCharsets.UTF_8),

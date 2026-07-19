@@ -18,6 +18,7 @@ public final class ActionPayloads
 		String notes;
 		long startedAtEpochMs;
 		String outputDirectory;
+		CaptureSettingsSnapshot captureSettings;
 	}
 
 	@Value
@@ -137,6 +138,7 @@ public final class ActionPayloads
 		long droppedEventCount;
 		Map<ActionRecordType, Long> eventCounts;
 		List<String> operatorMarkers;
+		CaptureSettingsSnapshot captureSettings;
 		String eventsFile;
 		String handoffFile;
 	}
