@@ -23,7 +23,7 @@ Every JSONL line uses the same envelope:
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "sessionId": "...",
   "sequence": 42,
   "type": "INTERACTION",
@@ -48,9 +48,9 @@ Every JSONL line uses the same envelope:
 }
 ```
 
-The client targets Java 11, so the implementation uses immutable value objects rather than the Java `record` keyword. Payloads are typed objects for session lifecycle, operator markers, interactions, game ticks, container changes, animations, graphics, widgets, varbits, stats, game messages, game state, and nearby game-object changes.
+The client targets Java 11, so the implementation uses immutable value objects rather than the Java `record` keyword. Payloads are typed objects for session lifecycle, operator markers, interactions, deferred walk destinations, game ticks, container changes, animations, graphics, widgets, varbits, stats, game messages, game state, object state, ground items, keyboard context, and camera changes.
 
-Schema version 3 adds resolved object metadata, bounded semantic widget context, owned ground-item changes, and unambiguous recording totals. Capture settings are frozen when the session starts; configuration edits made during a recording apply to the next session rather than silently changing the current trace.
+Schema version 4 adds interaction IDs, deferred walk destinations, configurable object-capture modes, click-time object state plus event-driven after-state, clock-variable suppression, opt-in keyboard context, and an independent camera stream. Capture settings are frozen when the session starts; configuration edits made during a recording apply to the next session rather than silently changing the current trace.
 
 ## Configuration
 
@@ -68,23 +68,31 @@ All capture categories default to enabled for a full operator demonstration. Dis
 | Graphic changes | on | Full local-player spot-animation details |
 | Widget lifecycle | on | Widget group load and close events |
 | Varbit changes | on | Varp/varbit ID and value changes |
+| Include clock variables | off | Include noisy varbits `12391`, `12392`, and varp `3079`; varbit `12393` is never suppressed |
 | Stat changes | on | XP, real level, and boosted level changes |
 | Game messages | on | System/dialogue categories only; player chat is excluded |
 | Game state changes | on | Login, loading, hopping, and connection transitions |
-| Nearby object changes | on | Radius-limited game-object spawn/despawn evidence |
-| Actionable objects only | on | Resolve transformed definitions, then exclude scenery without actions such as vegetation |
+| Object capture mode | `ACTIONABLE_NEARBY` | `OFF`, clicked-object `INTERACTION_FOCUSED`, actionable nearby objects, or all nearby objects |
 | Ground-item changes | on | Ground-item spawn, despawn, and quantity evidence |
 | Owned ground items only | on | Exclude unrelated public and static ground-item spawns |
 | Nearby capture radius | `16` | Maximum same-plane distance for object and ground-item changes |
+| Keyboard context | off | Opt-in key press/release identity capture while logged in; never records typed characters |
+| Keyboard capture mode | `ALLOWLIST` | Use the configurable semantic-key allowlist or opt in to `ALL_KEYS` |
+| Keyboard allowlist | movement/navigation/hotkeys | Comma-separated `KeyEvent` names used by allowlist mode |
+| Camera changes | on | Changed yaw/pitch and their targets, sampled independently on game ticks |
 | Flush every N records | `25` | Periodic JSONL disk flush; session start and markers flush immediately |
 
 ## Interaction and effect evidence
 
-An `INTERACTION` records the complete menu entry, canvas click, player state, event location, and target location when the target can be resolved. Widget interactions include the clicked component ID, parent ID, direct text/name/actions, and up to eight bounded text-bearing widgets from the clicked component's immediate context. `WALK` menu parameters are canvas coordinates, so the recorder deliberately leaves their interaction target location empty; subsequent tick locations and player destinations provide movement evidence. Canvas coordinates are diagnostic evidence only.
+An `INTERACTION` records a session-local `interactionId`, the complete menu entry, canvas click, player state, event location, and target location when the target can be resolved. Widget interactions include the clicked component ID, parent ID, direct text/name/actions, and up to eight bounded text-bearing widgets from the clicked component's immediate context. `WALK` targets are always blanked, because a player name may occupy the hovered menu target and the menu parameters are canvas coordinates rather than a destination. A subsequent `WALK_DESTINATION` uses the same `interactionId` to record the client destination after it updates, with an explicit resolution status. Canvas coordinates remain diagnostic evidence only.
 
 `CONTAINER_CHANGE` records inventory, equipment, and bank effects. Inventory and equipment include the after-state by slot. Bank events establish a private baseline without exporting the entire bank, then record item deltas. Item records include the exact ID, name, quantity, noted state and linked note ID, placeholder state and linked placeholder ID.
 
-`GAME_OBJECT_CHANGE` resolves the active transformed object composition before recording the resolved ID, name, and actions. With the default actionable-only filter, decorative scenery without interactions is omitted. `GROUND_ITEM_CHANGE` records owned or group-owned item spawn, despawn, and quantity changes by default, including item metadata, ownership, visibility timing, and world location.
+Game-object interactions include a canonical click-time object snapshot: base and resolved IDs, semantic name/actions, exact location, transform-controller varbit or varp, controller value, and bounded recent object context from the clicked tile and its immediate surroundings. An event-driven five-game-tick watch emits `OBJECT_TARGET_STATE` when the resolved object or controller value changes, or an explicit `unchanged_timeout` result. It never sleeps or blocks the client thread.
+
+`ACTIONABLE_NEARBY` resolves active transformed definitions and omits scenery without actions, such as vegetation. `ALL_NEARBY` emits every radius-limited object observation. `INTERACTION_FOCUSED` keeps the same nearby observations only in a bounded 15-second memory buffer, then attaches relevant context to clicked objects instead of writing unrelated spawn/despawn churn. This mode cannot create a gap for an interacted object because its canonical click snapshot and after-state watch are always emitted. `OFF` disables both streams. `GROUND_ITEM_CHANGE` remains independently configurable and records owned or group-owned item changes by default.
+
+`KEYBOARD_INPUT` is opt-in and captures press/release identity, modifiers, key location, repeat state, and original event time only while logged in. It deliberately ignores `keyTyped`, so literal chat, bank-search text, and credentials are never written; `ALL_KEYS` can still reconstruct many inputs from key identities and should be enabled only for an intentional private recording. `CAMERA_CHANGE` is independent of keyboard capture, so mouse-drag camera movement and remapped WASD camera movement share the same semantic camera evidence.
 
 The Hub review should correlate each interaction with subsequent location, container, animation, graphic, widget, varbit, message, and object records. Correlation is evidence for a proposed state transition, not proof that every observed action belongs in the final script.
 
@@ -118,7 +126,9 @@ Disabling the plugin also finalizes an active recording. That normal path writes
 - JSONL is flushed every configured record interval and immediately after session start or an operator marker, reducing loss during an abnormal client exit.
 - Player chat is excluded. Captured system/dialogue text has the local display name replaced with `<local-player>`, and player interaction targets are replaced with `<player-target>`.
 - The initial bank event establishes a count-only baseline. The recorder does not export the full bank contents.
-- Nearby object records are actionable-only and radius-limited by default. Disable **Actionable objects only** only when non-interactive scenery changes are deliberately needed.
+- Nearby object records are actionable-only and radius-limited by default. Choose **All nearby** only when non-interactive scenery changes are deliberately needed; choose **Interaction focused** for a quieter trace with clicked-object context.
+- The date-millisecond/date-second varbits (`12391`, `12392`) and map-clock varp (`3079`) are suppressed by default. Contextual varbit `12393` remains captured. The manifest records whether clock-variable inclusion was enabled.
+- Keyboard capture is disabled by default, never runs on login screens, and never writes `keyTyped` characters. The manifest freezes the mode and allowlist used for the session.
 - Ground-item records are self/group-owned and radius-limited by default. Disable **Owned ground items only** only when public or static spawns are relevant.
 - Exact repeated interactions remain in the lossless trace. Hub review should collapse retries and double-clicks according to observed effects rather than treating each click as a required script action.
 - Queue saturation is reported as `droppedObservationCount`; a session with dropped observations should be treated as incomplete evidence.

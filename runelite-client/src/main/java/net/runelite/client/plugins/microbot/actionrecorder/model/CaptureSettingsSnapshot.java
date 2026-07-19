@@ -19,10 +19,14 @@ public class CaptureSettingsSnapshot
 	boolean captureStats;
 	boolean captureGameMessages;
 	boolean captureGameState;
-	boolean captureGameObjects;
-	boolean actionableObjectsOnly;
+	boolean includeClockVariables;
+	ObjectCaptureMode objectCaptureMode;
 	boolean captureGroundItems;
 	boolean ownedGroundItemsOnly;
 	int nearbyObjectRadius;
+	boolean captureKeyboardContext;
+	KeyboardCaptureMode keyboardCaptureMode;
+	String keyboardAllowlist;
+	boolean captureCameraChanges;
 	int flushEveryRecords;
 }

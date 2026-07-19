@@ -30,7 +30,7 @@ import net.runelite.client.plugins.microbot.actionrecorder.model.LocationSnapsho
 @Slf4j
 final class ActionRecorderSession
 {
-	private static final int SCHEMA_VERSION = 3;
+	private static final int SCHEMA_VERSION = 4;
 	private static final int MAX_PENDING_RECORDS = 8192;
 	private static final DateTimeFormatter DIRECTORY_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -263,6 +263,8 @@ final class ActionRecorderSession
 		}
 		out.append("## Hub review guidance\n\n")
 			.append("- Correlate each `INTERACTION` with the following ticks and observed deltas; do not replay canvas coordinates.\n")
+			.append("- Join `WALK_DESTINATION` and `OBJECT_TARGET_STATE` to their source interaction by `interactionId`.\n")
+			.append("- Treat keyboard and camera records as operator context, not mandatory script inputs.\n")
 			.append("- Use item IDs plus noted/placeholder links, object IDs, widget IDs, and world locations as primary evidence.\n")
 			.append("- Mark accidental or redundant operator actions as discarded observations rather than script states.\n")
 			.append("- Implement the reviewed phases as a Hub state machine with explicit entry conditions, success conditions, timeouts, and recovery behavior.\n")

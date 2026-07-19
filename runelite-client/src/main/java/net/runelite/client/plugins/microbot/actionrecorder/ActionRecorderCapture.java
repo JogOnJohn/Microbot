@@ -1,13 +1,19 @@
 package net.runelite.client.plugins.microbot.actionrecorder;
 
+import java.awt.event.KeyEvent;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 import net.runelite.api.MenuAction;
 import net.runelite.api.ObjectComposition;
+import net.runelite.api.gameval.VarPlayerID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.plugins.microbot.actionrecorder.model.KeyboardCaptureMode;
 import net.runelite.client.plugins.microbot.actionrecorder.model.WidgetTextSnapshot;
 
 /** Small, client-thread-only capture helpers kept separate for focused regression testing. */
@@ -57,6 +63,48 @@ final class ActionRecorderCapture
 	{
 		String name = action.name();
 		return name.contains("GAME_OBJECT") || name.contains("GROUND_ITEM");
+	}
+
+	static boolean isGameObjectAction(MenuAction action)
+	{
+		return action.name().contains("GAME_OBJECT");
+	}
+
+	static String normalizedTarget(MenuAction action, String target, UnaryOperator<String> sanitizer)
+	{
+		if (action == MenuAction.WALK)
+		{
+			return null;
+		}
+		if (action.name().contains("PLAYER"))
+		{
+			return "<player-target>";
+		}
+		return sanitizer.apply(target);
+	}
+
+	static boolean isClockNoise(int varpId, int varbitId)
+	{
+		return varpId == VarPlayerID.MAP_CLOCK
+			|| varbitId == VarbitID.DATE_MILLISECONDS_PAST_MINUTE
+			|| varbitId == VarbitID.DATE_SECONDS_PAST_MINUTE;
+	}
+
+	static boolean shouldCaptureKey(KeyboardCaptureMode mode, String allowlist, int keyCode)
+	{
+		if (mode == KeyboardCaptureMode.ALL_KEYS)
+		{
+			return true;
+		}
+		String keyText = normalizeKeyName(KeyEvent.getKeyText(keyCode));
+		return Arrays.stream(allowlist == null ? new String[0] : allowlist.split(","))
+			.map(ActionRecorderCapture::normalizeKeyName)
+			.anyMatch(keyText::equals);
+	}
+
+	private static String normalizeKeyName(String value)
+	{
+		return value == null ? "" : value.trim().replace(" ", "").toUpperCase(Locale.ROOT);
 	}
 
 	static List<WidgetTextSnapshot> widgetContext(Widget widget, UnaryOperator<String> sanitizer)

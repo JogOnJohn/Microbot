@@ -1,5 +1,7 @@
 package net.runelite.client.plugins.microbot.actionrecorder;
 
+import net.runelite.client.plugins.microbot.actionrecorder.model.KeyboardCaptureMode;
+import net.runelite.client.plugins.microbot.actionrecorder.model.ObjectCaptureMode;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -28,10 +30,13 @@ public class ActionRecorderConfigTest
 		assertTrue(config.captureStats());
 		assertTrue(config.captureGameMessages());
 		assertTrue(config.captureGameState());
-		assertTrue(config.captureGameObjects());
-		assertTrue(config.actionableObjectsOnly());
+		assertFalse(config.includeClockVariables());
+		assertEquals(ObjectCaptureMode.ACTIONABLE_NEARBY, config.objectCaptureMode());
 		assertTrue(config.captureGroundItems());
 		assertTrue(config.ownedGroundItemsOnly());
+		assertFalse(config.captureKeyboardContext());
+		assertEquals(KeyboardCaptureMode.ALLOWLIST, config.keyboardCaptureMode());
+		assertTrue(config.captureCameraChanges());
 		assertEquals(1, config.gameTickInterval());
 		assertEquals(16, config.nearbyObjectRadius());
 		assertEquals(25, config.flushEveryRecords());
