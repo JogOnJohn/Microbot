@@ -29,6 +29,9 @@ public class ActionRecorderConfigTest
 		assertTrue(config.captureGameMessages());
 		assertTrue(config.captureGameState());
 		assertTrue(config.captureGameObjects());
+		assertTrue(config.actionableObjectsOnly());
+		assertTrue(config.captureGroundItems());
+		assertTrue(config.ownedGroundItemsOnly());
 		assertEquals(1, config.gameTickInterval());
 		assertEquals(16, config.nearbyObjectRadius());
 		assertEquals(25, config.flushEveryRecords());

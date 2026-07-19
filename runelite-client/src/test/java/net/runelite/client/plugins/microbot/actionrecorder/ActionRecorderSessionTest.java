@@ -27,7 +27,7 @@ public class ActionRecorderSessionTest
 		awaitNonEmpty(output.resolve("events.jsonl"));
 		String started = new String(Files.readAllBytes(output.resolve("events.jsonl")), StandardCharsets.UTF_8);
 		assertTrue(started.contains("SESSION_START"));
-		assertTrue(started.contains("\"schemaVersion\":2"));
+		assertTrue(started.contains("\"schemaVersion\":3"));
 		assertTrue(started.contains("captureSettings"));
 		assertTrue(session.offer(ActionRecordType.OPERATOR_MARKER, 10, null,
 			new ActionPayloads.OperatorMarker("BANK_PREP", "withdraw supplies")));
@@ -46,9 +46,14 @@ public class ActionRecorderSessionTest
 		String handoff = new String(Files.readAllBytes(output.resolve("handoff.md")), StandardCharsets.UTF_8);
 		assertTrue(handoff.contains("BANK_PREP"));
 		assertTrue(handoff.contains("Microbot Hub"));
+		assertTrue(handoff.contains("Accepted observations: 2"));
+		assertTrue(handoff.contains("Total written records: 3"));
 		assertEquals(2, session.getAcceptedCount());
 		String manifest = new String(Files.readAllBytes(output.resolve("manifest.json")), StandardCharsets.UTF_8);
 		assertTrue(manifest.contains("\"flushEveryRecords\": 25"));
+		assertTrue(manifest.contains("\"acceptedObservationCount\": 2"));
+		assertTrue(manifest.contains("\"writtenRecordCount\": 3"));
+		assertTrue(manifest.contains("\"droppedObservationCount\": 0"));
 	}
 
 	private static void awaitNonEmpty(Path path) throws Exception
@@ -65,6 +70,7 @@ public class ActionRecorderSessionTest
 	{
 		return new CaptureSettingsSnapshot(
 			true, true, 1, true, true, true, true, true,
-			true, true, true, true, true, true, 16, 25);
+			true, true, true, true, true, true, true, true,
+			true, 16, 25);
 	}
 }

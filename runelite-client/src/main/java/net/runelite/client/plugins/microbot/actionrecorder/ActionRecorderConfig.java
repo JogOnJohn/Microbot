@@ -265,7 +265,7 @@ public interface ActionRecorderConfig extends Config
 	@ConfigItem(
 		keyName = "captureGameObjects",
 		name = "Nearby object changes",
-		description = "Capture nearby game-object spawn and despawn events",
+		description = "Capture nearby game-object spawn and despawn evidence",
 		position = 13,
 		section = captureSection
 	)
@@ -275,10 +275,46 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "nearbyObjectRadius",
-		name = "Object radius",
-		description = "Maximum distance for recording spawned or despawned game objects",
+		keyName = "actionableObjectsOnly",
+		name = "Actionable objects only",
+		description = "Exclude scenery without actions, such as vegetation; transformed object definitions are resolved first",
 		position = 14,
+		section = captureSection
+	)
+	default boolean actionableObjectsOnly()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureGroundItems",
+		name = "Ground-item changes",
+		description = "Capture nearby ground-item spawn, despawn, and quantity changes",
+		position = 15,
+		section = captureSection
+	)
+	default boolean captureGroundItems()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "ownedGroundItemsOnly",
+		name = "Owned ground items only",
+		description = "Exclude unrelated public ground items and static item spawns",
+		position = 16,
+		section = captureSection
+	)
+	default boolean ownedGroundItemsOnly()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "nearbyObjectRadius",
+		name = "Nearby capture radius",
+		description = "Maximum same-plane distance for recording objects and ground items",
+		position = 17,
 		section = captureSection
 	)
 	@Range(min = 1, max = 32)

@@ -20,6 +20,9 @@ public class CaptureSettingsSnapshot
 	boolean captureGameMessages;
 	boolean captureGameState;
 	boolean captureGameObjects;
+	boolean actionableObjectsOnly;
+	boolean captureGroundItems;
+	boolean ownedGroundItemsOnly;
 	int nearbyObjectRadius;
 	int flushEveryRecords;
 }

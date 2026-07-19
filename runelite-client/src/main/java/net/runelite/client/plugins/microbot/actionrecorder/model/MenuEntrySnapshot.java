@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.actionrecorder.model;
 
+import java.util.List;
 import lombok.Value;
 
 @Value
@@ -15,7 +16,12 @@ public class MenuEntrySnapshot
 	int itemOp;
 	int worldViewId;
 	Integer widgetId;
+	Integer widgetParentId;
 	String widgetText;
+	String widgetName;
+	String widgetSemanticText;
+	String[] widgetActions;
+	List<WidgetTextSnapshot> widgetContext;
 	boolean itemOperation;
 	boolean forceLeftClick;
 	boolean deprioritized;

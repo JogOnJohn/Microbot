@@ -28,6 +28,8 @@ import net.runelite.api.NPC;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.Player;
 import net.runelite.api.Point;
+import net.runelite.api.Tile;
+import net.runelite.api.TileItem;
 import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
@@ -39,6 +41,9 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GraphicChanged;
 import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.ItemDespawned;
+import net.runelite.api.events.ItemQuantityChanged;
+import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
@@ -64,6 +69,7 @@ import net.runelite.client.plugins.microbot.actionrecorder.model.ItemSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.LocationSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.MenuEntrySnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.PlayerSnapshot;
+import net.runelite.client.plugins.microbot.actionrecorder.model.WidgetTextSnapshot;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.Text;
 
@@ -242,6 +248,7 @@ public class ActionRecorderPlugin extends Plugin
 		}
 		MenuEntry entry = event.getMenuEntry();
 		Widget widget = entry.getWidget();
+		List<WidgetTextSnapshot> widgetContext = ActionRecorderCapture.widgetContext(widget, this::sanitizeText);
 		String target = isPlayerAction(entry.getType()) ? "<player-target>" : sanitizeText(entry.getTarget());
 		MenuEntrySnapshot menu = new MenuEntrySnapshot(
 			sanitizeText(entry.getOption()),
@@ -254,7 +261,12 @@ public class ActionRecorderPlugin extends Plugin
 			entry.getItemOp(),
 			entry.getWorldViewId(),
 			widget == null ? null : widget.getId(),
+			widget == null ? null : widget.getParentId(),
 			widget == null ? null : sanitizeText(widget.getText()),
+			widget == null ? null : sanitizeText(widget.getName()),
+			ActionRecorderCapture.semanticWidgetText(widgetContext),
+			widget == null ? null : sanitizeActions(widget.getActions()),
+			widgetContext,
 			entry.isItemOp(),
 			entry.isForceLeftClick(),
 			entry.isDeprioritized());
@@ -458,6 +470,25 @@ public class ActionRecorderPlugin extends Plugin
 		recordGameObject("despawned", event.getGameObject());
 	}
 
+	@Subscribe
+	public void onItemSpawned(ItemSpawned event)
+	{
+		recordGroundItem("spawned", event.getTile(), event.getItem(), 0, event.getItem().getQuantity());
+	}
+
+	@Subscribe
+	public void onItemDespawned(ItemDespawned event)
+	{
+		recordGroundItem("despawned", event.getTile(), event.getItem(), event.getItem().getQuantity(), 0);
+	}
+
+	@Subscribe
+	public void onItemQuantityChanged(ItemQuantityChanged event)
+	{
+		recordGroundItem("quantity_changed", event.getTile(), event.getItem(),
+			event.getOldQuantity(), event.getNewQuantity());
+	}
+
 	private void recordGameObject(String change, GameObject object)
 	{
 		CaptureSettingsSnapshot settings = activeCaptureSettings();
@@ -471,13 +502,58 @@ public class ActionRecorderPlugin extends Plugin
 		{
 			return;
 		}
-		ObjectComposition composition = client.getObjectDefinition(object.getId());
+		ObjectComposition composition = ActionRecorderCapture.resolveObjectComposition(
+			client.getObjectDefinition(object.getId()));
+		String[] actions = composition == null ? null : sanitizeActions(composition.getActions());
+		if (settings.isActionableObjectsOnly() && !ActionRecorderCapture.hasActionableAction(actions))
+		{
+			return;
+		}
 		record(ActionRecordType.GAME_OBJECT_CHANGE, new ActionPayloads.GameObjectChange(
 			change,
 			object.getId(),
-			composition == null ? null : sanitizeText(composition.getName()),
+			composition == null ? null : composition.getId(),
+			composition == null ? null : sanitizeSemanticText(composition.getName()),
 			locationSnapshot(location, object.getWorldView()),
-			composition == null || composition.getActions() == null ? null : composition.getActions().clone()));
+			actions));
+	}
+
+	private void recordGroundItem(String change, Tile tile, TileItem item, int beforeQuantity, int afterQuantity)
+	{
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null || !settings.isCaptureGroundItems() || client.getLocalPlayer() == null
+			|| tile == null || item == null)
+		{
+			return;
+		}
+		if (settings.isOwnedGroundItemsOnly() && item.getOwnership() != TileItem.OWNERSHIP_SELF
+			&& item.getOwnership() != TileItem.OWNERSHIP_GROUP)
+		{
+			return;
+		}
+		WorldPoint player = client.getLocalPlayer().getWorldLocation();
+		WorldPoint location = tile.getWorldLocation();
+		if (player.getPlane() != location.getPlane() || player.distanceTo(location) > settings.getNearbyObjectRadius())
+		{
+			return;
+		}
+		WorldView view = client.getWorldView(tile.getLocalLocation().getWorldView());
+		ItemComposition composition = itemManager.getItemComposition(item.getId());
+		record(ActionRecordType.GROUND_ITEM_CHANGE, new ActionPayloads.GroundItemChange(
+			change,
+			item.getId(),
+			sanitizeText(composition.getMembersName()),
+			beforeQuantity,
+			afterQuantity,
+			locationSnapshot(location, view),
+			composition.getNote() != -1,
+			composition.getLinkedNoteId(),
+			composition.getPlaceholderTemplateId() != -1,
+			composition.getPlaceholderId(),
+			item.getOwnership(),
+			item.isPrivate(),
+			item.getVisibleTime(),
+			item.getDespawnTime()));
 	}
 
 	private ContainerState snapshotContainer(Item[] items)
@@ -539,6 +615,9 @@ public class ActionRecorderPlugin extends Plugin
 			config.captureGameMessages(),
 			config.captureGameState(),
 			config.captureGameObjects(),
+			config.actionableObjectsOnly(),
+			config.captureGroundItems(),
+			config.ownedGroundItemsOnly(),
 			config.nearbyObjectRadius(),
 			config.flushEveryRecords());
 	}
@@ -663,7 +742,7 @@ public class ActionRecorderPlugin extends Plugin
 				}
 			}
 		}
-		if (isSceneAction(entry.getType()))
+		if (ActionRecorderCapture.usesSceneCoordinates(entry.getType()))
 		{
 			if (view == null)
 			{
@@ -686,6 +765,26 @@ public class ActionRecorderPlugin extends Plugin
 		if (localPlayer != null && localPlayer.getName() != null && !localPlayer.getName().isEmpty())
 		{
 			sanitized = sanitized.replaceAll("(?i)" + Pattern.quote(localPlayer.getName()), "<local-player>");
+		}
+		return sanitized;
+	}
+
+	private String sanitizeSemanticText(String value)
+	{
+		String sanitized = sanitizeText(value);
+		return sanitized == null || sanitized.isEmpty() || "null".equalsIgnoreCase(sanitized) ? null : sanitized;
+	}
+
+	private String[] sanitizeActions(String[] actions)
+	{
+		if (actions == null)
+		{
+			return null;
+		}
+		String[] sanitized = actions.clone();
+		for (int index = 0; index < sanitized.length; index++)
+		{
+			sanitized[index] = sanitizeSemanticText(sanitized[index]);
 		}
 		return sanitized;
 	}
@@ -730,14 +829,6 @@ public class ActionRecorderPlugin extends Plugin
 	private static boolean isNpcAction(MenuAction action)
 	{
 		return action.name().contains("NPC");
-	}
-
-	private static boolean isSceneAction(MenuAction action)
-	{
-		String name = action.name();
-		return action == MenuAction.WALK
-			|| name.contains("GAME_OBJECT")
-			|| name.contains("GROUND_ITEM");
 	}
 
 	public static void openRecordingsFolderStatic()
@@ -793,9 +884,9 @@ public class ActionRecorderPlugin extends Plugin
 		String sessionId;
 		String sessionName;
 		String outputDirectory;
-		long acceptedEventCount;
-		long droppedEventCount;
-		int pendingEventCount;
+		long acceptedObservationCount;
+		long droppedObservationCount;
+		int pendingObservationCount;
 		CaptureSettingsSnapshot captureSettings;
 		String message;
 	}
