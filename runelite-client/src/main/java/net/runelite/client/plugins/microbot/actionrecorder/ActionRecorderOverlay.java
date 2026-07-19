@@ -34,14 +34,14 @@ public class ActionRecorderOverlay extends OverlayPanel
 			.right(status.isStopping() ? "Finishing" : "Recording")
 			.build());
 		panelComponent.getChildren().add(LineComponent.builder()
-			.left("Events")
-			.right(Long.toString(status.getAcceptedEventCount()))
+			.left("Observations")
+			.right(Long.toString(status.getAcceptedObservationCount()))
 			.build());
-		if (status.getDroppedEventCount() > 0)
+		if (status.getDroppedObservationCount() > 0)
 		{
 			panelComponent.getChildren().add(LineComponent.builder()
 				.left("Dropped")
-				.right(Long.toString(status.getDroppedEventCount()))
+				.right(Long.toString(status.getDroppedObservationCount()))
 				.build());
 		}
 

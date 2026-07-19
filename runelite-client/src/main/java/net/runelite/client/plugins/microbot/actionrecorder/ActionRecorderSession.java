@@ -30,7 +30,7 @@ import net.runelite.client.plugins.microbot.actionrecorder.model.LocationSnapsho
 @Slf4j
 final class ActionRecorderSession
 {
-	private static final int SCHEMA_VERSION = 2;
+	private static final int SCHEMA_VERSION = 3;
 	private static final int MAX_PENDING_RECORDS = 8192;
 	private static final DateTimeFormatter DIRECTORY_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -83,6 +83,11 @@ final class ActionRecorderSession
 		{
 			return false;
 		}
+		if (queue.remainingCapacity() == 0)
+		{
+			droppedCount.incrementAndGet();
+			return false;
+		}
 
 		long now = System.currentTimeMillis();
 		ActionRecord record = new ActionRecord(
@@ -97,6 +102,7 @@ final class ActionRecorderSession
 			payload);
 		if (!queue.offer(record))
 		{
+			sequence.decrementAndGet();
 			droppedCount.incrementAndGet();
 			return false;
 		}
@@ -160,6 +166,7 @@ final class ActionRecorderSession
 			}
 
 			stoppedAtEpochMs = System.currentTimeMillis();
+			long writtenRecordCount = acceptedCount.get() + 1;
 			ActionRecord endRecord = new ActionRecord(
 				SCHEMA_VERSION,
 				sessionId,
@@ -169,12 +176,13 @@ final class ActionRecorderSession
 				stoppedAtEpochMs - startedAtEpochMs,
 				-1,
 				null,
-				new ActionPayloads.SessionEnd(stopReason, stoppedAtEpochMs, acceptedCount.get(), droppedCount.get()));
+				new ActionPayloads.SessionEnd(stopReason, stoppedAtEpochMs, acceptedCount.get(),
+					writtenRecordCount, droppedCount.get()));
 			writer.write(JSONL_GSON.toJson(endRecord));
 			writer.newLine();
 			writer.flush();
 			eventCounts.merge(ActionRecordType.SESSION_END, 1L, Long::sum);
-			writeHandoffFiles();
+			writeHandoffFiles(writtenRecordCount);
 		}
 		catch (InterruptedException e)
 		{
@@ -194,7 +202,7 @@ final class ActionRecorderSession
 		}
 	}
 
-	private void writeHandoffFiles() throws IOException
+	private void writeHandoffFiles(long writtenRecordCount) throws IOException
 	{
 		Map<ActionRecordType, Long> counts;
 		synchronized (eventCounts)
@@ -215,6 +223,7 @@ final class ActionRecorderSession
 			startedAtEpochMs,
 			stoppedAtEpochMs,
 			acceptedCount.get(),
+			writtenRecordCount,
 			droppedCount.get(),
 			counts,
 			markerCopy,
@@ -233,7 +242,12 @@ final class ActionRecorderSession
 		out.append("# Microbot Action Recorder handoff\n\n")
 			.append("Session: ").append(name).append("\n\n")
 			.append("This folder is an observation bundle for Microbot Hub script development. ")
-			.append("Treat interactions as demonstrated intent and container, animation, widget, varbit, object, and location records as observed effects.\n\n")
+			.append("Treat interactions as demonstrated intent and container, animation, widget, varbit, object, ground-item, and location records as observed effects.\n\n")
+			.append("## Recording integrity\n\n")
+			.append("- Accepted observations: ").append(acceptedCount.get()).append('\n')
+			.append("- Generated session-end records: 1\n")
+			.append("- Total written records: ").append(acceptedCount.get() + 1).append('\n')
+			.append("- Dropped observations: ").append(droppedCount.get()).append("\n\n")
 			.append("## Candidate flow boundaries\n\n");
 		if (markerCopy.isEmpty())
 		{

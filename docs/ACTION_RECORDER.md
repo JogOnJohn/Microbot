@@ -23,7 +23,7 @@ Every JSONL line uses the same envelope:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "sessionId": "...",
   "sequence": 42,
   "type": "INTERACTION",
@@ -50,7 +50,7 @@ Every JSONL line uses the same envelope:
 
 The client targets Java 11, so the implementation uses immutable value objects rather than the Java `record` keyword. Payloads are typed objects for session lifecycle, operator markers, interactions, game ticks, container changes, animations, graphics, widgets, varbits, stats, game messages, game state, and nearby game-object changes.
 
-Schema version 2 adds the effective capture profile to `SESSION_START` and `manifest.json`. Capture settings are frozen when the session starts; configuration edits made during a recording apply to the next session rather than silently changing the current trace.
+Schema version 3 adds resolved object metadata, bounded semantic widget context, owned ground-item changes, and unambiguous recording totals. Capture settings are frozen when the session starts; configuration edits made during a recording apply to the next session rather than silently changing the current trace.
 
 ## Configuration
 
@@ -72,14 +72,19 @@ All capture categories default to enabled for a full operator demonstration. Dis
 | Game messages | on | System/dialogue categories only; player chat is excluded |
 | Game state changes | on | Login, loading, hopping, and connection transitions |
 | Nearby object changes | on | Radius-limited game-object spawn/despawn evidence |
-| Object radius | `16` | Maximum same-plane distance for object changes |
+| Actionable objects only | on | Resolve transformed definitions, then exclude scenery without actions such as vegetation |
+| Ground-item changes | on | Ground-item spawn, despawn, and quantity evidence |
+| Owned ground items only | on | Exclude unrelated public and static ground-item spawns |
+| Nearby capture radius | `16` | Maximum same-plane distance for object and ground-item changes |
 | Flush every N records | `25` | Periodic JSONL disk flush; session start and markers flush immediately |
 
 ## Interaction and effect evidence
 
-An `INTERACTION` records the complete menu entry, canvas click, player state, event location, and target location when the target can be resolved. Canvas coordinates are diagnostic evidence only.
+An `INTERACTION` records the complete menu entry, canvas click, player state, event location, and target location when the target can be resolved. Widget interactions include the clicked component ID, parent ID, direct text/name/actions, and up to eight bounded text-bearing widgets from the clicked component's immediate context. `WALK` menu parameters are canvas coordinates, so the recorder deliberately leaves their interaction target location empty; subsequent tick locations and player destinations provide movement evidence. Canvas coordinates are diagnostic evidence only.
 
 `CONTAINER_CHANGE` records inventory, equipment, and bank effects. Inventory and equipment include the after-state by slot. Bank events establish a private baseline without exporting the entire bank, then record item deltas. Item records include the exact ID, name, quantity, noted state and linked note ID, placeholder state and linked placeholder ID.
+
+`GAME_OBJECT_CHANGE` resolves the active transformed object composition before recording the resolved ID, name, and actions. With the default actionable-only filter, decorative scenery without interactions is omitted. `GROUND_ITEM_CHANGE` records owned or group-owned item spawn, despawn, and quantity changes by default, including item metadata, ownership, visibility timing, and world location.
 
 The Hub review should correlate each interaction with subsequent location, container, animation, graphic, widget, varbit, message, and object records. Correlation is evidence for a proposed state transition, not proof that every observed action belongs in the final script.
 
@@ -97,6 +102,15 @@ The Agent Server must be enabled, authenticated normally, and the Action Recorde
 
 `POST /action-recorder/stop` returns `202` because disk finalization happens on the recorder writer thread. Poll status until `stopping` becomes false and `stopped` becomes true before handing off the directory.
 
+Disabling the plugin also finalizes an active recording. That normal path writes `SESSION_END.reason` as `plugin_shutdown`; an explicit stop preserves the supplied operator reason.
+
+## Recording totals
+
+- `acceptedObservationCount` counts records accepted from the session start and subscribed capture events. It excludes the writer-generated `SESSION_END` record.
+- `writtenRecordCount` counts every JSONL line, including `SESSION_END`.
+- `droppedObservationCount` counts observations rejected because the bounded queue was full. Written sequence numbers remain contiguous when observations are dropped.
+- `eventCounts` includes every written record type and therefore sums to `writtenRecordCount`.
+
 ## Capture and privacy boundaries
 
 - Event subscribers only take small immutable snapshots; JSONL and handoff files are written on a bounded daemon writer queue.
@@ -104,8 +118,10 @@ The Agent Server must be enabled, authenticated normally, and the Action Recorde
 - JSONL is flushed every configured record interval and immediately after session start or an operator marker, reducing loss during an abnormal client exit.
 - Player chat is excluded. Captured system/dialogue text has the local display name replaced with `<local-player>`, and player interaction targets are replaced with `<player-target>`.
 - The initial bank event establishes a count-only baseline. The recorder does not export the full bank contents.
-- Nearby object spawn/despawn records are radius-limited to avoid unrelated scene noise.
-- Queue saturation is reported as `droppedEventCount`; a session with dropped records should be treated as incomplete evidence.
+- Nearby object records are actionable-only and radius-limited by default. Disable **Actionable objects only** only when non-interactive scenery changes are deliberately needed.
+- Ground-item records are self/group-owned and radius-limited by default. Disable **Owned ground items only** only when public or static spawns are relevant.
+- Exact repeated interactions remain in the lossless trace. Hub review should collapse retries and double-clicks according to observed effects rather than treating each click as a required script action.
+- Queue saturation is reported as `droppedObservationCount`; a session with dropped observations should be treated as incomplete evidence.
 
 ## Microbot Hub handoff boundary
 

@@ -26,8 +26,9 @@ public final class ActionPayloads
 	{
 		String reason;
 		long stoppedAtEpochMs;
-		long acceptedEventCount;
-		long droppedEventCount;
+		long acceptedObservationCount;
+		long writtenRecordCount;
+		long droppedObservationCount;
 	}
 
 	@Value
@@ -120,9 +121,29 @@ public final class ActionPayloads
 	{
 		String change;
 		int objectId;
+		Integer resolvedObjectId;
 		String name;
 		LocationSnapshot objectLocation;
 		String[] actions;
+	}
+
+	@Value
+	public static class GroundItemChange
+	{
+		String change;
+		int itemId;
+		String name;
+		int beforeQuantity;
+		int afterQuantity;
+		LocationSnapshot itemLocation;
+		boolean noted;
+		int linkedNoteId;
+		boolean placeholder;
+		int linkedPlaceholderId;
+		int ownership;
+		boolean privateItem;
+		int visibleTime;
+		int despawnTime;
 	}
 
 	@Value
@@ -134,8 +155,9 @@ public final class ActionPayloads
 		String notes;
 		long startedAtEpochMs;
 		long stoppedAtEpochMs;
-		long acceptedEventCount;
-		long droppedEventCount;
+		long acceptedObservationCount;
+		long writtenRecordCount;
+		long droppedObservationCount;
 		Map<ActionRecordType, Long> eventCounts;
 		List<String> operatorMarkers;
 		CaptureSettingsSnapshot captureSettings;
