@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.agentserver.handler;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -78,7 +79,7 @@ public class ActionRecorderHandler extends AgentHandler
 		{
 			return;
 		}
-		Map<String, Object> body = readJsonBody(exchange);
+		Map<String, Object> body = readOptionalJsonBody(exchange);
 		String name = stringValue(body.get("name"));
 		String notes = stringValue(body.get("notes"));
 		ActionRecorderPlugin.RecorderStatus status = plugin.startSession(name, notes);
@@ -96,7 +97,7 @@ public class ActionRecorderHandler extends AgentHandler
 		{
 			return;
 		}
-		Map<String, Object> body = readJsonBody(exchange);
+		Map<String, Object> body = readOptionalJsonBody(exchange);
 		String label = stringValue(body.get("label"));
 		if (label == null || label.trim().isEmpty())
 		{
@@ -121,7 +122,13 @@ public class ActionRecorderHandler extends AgentHandler
 		{
 			return;
 		}
-		Map<String, Object> body = readJsonBody(exchange);
+		ActionRecorderPlugin.RecorderStatus before = plugin.getRecorderStatus();
+		if (!before.isRecording() && !before.isStopping())
+		{
+			sendJson(exchange, 409, errorResponse("No Action Recorder session is active"));
+			return;
+		}
+		Map<String, Object> body = readOptionalJsonBody(exchange);
 		String reason = stringValue(body.get("reason"));
 		sendJson(exchange, 202, plugin.requestStop(reason));
 	}
@@ -171,5 +178,11 @@ public class ActionRecorderHandler extends AgentHandler
 	private static String stringValue(Object value)
 	{
 		return value instanceof String ? (String) value : null;
+	}
+
+	private Map<String, Object> readOptionalJsonBody(HttpExchange exchange) throws IOException
+	{
+		Map<String, Object> body = readJsonBody(exchange);
+		return body == null ? Collections.emptyMap() : body;
 	}
 }

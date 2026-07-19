@@ -26,6 +26,13 @@ public interface ActionRecorderConfig extends Config
 	)
 	String captureSection = "capture";
 
+	@ConfigSection(
+		name = "Output",
+		description = "Recording durability and output behavior",
+		position = 2
+	)
+	String outputSection = "output";
+
 	@ConfigItem(
 		keyName = "recordingEnabled",
 		name = "Recording enabled",
@@ -99,10 +106,22 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "captureInteractions",
+		name = "Interactions",
+		description = "Capture clicked menu entries, targets, canvas coordinates, and player state",
+		position = 0,
+		section = captureSection
+	)
+	default boolean captureInteractions()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "captureGameTicks",
 		name = "Game tick snapshots",
-		description = "Capture player state and location once per game tick",
-		position = 0,
+		description = "Capture periodic player state and location snapshots",
+		position = 1,
 		section = captureSection
 	)
 	default boolean captureGameTicks()
@@ -111,10 +130,95 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "gameTickInterval",
+		name = "Game tick interval",
+		description = "Record one game tick snapshot every N ticks",
+		position = 2,
+		section = captureSection
+	)
+	@Range(min = 1, max = 20)
+	default int gameTickInterval()
+	{
+		return 1;
+	}
+
+	@ConfigItem(
+		keyName = "captureInventory",
+		name = "Inventory changes",
+		description = "Capture inventory deltas and complete after-state snapshots",
+		position = 3,
+		section = captureSection
+	)
+	default boolean captureInventory()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureEquipment",
+		name = "Equipment changes",
+		description = "Capture equipment deltas and complete after-state snapshots",
+		position = 4,
+		section = captureSection
+	)
+	default boolean captureEquipment()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureBank",
+		name = "Bank changes",
+		description = "Capture bank deltas after a count-only baseline; never export the full bank",
+		position = 5,
+		section = captureSection
+	)
+	default boolean captureBank()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureAnimations",
+		name = "Animation changes",
+		description = "Capture local-player animation and pose-animation changes",
+		position = 6,
+		section = captureSection
+	)
+	default boolean captureAnimations()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureGraphics",
+		name = "Graphic changes",
+		description = "Capture local-player spot-animation details such as teleport graphics",
+		position = 7,
+		section = captureSection
+	)
+	default boolean captureGraphics()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureWidgets",
+		name = "Widget lifecycle",
+		description = "Capture widget group load and close events",
+		position = 8,
+		section = captureSection
+	)
+	default boolean captureWidgets()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "captureVarbits",
 		name = "Varbit changes",
 		description = "Capture varp and varbit changes for later state discovery",
-		position = 1,
+		position = 9,
 		section = captureSection
 	)
 	default boolean captureVarbits()
@@ -123,10 +227,22 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "captureStats",
+		name = "Stat changes",
+		description = "Capture XP, real level, and boosted level changes",
+		position = 10,
+		section = captureSection
+	)
+	default boolean captureStats()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "captureGameMessages",
 		name = "Game messages",
 		description = "Capture system and dialogue messages while excluding player chat",
-		position = 2,
+		position = 11,
 		section = captureSection
 	)
 	default boolean captureGameMessages()
@@ -135,15 +251,52 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "captureGameState",
+		name = "Game state changes",
+		description = "Capture login, loading, hopping, and connection state transitions",
+		position = 12,
+		section = captureSection
+	)
+	default boolean captureGameState()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "captureGameObjects",
+		name = "Nearby object changes",
+		description = "Capture nearby game-object spawn and despawn events",
+		position = 13,
+		section = captureSection
+	)
+	default boolean captureGameObjects()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "nearbyObjectRadius",
 		name = "Object radius",
 		description = "Maximum distance for recording spawned or despawned game objects",
-		position = 3,
+		position = 14,
 		section = captureSection
 	)
 	@Range(min = 1, max = 32)
 	default int nearbyObjectRadius()
 	{
 		return 16;
+	}
+
+	@ConfigItem(
+		keyName = "flushEveryRecords",
+		name = "Flush every N records",
+		description = "Flush JSONL to disk after this many records; lower values improve crash durability at a small I/O cost",
+		position = 0,
+		section = outputSection
+	)
+	@Range(min = 1, max = 250)
+	default int flushEveryRecords()
+	{
+		return 25;
 	}
 }

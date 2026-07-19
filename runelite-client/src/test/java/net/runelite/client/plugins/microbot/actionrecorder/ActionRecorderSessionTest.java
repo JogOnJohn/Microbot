@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionPayloads;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionRecordType;
+import net.runelite.client.plugins.microbot.actionrecorder.model.CaptureSettingsSnapshot;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -21,14 +22,19 @@ public class ActionRecorderSessionTest
 	public void stopDrainsEventsAndCreatesHubHandoffBundle() throws Exception
 	{
 		Path root = temporaryFolder.newFolder("recordings").toPath();
-		ActionRecorderSession session = new ActionRecorderSession(root, "Farm run", "normal route");
+		ActionRecorderSession session = new ActionRecorderSession(root, "Farm run", "normal route", captureSettings());
+		Path output = session.getOutputDirectory();
+		awaitNonEmpty(output.resolve("events.jsonl"));
+		String started = new String(Files.readAllBytes(output.resolve("events.jsonl")), StandardCharsets.UTF_8);
+		assertTrue(started.contains("SESSION_START"));
+		assertTrue(started.contains("\"schemaVersion\":2"));
+		assertTrue(started.contains("captureSettings"));
 		assertTrue(session.offer(ActionRecordType.OPERATOR_MARKER, 10, null,
 			new ActionPayloads.OperatorMarker("BANK_PREP", "withdraw supplies")));
 
 		session.requestStop("demonstration_complete");
 
 		assertTrue(session.awaitStopped(5_000));
-		Path output = session.getOutputDirectory();
 		assertTrue(Files.isRegularFile(output.resolve("events.jsonl")));
 		assertTrue(Files.isRegularFile(output.resolve("manifest.json")));
 		assertTrue(Files.isRegularFile(output.resolve("handoff.md")));
@@ -41,5 +47,24 @@ public class ActionRecorderSessionTest
 		assertTrue(handoff.contains("BANK_PREP"));
 		assertTrue(handoff.contains("Microbot Hub"));
 		assertEquals(2, session.getAcceptedCount());
+		String manifest = new String(Files.readAllBytes(output.resolve("manifest.json")), StandardCharsets.UTF_8);
+		assertTrue(manifest.contains("\"flushEveryRecords\": 25"));
+	}
+
+	private static void awaitNonEmpty(Path path) throws Exception
+	{
+		long deadline = System.currentTimeMillis() + 2_000;
+		while ((!Files.isRegularFile(path) || Files.size(path) == 0) && System.currentTimeMillis() < deadline)
+		{
+			Thread.sleep(10);
+		}
+		assertTrue("Session start record was not flushed promptly", Files.isRegularFile(path) && Files.size(path) > 0);
+	}
+
+	private static CaptureSettingsSnapshot captureSettings()
+	{
+		return new CaptureSettingsSnapshot(
+			true, true, 1, true, true, true, true, true,
+			true, true, true, true, true, true, 16, 25);
 	}
 }
