@@ -1,9 +1,13 @@
 package net.runelite.client.plugins.microbot.actionrecorder;
 
+import java.awt.event.KeyEvent;
 import java.util.List;
 import net.runelite.api.MenuAction;
 import net.runelite.api.ObjectComposition;
+import net.runelite.api.gameval.VarPlayerID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.plugins.microbot.actionrecorder.model.KeyboardCaptureMode;
 import net.runelite.client.plugins.microbot.actionrecorder.model.WidgetTextSnapshot;
 import org.junit.Test;
 
@@ -33,8 +37,34 @@ public class ActionRecorderCaptureTest
 	public void walkCanvasParametersAreNotTreatedAsSceneCoordinates()
 	{
 		assertFalse(ActionRecorderCapture.usesSceneCoordinates(MenuAction.WALK));
+		assertEquals(null, ActionRecorderCapture.normalizedTarget(
+			MenuAction.WALK, "Follow Billy", value -> value));
+		assertEquals("<player-target>", ActionRecorderCapture.normalizedTarget(
+			MenuAction.PLAYER_FIRST_OPTION, "Billy", value -> value));
 		assertTrue(ActionRecorderCapture.usesSceneCoordinates(MenuAction.GAME_OBJECT_FIRST_OPTION));
 		assertTrue(ActionRecorderCapture.usesSceneCoordinates(MenuAction.GROUND_ITEM_FIRST_OPTION));
+	}
+
+	@Test
+	public void suppressesOnlyApprovedClockVariables()
+	{
+		assertTrue(ActionRecorderCapture.isClockNoise(VarPlayerID.MAP_CLOCK, -1));
+		assertTrue(ActionRecorderCapture.isClockNoise(-1, VarbitID.DATE_MILLISECONDS_PAST_MINUTE));
+		assertTrue(ActionRecorderCapture.isClockNoise(-1, VarbitID.DATE_SECONDS_PAST_MINUTE));
+		assertFalse(ActionRecorderCapture.isClockNoise(-1, 12393));
+	}
+
+	@Test
+	public void keyboardAllowlistUsesSemanticKeyNames()
+	{
+		assertTrue(ActionRecorderCapture.shouldCaptureKey(
+			KeyboardCaptureMode.ALLOWLIST, "W, Space, F1", KeyEvent.VK_W));
+		assertTrue(ActionRecorderCapture.shouldCaptureKey(
+			KeyboardCaptureMode.ALLOWLIST, "W, Space, F1", KeyEvent.VK_SPACE));
+		assertFalse(ActionRecorderCapture.shouldCaptureKey(
+			KeyboardCaptureMode.ALLOWLIST, "W, Space, F1", KeyEvent.VK_Q));
+		assertTrue(ActionRecorderCapture.shouldCaptureKey(
+			KeyboardCaptureMode.ALL_KEYS, "", KeyEvent.VK_Q));
 	}
 
 	@Test

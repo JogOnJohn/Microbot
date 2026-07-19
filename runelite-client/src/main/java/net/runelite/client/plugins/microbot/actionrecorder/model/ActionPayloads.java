@@ -41,11 +41,22 @@ public final class ActionPayloads
 	@Value
 	public static class Interaction
 	{
+		long interactionId;
 		MenuEntrySnapshot menuEntry;
 		int canvasX;
 		int canvasY;
 		LocationSnapshot targetLocation;
+		ObjectTargetSnapshot objectTarget;
 		PlayerSnapshot player;
+	}
+
+	@Value
+	public static class WalkDestination
+	{
+		long interactionId;
+		String resolution;
+		int clientTicksElapsed;
+		LocationSnapshot destination;
 	}
 
 	@Value
@@ -128,6 +139,42 @@ public final class ActionPayloads
 	}
 
 	@Value
+	public static class ObjectContextSnapshot
+	{
+		String change;
+		long observedAtEpochMs;
+		int gameTick;
+		int objectId;
+		Integer resolvedObjectId;
+		String name;
+		LocationSnapshot objectLocation;
+		String[] actions;
+	}
+
+	@Value
+	public static class ObjectTargetSnapshot
+	{
+		int objectId;
+		Integer resolvedObjectId;
+		String name;
+		LocationSnapshot objectLocation;
+		String[] actions;
+		int transformVarbitId;
+		int transformVarpId;
+		Integer transformValue;
+		List<ObjectContextSnapshot> recentContext;
+	}
+
+	@Value
+	public static class ObjectTargetState
+	{
+		long interactionId;
+		String phase;
+		int gameTicksElapsed;
+		ObjectTargetSnapshot object;
+	}
+
+	@Value
 	public static class GroundItemChange
 	{
 		String change;
@@ -144,6 +191,29 @@ public final class ActionPayloads
 		boolean privateItem;
 		int visibleTime;
 		int despawnTime;
+	}
+
+	@Value
+	public static class KeyboardInput
+	{
+		String eventType;
+		int keyCode;
+		String keyText;
+		int modifiersEx;
+		String modifiersText;
+		int keyLocation;
+		boolean autoRepeat;
+		long eventWhenEpochMs;
+	}
+
+	@Value
+	public static class CameraChange
+	{
+		boolean baselineEstablished;
+		int yaw;
+		int pitch;
+		int yawTarget;
+		int pitchTarget;
 	}
 
 	@Value

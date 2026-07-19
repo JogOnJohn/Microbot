@@ -6,6 +6,8 @@ import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
+import net.runelite.client.plugins.microbot.actionrecorder.model.KeyboardCaptureMode;
+import net.runelite.client.plugins.microbot.actionrecorder.model.ObjectCaptureMode;
 
 @ConfigGroup(ActionRecorderConfig.CONFIG_GROUP)
 public interface ActionRecorderConfig extends Config
@@ -227,10 +229,22 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "includeClockVariables",
+		name = "Include clock variables",
+		description = "Opt in to high-frequency date/clock variables 12391, 12392, and varp 3079; contextual varbit 12393 remains captured",
+		position = 10,
+		section = captureSection
+	)
+	default boolean includeClockVariables()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "captureStats",
 		name = "Stat changes",
 		description = "Capture XP, real level, and boosted level changes",
-		position = 10,
+		position = 11,
 		section = captureSection
 	)
 	default boolean captureStats()
@@ -242,7 +256,7 @@ public interface ActionRecorderConfig extends Config
 		keyName = "captureGameMessages",
 		name = "Game messages",
 		description = "Capture system and dialogue messages while excluding player chat",
-		position = 11,
+		position = 12,
 		section = captureSection
 	)
 	default boolean captureGameMessages()
@@ -254,7 +268,7 @@ public interface ActionRecorderConfig extends Config
 		keyName = "captureGameState",
 		name = "Game state changes",
 		description = "Capture login, loading, hopping, and connection state transitions",
-		position = 12,
+		position = 13,
 		section = captureSection
 	)
 	default boolean captureGameState()
@@ -263,27 +277,15 @@ public interface ActionRecorderConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "captureGameObjects",
-		name = "Nearby object changes",
-		description = "Capture nearby game-object spawn and despawn evidence",
-		position = 13,
-		section = captureSection
-	)
-	default boolean captureGameObjects()
-	{
-		return true;
-	}
-
-	@ConfigItem(
-		keyName = "actionableObjectsOnly",
-		name = "Actionable objects only",
-		description = "Exclude scenery without actions, such as vegetation; transformed object definitions are resolved first",
+		keyName = "objectCaptureMode",
+		name = "Object capture mode",
+		description = "Choose no objects, clicked objects with buffered context, actionable nearby objects, or all nearby objects",
 		position = 14,
 		section = captureSection
 	)
-	default boolean actionableObjectsOnly()
+	default ObjectCaptureMode objectCaptureMode()
 	{
-		return true;
+		return ObjectCaptureMode.ACTIONABLE_NEARBY;
 	}
 
 	@ConfigItem(
@@ -321,6 +323,54 @@ public interface ActionRecorderConfig extends Config
 	default int nearbyObjectRadius()
 	{
 		return 16;
+	}
+
+	@ConfigItem(
+		keyName = "captureKeyboardContext",
+		name = "Keyboard context",
+		description = "Opt in to key press/release identity while logged in; typed characters are never recorded",
+		position = 18,
+		section = captureSection
+	)
+	default boolean captureKeyboardContext()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "keyboardCaptureMode",
+		name = "Keyboard capture mode",
+		description = "Capture only allowlisted keys or every key identity",
+		position = 19,
+		section = captureSection
+	)
+	default KeyboardCaptureMode keyboardCaptureMode()
+	{
+		return KeyboardCaptureMode.ALLOWLIST;
+	}
+
+	@ConfigItem(
+		keyName = "keyboardAllowlist",
+		name = "Keyboard allowlist",
+		description = "Comma-separated KeyEvent names used in allowlist mode",
+		position = 20,
+		section = captureSection
+	)
+	default String keyboardAllowlist()
+	{
+		return "W,A,S,D,Up,Down,Left,Right,Space,Escape,Tab,Enter,Shift,Ctrl,Alt,0,1,2,3,4,5,6,7,8,9,F1,F2,F3,F4,F5,F6,F7,F8,F9,F10,F11,F12";
+	}
+
+	@ConfigItem(
+		keyName = "captureCameraChanges",
+		name = "Camera changes",
+		description = "Capture camera yaw and pitch changes independently of keyboard input",
+		position = 21,
+		section = captureSection
+	)
+	default boolean captureCameraChanges()
+	{
+		return true;
 	}
 
 	@ConfigItem(

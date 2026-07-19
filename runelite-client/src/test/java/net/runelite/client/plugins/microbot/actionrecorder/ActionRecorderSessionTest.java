@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionPayloads;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionRecordType;
 import net.runelite.client.plugins.microbot.actionrecorder.model.CaptureSettingsSnapshot;
+import net.runelite.client.plugins.microbot.actionrecorder.model.KeyboardCaptureMode;
+import net.runelite.client.plugins.microbot.actionrecorder.model.ObjectCaptureMode;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -27,7 +29,7 @@ public class ActionRecorderSessionTest
 		awaitNonEmpty(output.resolve("events.jsonl"));
 		String started = new String(Files.readAllBytes(output.resolve("events.jsonl")), StandardCharsets.UTF_8);
 		assertTrue(started.contains("SESSION_START"));
-		assertTrue(started.contains("\"schemaVersion\":3"));
+		assertTrue(started.contains("\"schemaVersion\":4"));
 		assertTrue(started.contains("captureSettings"));
 		assertTrue(session.offer(ActionRecordType.OPERATOR_MARKER, 10, null,
 			new ActionPayloads.OperatorMarker("BANK_PREP", "withdraw supplies")));
@@ -70,7 +72,7 @@ public class ActionRecorderSessionTest
 	{
 		return new CaptureSettingsSnapshot(
 			true, true, 1, true, true, true, true, true,
-			true, true, true, true, true, true, true, true,
-			true, 16, 25);
+			true, true, true, true, true, false, ObjectCaptureMode.ACTIONABLE_NEARBY,
+			true, true, 16, false, KeyboardCaptureMode.ALLOWLIST, "W,A,S,D", true, 25);
 	}
 }

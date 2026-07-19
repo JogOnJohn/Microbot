@@ -2,14 +2,20 @@ package net.runelite.client.plugins.microbot.actionrecorder;
 
 import com.google.inject.Provides;
 import java.awt.Desktop;
+import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
 import lombok.Value;
@@ -19,6 +25,7 @@ import net.runelite.api.ActorSpotAnim;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
+import net.runelite.api.GameState;
 import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
@@ -35,6 +42,7 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.AnimationChanged;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameObjectDespawned;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
@@ -57,6 +65,8 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.input.KeyListener;
+import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ActionPayloads;
@@ -68,6 +78,7 @@ import net.runelite.client.plugins.microbot.actionrecorder.model.ItemDelta;
 import net.runelite.client.plugins.microbot.actionrecorder.model.ItemSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.LocationSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.MenuEntrySnapshot;
+import net.runelite.client.plugins.microbot.actionrecorder.model.ObjectCaptureMode;
 import net.runelite.client.plugins.microbot.actionrecorder.model.PlayerSnapshot;
 import net.runelite.client.plugins.microbot.actionrecorder.model.WidgetTextSnapshot;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -80,10 +91,15 @@ import net.runelite.client.util.Text;
 	enabledByDefault = false
 )
 @Slf4j
-public class ActionRecorderPlugin extends Plugin
+public class ActionRecorderPlugin extends Plugin implements KeyListener
 {
 	public static final String CONFIG_GROUP = ActionRecorderConfig.CONFIG_GROUP;
 	private static final Path RECORDINGS_DIR = RuneLite.RUNELITE_DIR.toPath().resolve("action-recordings");
+	private static final int MAX_PENDING_WALK_CLIENT_TICKS = 5;
+	private static final int OBJECT_STATE_WATCH_TICKS = 5;
+	private static final int MAX_OBJECT_CONTEXT = 512;
+	private static final long OBJECT_CONTEXT_WINDOW_MS = 15_000L;
+	private static final int OBJECT_CONTEXT_RADIUS = 2;
 
 	@Inject
 	private Client client;
@@ -103,11 +119,20 @@ public class ActionRecorderPlugin extends Plugin
 	@Inject
 	private ActionRecorderOverlay overlay;
 
+	@Inject
+	private KeyManager keyManager;
+
 	private final Map<Integer, ContainerState> containerStates = new HashMap<>();
+	private final Deque<PendingWalk> pendingWalks = new ArrayDeque<>();
+	private final List<PendingObjectWatch> pendingObjectWatches = new ArrayList<>();
+	private final Deque<ActionPayloads.ObjectContextSnapshot> objectContext = new ArrayDeque<>();
+	private final Set<Integer> pressedKeys = Collections.synchronizedSet(new HashSet<>());
 	private volatile ActionRecorderSession session;
 	private volatile CaptureSettingsSnapshot captureSettings;
 	private volatile boolean pluginActive;
 	private volatile boolean initialContainerSnapshotPending;
+	private long nextInteractionId;
+	private CameraState previousCameraState;
 
 	@Provides
 	ActionRecorderConfig provideConfig(ConfigManager configManager)
@@ -120,6 +145,7 @@ public class ActionRecorderPlugin extends Plugin
 	{
 		pluginActive = true;
 		overlayManager.add(overlay);
+		keyManager.registerKeyListener(this);
 		if (config.recordingEnabled())
 		{
 			startSession(config.sessionName(), config.sessionNotes());
@@ -131,8 +157,9 @@ public class ActionRecorderPlugin extends Plugin
 	{
 		pluginActive = false;
 		overlayManager.remove(overlay);
+		keyManager.unregisterKeyListener(this);
 		requestStop("plugin_shutdown");
-		containerStates.clear();
+		clearTransientState();
 	}
 
 	@Subscribe
@@ -180,7 +207,8 @@ public class ActionRecorderPlugin extends Plugin
 		{
 			CaptureSettingsSnapshot nextSettings = captureSettingsFromConfig();
 			ActionRecorderSession nextSession = new ActionRecorderSession(RECORDINGS_DIR, name, notes, nextSettings);
-			containerStates.clear();
+			clearTransientState();
+			nextInteractionId = 0;
 			captureSettings = nextSettings;
 			initialContainerSnapshotPending = true;
 			session = nextSession;
@@ -247,9 +275,10 @@ public class ActionRecorderPlugin extends Plugin
 			return;
 		}
 		MenuEntry entry = event.getMenuEntry();
+		long interactionId = ++nextInteractionId;
 		Widget widget = entry.getWidget();
 		List<WidgetTextSnapshot> widgetContext = ActionRecorderCapture.widgetContext(widget, this::sanitizeText);
-		String target = isPlayerAction(entry.getType()) ? "<player-target>" : sanitizeText(entry.getTarget());
+		String target = ActionRecorderCapture.normalizedTarget(entry.getType(), entry.getTarget(), this::sanitizeText);
 		MenuEntrySnapshot menu = new MenuEntrySnapshot(
 			sanitizeText(entry.getOption()),
 			target,
@@ -271,12 +300,57 @@ public class ActionRecorderPlugin extends Plugin
 			entry.isForceLeftClick(),
 			entry.isDeprioritized());
 		Point mouse = client.getMouseCanvasPosition();
-		record(ActionRecordType.INTERACTION, new ActionPayloads.Interaction(
+		ActionPayloads.ObjectTargetSnapshot objectTarget = snapshotInteractionObject(entry, settings, true);
+		boolean accepted = record(ActionRecordType.INTERACTION, new ActionPayloads.Interaction(
+			interactionId,
 			menu,
 			mouse.getX(),
 			mouse.getY(),
 			resolveInteractionTarget(entry),
+			objectTarget,
 			playerSnapshot()));
+		if (!accepted)
+		{
+			return;
+		}
+		if (entry.getType() == MenuAction.WALK)
+		{
+			pendingWalks.addLast(new PendingWalk(interactionId, client.getLocalDestinationLocation()));
+		}
+		if (objectTarget != null)
+		{
+			pendingObjectWatches.add(new PendingObjectWatch(interactionId, objectTarget));
+		}
+	}
+
+	@Subscribe
+	public void onClientTick(ClientTick event)
+	{
+		if (activeCaptureSettings() == null || pendingWalks.isEmpty())
+		{
+			return;
+		}
+		LocalPoint destination = client.getLocalDestinationLocation();
+		Iterator<PendingWalk> iterator = pendingWalks.iterator();
+		while (iterator.hasNext())
+		{
+			PendingWalk pending = iterator.next();
+			pending.incrementClientTicksElapsed();
+			boolean changed = destination != null && !destination.equals(pending.getBaselineDestination());
+			boolean timedOut = pending.getClientTicksElapsed() >= MAX_PENDING_WALK_CLIENT_TICKS;
+			if (!changed && !timedOut)
+			{
+				continue;
+			}
+			LocationSnapshot resolved = destination == null ? null : locationSnapshot(
+				WorldPoint.fromLocal(client, destination), client.getWorldView(destination.getWorldView()));
+			record(ActionRecordType.WALK_DESTINATION, new ActionPayloads.WalkDestination(
+				pending.getInteractionId(),
+				resolved == null ? "unresolved" : changed ? "destination_changed" : "destination_unchanged",
+				pending.getClientTicksElapsed(),
+				resolved));
+			iterator.remove();
+		}
 	}
 
 	@Subscribe
@@ -307,6 +381,8 @@ public class ActionRecorderPlugin extends Plugin
 		{
 			record(ActionRecordType.GAME_TICK, new ActionPayloads.GameTick(playerSnapshot()));
 		}
+		captureCamera(settings);
+		captureObjectWatchStates();
 	}
 
 	private void recordInitialContainer(int containerId)
@@ -418,7 +494,9 @@ public class ActionRecorderPlugin extends Plugin
 	public void onVarbitChanged(VarbitChanged event)
 	{
 		CaptureSettingsSnapshot settings = activeCaptureSettings();
-		if (settings != null && settings.isCaptureVarbits())
+		if (settings != null && settings.isCaptureVarbits()
+			&& (settings.isIncludeClockVariables()
+				|| !ActionRecorderCapture.isClockNoise(event.getVarpId(), event.getVarbitId())))
 		{
 			record(ActionRecordType.VARBIT_CHANGE,
 				new ActionPayloads.VarbitChange(event.getVarpId(), event.getVarbitId(), event.getValue()));
@@ -492,7 +570,8 @@ public class ActionRecorderPlugin extends Plugin
 	private void recordGameObject(String change, GameObject object)
 	{
 		CaptureSettingsSnapshot settings = activeCaptureSettings();
-		if (settings == null || !settings.isCaptureGameObjects() || client.getLocalPlayer() == null)
+		if (settings == null || settings.getObjectCaptureMode() == ObjectCaptureMode.OFF
+			|| client.getLocalPlayer() == null)
 		{
 			return;
 		}
@@ -505,7 +584,23 @@ public class ActionRecorderPlugin extends Plugin
 		ObjectComposition composition = ActionRecorderCapture.resolveObjectComposition(
 			client.getObjectDefinition(object.getId()));
 		String[] actions = composition == null ? null : sanitizeActions(composition.getActions());
-		if (settings.isActionableObjectsOnly() && !ActionRecorderCapture.hasActionableAction(actions))
+		ActionPayloads.ObjectContextSnapshot contextSnapshot = new ActionPayloads.ObjectContextSnapshot(
+			change,
+			System.currentTimeMillis(),
+			client.getTickCount(),
+			object.getId(),
+			composition == null ? null : composition.getId(),
+			composition == null ? null : sanitizeSemanticText(composition.getName()),
+			locationSnapshot(location, object.getWorldView()),
+			actions);
+		bufferObjectContext(contextSnapshot);
+		observeObjectWatches(contextSnapshot);
+		if (settings.getObjectCaptureMode() == ObjectCaptureMode.INTERACTION_FOCUSED)
+		{
+			return;
+		}
+		if (settings.getObjectCaptureMode() == ObjectCaptureMode.ACTIONABLE_NEARBY
+			&& !ActionRecorderCapture.hasActionableAction(actions))
 		{
 			return;
 		}
@@ -516,6 +611,135 @@ public class ActionRecorderPlugin extends Plugin
 			composition == null ? null : sanitizeSemanticText(composition.getName()),
 			locationSnapshot(location, object.getWorldView()),
 			actions));
+	}
+
+	private void bufferObjectContext(ActionPayloads.ObjectContextSnapshot snapshot)
+	{
+		objectContext.addLast(snapshot);
+		long cutoff = System.currentTimeMillis() - OBJECT_CONTEXT_WINDOW_MS;
+		while (!objectContext.isEmpty()
+			&& (objectContext.size() > MAX_OBJECT_CONTEXT
+				|| objectContext.peekFirst().getObservedAtEpochMs() < cutoff))
+		{
+			objectContext.removeFirst();
+		}
+	}
+
+	private void observeObjectWatches(ActionPayloads.ObjectContextSnapshot snapshot)
+	{
+		LocationSnapshot observedLocation = snapshot.getObjectLocation();
+		if (observedLocation == null)
+		{
+			return;
+		}
+		for (PendingObjectWatch watch : pendingObjectWatches)
+		{
+			LocationSnapshot targetLocation = watch.getBefore().getObjectLocation();
+			if (targetLocation != null
+				&& targetLocation.getWorldX() == observedLocation.getWorldX()
+				&& targetLocation.getWorldY() == observedLocation.getWorldY()
+				&& targetLocation.getPlane() == observedLocation.getPlane())
+			{
+				watch.observe(snapshot.getChange(), snapshot.getObjectId());
+			}
+		}
+	}
+
+	private ActionPayloads.ObjectTargetSnapshot snapshotInteractionObject(MenuEntry entry,
+		CaptureSettingsSnapshot settings, boolean includeRecentContext)
+	{
+		if (settings.getObjectCaptureMode() == ObjectCaptureMode.OFF
+			|| !ActionRecorderCapture.isGameObjectAction(entry.getType()))
+		{
+			return null;
+		}
+		WorldView view = client.getWorldView(entry.getWorldViewId());
+		if (view == null)
+		{
+			view = client.getTopLevelWorldView();
+		}
+		if (view == null)
+		{
+			return null;
+		}
+		WorldPoint worldPoint = WorldPoint.fromScene(view, entry.getParam0(), entry.getParam1(), view.getPlane());
+		return snapshotObjectTarget(entry.getIdentifier(), locationSnapshot(worldPoint, view), includeRecentContext);
+	}
+
+	private ActionPayloads.ObjectTargetSnapshot snapshotObjectTarget(int objectId,
+		LocationSnapshot location, boolean includeRecentContext)
+	{
+		ObjectComposition base = client.getObjectDefinition(objectId);
+		ObjectComposition resolved = ActionRecorderCapture.resolveObjectComposition(base);
+		int transformVarbitId = base == null ? -1 : base.getVarbitId();
+		int transformVarpId = base == null ? -1 : base.getVarPlayerId();
+		Integer transformValue = transformVarbitId >= 0 ? client.getVarbitValue(transformVarbitId)
+			: transformVarpId >= 0 ? client.getVarpValue(transformVarpId) : null;
+		List<ActionPayloads.ObjectContextSnapshot> context = includeRecentContext
+			? recentObjectContext(location) : Collections.emptyList();
+		return new ActionPayloads.ObjectTargetSnapshot(
+			objectId,
+			resolved == null ? null : resolved.getId(),
+			resolved == null ? null : sanitizeSemanticText(resolved.getName()),
+			location,
+			resolved == null ? null : sanitizeActions(resolved.getActions()),
+			transformVarbitId,
+			transformVarpId,
+			transformValue,
+			context);
+	}
+
+	private List<ActionPayloads.ObjectContextSnapshot> recentObjectContext(LocationSnapshot target)
+	{
+		if (target == null)
+		{
+			return Collections.emptyList();
+		}
+		long cutoff = System.currentTimeMillis() - OBJECT_CONTEXT_WINDOW_MS;
+		List<ActionPayloads.ObjectContextSnapshot> context = new ArrayList<>();
+		for (ActionPayloads.ObjectContextSnapshot snapshot : objectContext)
+		{
+			LocationSnapshot location = snapshot.getObjectLocation();
+			if (snapshot.getObservedAtEpochMs() >= cutoff && location != null
+				&& location.getPlane() == target.getPlane()
+				&& Math.abs(location.getWorldX() - target.getWorldX()) <= OBJECT_CONTEXT_RADIUS
+				&& Math.abs(location.getWorldY() - target.getWorldY()) <= OBJECT_CONTEXT_RADIUS)
+			{
+				context.add(snapshot);
+			}
+		}
+		return context;
+	}
+
+	private void captureObjectWatchStates()
+	{
+		if (pendingObjectWatches.isEmpty())
+		{
+			return;
+		}
+		Iterator<PendingObjectWatch> iterator = pendingObjectWatches.iterator();
+		while (iterator.hasNext())
+		{
+			PendingObjectWatch watch = iterator.next();
+			watch.incrementGameTicksElapsed();
+			int currentObjectId = watch.getObservedObjectId() == null
+				? watch.getBefore().getObjectId() : watch.getObservedObjectId();
+			ActionPayloads.ObjectTargetSnapshot current = snapshotObjectTarget(
+				currentObjectId, watch.getBefore().getObjectLocation(), false);
+			boolean changed = watch.getObservedChange() != null
+				|| !java.util.Objects.equals(watch.getBefore().getResolvedObjectId(), current.getResolvedObjectId())
+				|| !java.util.Objects.equals(watch.getBefore().getTransformValue(), current.getTransformValue());
+			boolean timedOut = watch.getGameTicksElapsed() >= OBJECT_STATE_WATCH_TICKS;
+			if (!changed && !timedOut)
+			{
+				continue;
+			}
+			record(ActionRecordType.OBJECT_TARGET_STATE, new ActionPayloads.ObjectTargetState(
+				watch.getInteractionId(), watch.getObservedChange() != null
+					? "event_" + watch.getObservedChange() : changed ? "changed" : "unchanged_timeout",
+				watch.getGameTicksElapsed(), current));
+			iterator.remove();
+		}
 	}
 
 	private void recordGroundItem(String change, Tile tile, TileItem item, int beforeQuantity, int afterQuantity)
@@ -614,12 +838,116 @@ public class ActionRecorderPlugin extends Plugin
 			config.captureStats(),
 			config.captureGameMessages(),
 			config.captureGameState(),
-			config.captureGameObjects(),
-			config.actionableObjectsOnly(),
+			config.includeClockVariables(),
+			config.objectCaptureMode(),
 			config.captureGroundItems(),
 			config.ownedGroundItemsOnly(),
 			config.nearbyObjectRadius(),
+			config.captureKeyboardContext(),
+			config.keyboardCaptureMode(),
+			config.keyboardAllowlist(),
+			config.captureCameraChanges(),
 			config.flushEveryRecords());
+	}
+
+	private void captureCamera(CaptureSettingsSnapshot settings)
+	{
+		if (!settings.isCaptureCameraChanges())
+		{
+			previousCameraState = null;
+			return;
+		}
+		CameraState current = new CameraState(
+			client.getCameraYaw(),
+			client.getCameraPitch(),
+			client.getCameraYawTarget(),
+			client.getCameraPitchTarget());
+		if (current.equals(previousCameraState))
+		{
+			return;
+		}
+		record(ActionRecordType.CAMERA_CHANGE, new ActionPayloads.CameraChange(
+			previousCameraState == null,
+			current.getYaw(),
+			current.getPitch(),
+			current.getYawTarget(),
+			current.getPitchTarget()));
+		previousCameraState = current;
+	}
+
+	@Override
+	public void keyPressed(KeyEvent event)
+	{
+		boolean autoRepeat = !pressedKeys.add(event.getKeyCode());
+		queueKeyboardInput("pressed", event, autoRepeat);
+	}
+
+	@Override
+	public void keyReleased(KeyEvent event)
+	{
+		pressedKeys.remove(event.getKeyCode());
+		queueKeyboardInput("released", event, false);
+	}
+
+	@Override
+	public void keyTyped(KeyEvent event)
+	{
+		// Deliberately excluded: typed characters may contain chat, search text, or credentials.
+	}
+
+	@Override
+	public void focusLost()
+	{
+		pressedKeys.clear();
+	}
+
+	private void queueKeyboardInput(String eventType, KeyEvent event, boolean autoRepeat)
+	{
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null || !settings.isCaptureKeyboardContext()
+			|| !ActionRecorderCapture.shouldCaptureKey(
+				settings.getKeyboardCaptureMode(), settings.getKeyboardAllowlist(), event.getKeyCode()))
+		{
+			return;
+		}
+		int keyCode = event.getKeyCode();
+		String keyText = KeyEvent.getKeyText(keyCode);
+		int modifiersEx = event.getModifiersEx();
+		String modifiersText = KeyEvent.getModifiersExText(modifiersEx);
+		int keyLocation = event.getKeyLocation();
+		long eventWhen = event.getWhen();
+		clientThread.invokeLater(() -> captureKeyboardInput(eventType, keyCode, keyText,
+			modifiersEx, modifiersText, keyLocation, autoRepeat, eventWhen));
+	}
+
+	private void captureKeyboardInput(String eventType, int keyCode, String keyText,
+		int modifiersEx, String modifiersText, int keyLocation, boolean autoRepeat, long eventWhen)
+	{
+		CaptureSettingsSnapshot settings = activeCaptureSettings();
+		if (settings == null || !settings.isCaptureKeyboardContext()
+			|| client.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+		record(ActionRecordType.KEYBOARD_INPUT, new ActionPayloads.KeyboardInput(
+			eventType,
+			keyCode,
+			keyText,
+			modifiersEx,
+			modifiersText,
+			keyLocation,
+			autoRepeat,
+			eventWhen));
+	}
+
+	private void clearTransientState()
+	{
+		containerStates.clear();
+		pendingWalks.clear();
+		pendingObjectWatches.clear();
+		objectContext.clear();
+		pressedKeys.clear();
+		previousCameraState = null;
 	}
 
 	private static boolean isContainerCaptureEnabled(CaptureSettingsSnapshot settings, int containerId)
@@ -821,11 +1149,6 @@ public class ActionRecorderPlugin extends Plugin
 			|| type == ChatMessageType.LEVELUPMESSAGE;
 	}
 
-	private static boolean isPlayerAction(MenuAction action)
-	{
-		return action.name().contains("PLAYER");
-	}
-
 	private static boolean isNpcAction(MenuAction action)
 	{
 		return action.name().contains("NPC");
@@ -889,5 +1212,98 @@ public class ActionRecorderPlugin extends Plugin
 		int pendingObservationCount;
 		CaptureSettingsSnapshot captureSettings;
 		String message;
+	}
+
+	@Value
+	private static class CameraState
+	{
+		int yaw;
+		int pitch;
+		int yawTarget;
+		int pitchTarget;
+	}
+
+	private static class PendingWalk
+	{
+		private final long interactionId;
+		private final LocalPoint baselineDestination;
+		private int clientTicksElapsed;
+
+		private PendingWalk(long interactionId, LocalPoint baselineDestination)
+		{
+			this.interactionId = interactionId;
+			this.baselineDestination = baselineDestination;
+		}
+
+		private long getInteractionId()
+		{
+			return interactionId;
+		}
+
+		private LocalPoint getBaselineDestination()
+		{
+			return baselineDestination;
+		}
+
+		private int getClientTicksElapsed()
+		{
+			return clientTicksElapsed;
+		}
+
+		private void incrementClientTicksElapsed()
+		{
+			clientTicksElapsed++;
+		}
+	}
+
+	private static class PendingObjectWatch
+	{
+		private final long interactionId;
+		private final ActionPayloads.ObjectTargetSnapshot before;
+		private int gameTicksElapsed;
+		private String observedChange;
+		private Integer observedObjectId;
+
+		private PendingObjectWatch(long interactionId, ActionPayloads.ObjectTargetSnapshot before)
+		{
+			this.interactionId = interactionId;
+			this.before = before;
+		}
+
+		private long getInteractionId()
+		{
+			return interactionId;
+		}
+
+		private ActionPayloads.ObjectTargetSnapshot getBefore()
+		{
+			return before;
+		}
+
+		private int getGameTicksElapsed()
+		{
+			return gameTicksElapsed;
+		}
+
+		private String getObservedChange()
+		{
+			return observedChange;
+		}
+
+		private Integer getObservedObjectId()
+		{
+			return observedObjectId;
+		}
+
+		private void observe(String change, int objectId)
+		{
+			observedChange = change;
+			observedObjectId = objectId;
+		}
+
+		private void incrementGameTicksElapsed()
+		{
+			gameTicksElapsed++;
+		}
 	}
 }
