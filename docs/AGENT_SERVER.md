@@ -75,6 +75,10 @@ CLI environment variables:
 
 ## API Reference
 
+### Action Recorder
+
+Structured operator session controls are available at `/action-recorder/status`, `/action-recorder/start`, `/action-recorder/marker`, `/action-recorder/stop`, and `/action-recorder/sessions`. See [Action Recorder](ACTION_RECORDER.md) for the record schema, privacy boundary, asynchronous finalization, and Microbot Hub handoff workflow.
+
 ### Widget Endpoints
 
 #### GET /widgets/list
@@ -842,6 +846,7 @@ The `AgentHandler` base class provides: `sendJson()`, `parseQuery()`, `readJsonB
 | `agentserver/handler/ScriptHandler.java` | `/scripts` endpoints |
 | `agentserver/handler/ScriptSession.java` | Script execution session tracking |
 | `agentserver/handler/ScriptResultStore.java` | Static result store (Java API + HTTP) |
+| `agentserver/handler/ActionRecorderHandler.java` | `/action-recorder` session controls |
 | `util/widget/Rs2WidgetInspector.java` | Widget tree inspection logic |
 | `microbot-cli` (repo root) | Bash CLI wrapper |
 

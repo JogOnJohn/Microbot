@@ -150,6 +150,7 @@ public class AgentServerPlugin extends Plugin {
 				new SettingsHandler(gson),
 				new KeyboardHandler(gson),
 				new QuestHelperHandler(gson),
+				new ActionRecorderHandler(gson),
 				new StateMachineDebugHandler(gson),
 				new ProfileHandler(gson),
 				new DynamicScriptDeployHandler(gson)
