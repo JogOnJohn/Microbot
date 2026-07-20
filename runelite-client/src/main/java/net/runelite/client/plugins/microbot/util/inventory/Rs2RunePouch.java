@@ -20,6 +20,7 @@ import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
 import java.util.*;
 import java.util.function.BiPredicate;
+import java.util.function.IntUnaryOperator;
 import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.stream.Collectors;
@@ -61,6 +62,29 @@ public class Rs2RunePouch
 			i -> i,
 			i -> new ArrayList<>()
 		));
+
+	/**
+	 * Fingerprints the raw rune-pouch varbits used by spell availability checks.
+	 * This deliberately does not read {@link #slots}: pathfinder refreshes run off the client thread,
+	 * while the slot list is maintained by client-thread events.
+	 */
+	public static int getVarbitFingerprint()
+	{
+		return computeVarbitFingerprint(Microbot::getVarbitValue);
+	}
+
+	static int computeVarbitFingerprint(IntUnaryOperator varbitProvider)
+	{
+		int hash = 1;
+		for (int i = 0; i < NUM_SLOTS; i++)
+		{
+			hash = 31 * hash + RUNE_VARBITS[i];
+			hash = 31 * hash + varbitProvider.applyAsInt(RUNE_VARBITS[i]);
+			hash = 31 * hash + AMOUNT_VARBITS[i];
+			hash = 31 * hash + varbitProvider.applyAsInt(AMOUNT_VARBITS[i]);
+		}
+		return hash;
+	}
 
 	/**
 	 * Updates the internal state of the pouch from the current varbits.

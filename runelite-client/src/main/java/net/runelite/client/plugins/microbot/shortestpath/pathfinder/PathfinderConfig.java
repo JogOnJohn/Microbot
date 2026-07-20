@@ -15,6 +15,7 @@ import net.runelite.client.plugins.microbot.shortestpath.pathfinder.policy.Trans
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.magic.RuneFilter;
@@ -1765,6 +1766,7 @@ public class PathfinderConfig {
                 useBankItems,
                 useNpcs,
                 invFp,
+                Rs2RunePouch.getVarbitFingerprint(),
                 members,
                 Rs2Walker.disableTeleports,
                 Microbot.getVarbitValue(VarbitID.LEAGUE_TYPE),
