@@ -2,7 +2,6 @@ package net.runelite.client.plugins.microbot.util.inventory;
 
 import java.awt.Rectangle;
 import lombok.Getter;
-import lombok.Setter;
 import net.runelite.api.MenuAction;
 import net.runelite.api.Varbits;
 import net.runelite.api.events.VarbitChanged;
@@ -53,7 +52,7 @@ public class Rs2RunePouch
 	private static final List<Integer> RUNEPOUCH_LOADOUT_WIDGETS = Arrays.asList(34, 38, 41, 44, 46, 48, 50, 52, 54, 56); // New Loadout Child IDs
 
 	@Getter
-	private static final List<PouchSlot> slots = new ArrayList<>();
+	private static volatile List<PouchSlot> slots = emptySlotSnapshot();
 
 	@Getter
 	private static final Map<Integer, List<PouchSlot>> loadoutSlots = IntStream.range(0, NUM_SLOTS)
@@ -91,17 +90,19 @@ public class Rs2RunePouch
 	 */
 	public static void fullUpdate()
 	{
-		if (!isEmpty())
-		{
-			slots.clear();
-		}
+		replaceSlotsFromVarbits(Microbot::getVarbitValue);
+	}
+
+	static void replaceSlotsFromVarbits(IntUnaryOperator varbitProvider)
+	{
+		List<PouchSlot> updatedSlots = new ArrayList<>(NUM_SLOTS);
 		for (int i = 0; i < NUM_SLOTS; i++)
 		{
-			int rawRune = Microbot.getVarbitValue(RUNE_VARBITS[i]);
-			int rawQuantity = Microbot.getVarbitValue(AMOUNT_VARBITS[i]);
-			PouchSlot slot = new PouchSlot(Runes.byVarbitId(rawRune), rawQuantity);
-			slots.add(slot);
+			int rawRune = varbitProvider.applyAsInt(RUNE_VARBITS[i]);
+			int rawQuantity = varbitProvider.applyAsInt(AMOUNT_VARBITS[i]);
+			updatedSlots.add(new PouchSlot(Runes.byVarbitId(rawRune), rawQuantity));
 		}
+		slots = Collections.unmodifiableList(updatedSlots);
 	}
 
 	/**
@@ -117,7 +118,8 @@ public class Rs2RunePouch
                 break; // avoid index out of bounds
             }
 
-            PouchSlot slot = slots.get(i);
+            List<PouchSlot> currentSlots = slots;
+            PouchSlot slot = currentSlots.get(i);
             if (slot == null) {
                 continue; // skip null entries
             }
@@ -126,15 +128,29 @@ public class Rs2RunePouch
             int value = ev.getValue();
 
             if (varbitId == RUNE_VARBITS[i]) {
-                slot.setRune(Runes.byVarbitId(value));
+				List<PouchSlot> updatedSlots = new ArrayList<>(currentSlots);
+				updatedSlots.set(i, new PouchSlot(Runes.byVarbitId(value), slot.getQuantity()));
+				slots = Collections.unmodifiableList(updatedSlots);
                 break;
             }
             if (varbitId == AMOUNT_VARBITS[i]) {
-                slot.setQuantity(value);
+				List<PouchSlot> updatedSlots = new ArrayList<>(currentSlots);
+				updatedSlots.set(i, new PouchSlot(slot.getRune(), value));
+				slots = Collections.unmodifiableList(updatedSlots);
                 break;
             }
         }
     }
+
+	private static List<PouchSlot> emptySlotSnapshot()
+	{
+		List<PouchSlot> emptySlots = new ArrayList<>(NUM_SLOTS);
+		for (int i = 0; i < NUM_SLOTS; i++)
+		{
+			emptySlots.add(new PouchSlot(null, 0));
+		}
+		return Collections.unmodifiableList(emptySlots);
+	}
 
 	/**
 	 * Handles reading rune pouch loadouts from the bank interface widgets.
@@ -642,7 +658,6 @@ public class Rs2RunePouch
 	 * Represents a slot inside the rune pouch, containing a rune and its quantity.
 	 */
 	@Getter
-	@Setter
 	private static class PouchSlot
 	{
 		PouchSlot(Runes rune, int quantity)
@@ -651,7 +666,7 @@ public class Rs2RunePouch
 			this.quantity = quantity;
 		}
 
-		private Runes rune;
-		private int quantity;
+		private final Runes rune;
+		private final int quantity;
 	}
 }
