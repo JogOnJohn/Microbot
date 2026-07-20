@@ -39,6 +39,8 @@ final class PreferredTeleportAssistant
 
 	private final Client client;
 	private String lastAutoActivationKey;
+	private Set<WorldPoint> plannedTargets = Collections.emptySet();
+	private List<PohTransport> plannedPohChoices = Collections.emptyList();
 	private int cachedTick = Integer.MIN_VALUE;
 	private Optional<HighlightTarget> cachedTarget = Optional.empty();
 
@@ -65,6 +67,26 @@ final class PreferredTeleportAssistant
 		Pathfinder pathfinder = ShortestPathPlugin.getPathfinder();
 		List<WorldPoint> path = pathfinder == null ? null : pathfinder.getPath();
 		WorldPoint player = client.getLocalPlayer() == null ? null : client.getLocalPlayer().getWorldLocation();
+		Set<WorldPoint> targets = pathfinder == null
+			? Collections.emptySet()
+			: pathfinder.getTargets();
+		rememberPlannedPohChoices(targets, path != null && path.size() >= 2, findUpcomingPohTransports(
+			path,
+			player,
+			ShortestPathPlugin.getTransports()));
+
+		// A W330 route is a two-stage chain: enter the hosted house, then use a POH facility.
+		// While outside, the first edge correctly highlights the house tab. Once a facility menu is
+		// visible, prefer the later POH edge and keep it across the instance-load path recalculation.
+		for (PohTransport pohChoice : plannedPohChoices)
+		{
+			HighlightTarget choice = resolveDestinationChoice(pohChoice);
+			if (choice != null)
+			{
+				return Optional.of(choice);
+			}
+		}
+
 		Transport transport = findPreferredTransport(
 			path,
 			player,
@@ -124,8 +146,27 @@ final class PreferredTeleportAssistant
 	void reset()
 	{
 		lastAutoActivationKey = null;
+		plannedTargets = Collections.emptySet();
+		plannedPohChoices = Collections.emptyList();
 		cachedTick = Integer.MIN_VALUE;
 		cachedTarget = Optional.empty();
+	}
+
+	private void rememberPlannedPohChoices(Set<WorldPoint> targets, boolean hasComputedPath,
+		List<PohTransport> choices)
+	{
+		Set<WorldPoint> currentTargets = targets == null
+			? Collections.emptySet()
+			: new HashSet<>(targets);
+		if (!currentTargets.equals(plannedTargets))
+		{
+			plannedTargets = currentTargets;
+			plannedPohChoices = Collections.emptyList();
+		}
+		if (hasComputedPath)
+		{
+			plannedPohChoices = new ArrayList<>(choices);
+		}
 	}
 
 	private HighlightTarget resolveDestinationChoice(Transport transport)
@@ -256,6 +297,33 @@ final class PreferredTeleportAssistant
 		return null;
 	}
 
+	static List<PohTransport> findUpcomingPohTransports(List<WorldPoint> path, WorldPoint player,
+		Map<WorldPoint, Set<Transport>> transports)
+	{
+		if (path == null || path.size() < 2 || transports == null)
+		{
+			return Collections.emptyList();
+		}
+
+		List<PohTransport> choices = new ArrayList<>();
+		int startIndex = closestPathIndex(path, player);
+		for (int i = startIndex; i + 1 < path.size(); i++)
+		{
+			WorldPoint from = path.get(i);
+			WorldPoint to = path.get(i + 1);
+			if (from == null || to == null || from.distanceTo(to) <= 1)
+			{
+				continue;
+			}
+			Transport transport = matchTeleportByDestination(transports.get(from), to);
+			if (transport instanceof PohTransport && !choices.contains(transport))
+			{
+				choices.add((PohTransport) transport);
+			}
+		}
+		return choices;
+	}
+
 	static Transport matchTeleportByDestination(Set<Transport> candidates, WorldPoint destination)
 	{
 		if (candidates == null || destination == null)
@@ -370,7 +438,7 @@ final class PreferredTeleportAssistant
 		return null;
 	}
 
-	private static Widget findBestTextWidget(Widget root, String needle)
+	static Widget findBestTextWidget(Widget root, String needle)
 	{
 		if (!isVisible(root) || needle == null || needle.isEmpty())
 		{
