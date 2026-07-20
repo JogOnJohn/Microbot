@@ -726,20 +726,7 @@ public class PathfinderConfig {
                     world330Transports.size(),
                     world330TransportCount,
                     Rs2Player.getWorldLocation());
-            if (inWorld330HostedHouse) {
-                mergedTransports.remove(null);
-            }
-            for (var entry : world330Transports.entrySet()) {
-                if (entry.getKey() == null) {
-                    if (!inWorld330HostedHouse) {
-                        mergedTransports.put(null, new HashSet<>(entry.getValue()));
-                    }
-                    continue;
-                }
-                mergedTransports
-                        .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
-                        .addAll(entry.getValue());
-            }
+            mergeWorld330Transports(mergedTransports, world330Transports, inWorld330HostedHouse);
         }
 
         if (!usePoh) {
@@ -767,6 +754,26 @@ public class PathfinderConfig {
                     .addAll(entry.getValue());
         }
         return mergedTransports;
+    }
+
+    static void mergeWorld330Transports(Map<WorldPoint, Set<Transport>> mergedTransports,
+            Map<WorldPoint, Set<Transport>> world330Transports, boolean inWorld330HostedHouse) {
+        if (inWorld330HostedHouse) {
+            mergedTransports.remove(null);
+        }
+        for (var entry : world330Transports.entrySet()) {
+            if (entry.getKey() == null) {
+                if (!inWorld330HostedHouse) {
+                    mergedTransports
+                            .computeIfAbsent(null, k -> new HashSet<>())
+                            .addAll(entry.getValue());
+                }
+                continue;
+            }
+            mergedTransports
+                    .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
+                    .addAll(entry.getValue());
+        }
     }
 
     private boolean shouldUseWorld330MaxHouse() {
