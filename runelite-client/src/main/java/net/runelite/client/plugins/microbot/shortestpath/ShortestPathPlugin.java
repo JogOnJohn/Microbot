@@ -132,6 +132,12 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     private PathMapTooltipOverlay pathMapTooltipOverlay;
 
     @Inject
+    private PreferredTeleportOverlay preferredTeleportOverlay;
+
+    @Inject
+    private PreferredTeleportAssistant preferredTeleportAssistant;
+
+    @Inject
     private ClientToolbar clientToolbar;
 
     @Inject
@@ -251,6 +257,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         overlayManager.add(pathMinimapOverlay);
         overlayManager.add(pathMapOverlay);
         overlayManager.add(pathMapTooltipOverlay);
+        overlayManager.add(preferredTeleportOverlay);
         if (config.showETA()) {
             overlayManager.add(etaOverlayPanel);
         }
@@ -291,6 +298,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         overlayManager.remove(pathMinimapOverlay);
         overlayManager.remove(pathMapOverlay);
         overlayManager.remove(pathMapTooltipOverlay);
+        overlayManager.remove(preferredTeleportOverlay);
         overlayManager.remove(debugOverlayPanel);
         clientToolbar.removeNavigation(navButton);
         clientToolbar.removeNavigation(pohNavButton);
@@ -304,6 +312,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         pohPanel = null;
 
         shortestPathScript.shutdown();
+        preferredTeleportAssistant.reset();
 
         exit();
     }
@@ -609,6 +618,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     @Subscribe
     public void onGameTick(GameTick tick) {
         handlePendingLoginRefresh();
+        preferredTeleportAssistant.autoActivateVisibleChoice(config.autoSelectPreferredTeleport());
 
         if (Rs2Walker.getCurrentTarget() != null) {
             return;

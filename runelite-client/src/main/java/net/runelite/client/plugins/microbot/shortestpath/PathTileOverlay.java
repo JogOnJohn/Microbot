@@ -318,14 +318,17 @@ public class PathTileOverlay extends Overlay {
             // spell/item teleports; POH facility teleports (jewellery box, etc.) keyed under the house
             // anchor (the jump origin); and origin-less teleports like the world-330 house entry keyed
             // under null. This lets the label update from "house tab" to the actual PoH teleport.
-            // usableTeleports covers spell/item teleports and the origin-less world-330 house entry;
-            // transports.get(from) covers PoH facility teleports keyed under the house anchor. Do NOT
+            // transports.get(from) covers PoH facility teleports keyed under the house anchor;
+            // usableTeleports covers spell/item teleports and the origin-less world-330 house entry. Do NOT
             // look up transports.get(null): getTransports() is a ConcurrentHashMap, which throws on a
             // null key (and can never hold one anyway), so that call only ever NPE'd the overlay.
-            String info = matchTeleportByDestination(ShortestPathPlugin.getUsableTeleports(), to);
-            if (info == null && transports != null) {
-                info = matchTeleportByDestination(transports.get(from), to);
+            Transport preferred = transports == null ? null
+                    : PreferredTeleportAssistant.matchTeleportByDestination(transports.get(from), to);
+            if (preferred == null) {
+                preferred = PreferredTeleportAssistant.matchTeleportByDestination(
+                        ShortestPathPlugin.getUsableTeleports(), to);
             }
+            String info = preferred == null ? null : preferred.getDisplayInfo();
             if (info != null && !labels.contains(info)) {
                 labels.add(info);
             }
@@ -370,32 +373,6 @@ public class PathTileOverlay extends Overlay {
         graphics.drawString(text, x, y);
 
         return vertical_offset + (int) height + TRANSPORT_LABEL_GAP;
-    }
-
-    /**
-     * Returns the display name of the first teleport-like transport in {@code candidates} whose
-     * destination matches {@code destination}, or null. "Teleport-like" means a genuine teleport
-     * (spell/item/minigame) or a PoH facility teleport (jewellery box, nexus, mounted portals, and
-     * the world-330 house entry), so PoH routing labels update as the path progresses.
-     */
-    private String matchTeleportByDestination(Set<Transport> candidates, WorldPoint destination) {
-        if (candidates == null) {
-            return null;
-        }
-        for (Transport transport : candidates) {
-            if (!destination.equals(transport.getDestination())) {
-                continue;
-            }
-            if (transport.getType() != TransportType.POH
-                    && !TransportType.isTeleport(transport.getType(), transport.getOrigin())) {
-                continue;
-            }
-            String info = transport.getDisplayInfo();
-            if (info != null && !info.isEmpty()) {
-                return info;
-            }
-        }
-        return null;
     }
 
     public static Color generateGradient(float step) {

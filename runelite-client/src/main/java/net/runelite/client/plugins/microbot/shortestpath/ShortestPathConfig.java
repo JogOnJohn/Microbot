@@ -612,6 +612,30 @@ public interface ShortestPathConfig extends Config {
         return true;
     }
 
+    @ConfigItem(
+            keyName = "highlightPreferredTeleport",
+            name = "Highlight preferred teleport",
+            description = "Draw a blue box around the spell, item, or destination option selected by the current path.",
+            position = 7,
+            section = sectionDisplay
+    )
+    default boolean highlightPreferredTeleport() {
+        return true;
+    }
+
+    @ConfigItem(
+            keyName = "autoSelectPreferredTeleport",
+            name = "Auto-select teleport choice",
+            description = "Experimental: automatically selects the highlighted destination after its menu, dialogue, " +
+                    "jewellery box, or Portal Nexus interface is open. Does not cast spells or click teleport items.",
+            warning = "This setting clicks teleport destination choices automatically.",
+            position = 8,
+            section = sectionDisplay
+    )
+    default boolean autoSelectPreferredTeleport() {
+        return false;
+    }
+
     @ConfigSection(
             name = "Colours",
             description = "Colours for the path map, minimap and scene tiles",
