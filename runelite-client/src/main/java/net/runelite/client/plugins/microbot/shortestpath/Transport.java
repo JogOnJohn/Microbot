@@ -196,7 +196,15 @@ public class Transport {
      * Transport constructor with item requirements
      */
     public Transport(WorldPoint destination, String displayInfo, TransportType transportType, boolean isMember, int maxWildernessLevel, Set<Set<Integer>> itemIdRequirements) {
-        this(null, destination, displayInfo, transportType, isMember, 1);
+        this(destination, displayInfo, transportType, isMember, maxWildernessLevel, itemIdRequirements, 1);
+    }
+
+    /**
+     * Transport constructor with item requirements and an explicit duration.
+     */
+    public Transport(WorldPoint destination, String displayInfo, TransportType transportType, boolean isMember,
+            int maxWildernessLevel, Set<Set<Integer>> itemIdRequirements, int duration) {
+        this(null, destination, displayInfo, transportType, isMember, duration);
         this.maxWildernessLevel = maxWildernessLevel;
         this.itemIdRequirements = itemIdRequirements != null ? new HashSet<>(itemIdRequirements) : new HashSet<>();
     }
