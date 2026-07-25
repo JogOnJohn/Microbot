@@ -91,19 +91,6 @@ import org.lwjgl.opengl.GLUtil;
 import org.lwjgl.system.Callback;
 import org.lwjgl.system.Configuration;
 
-import javax.annotation.Nonnull;
-import javax.inject.Inject;
-import javax.swing.*;
-import java.awt.*;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
-import java.awt.image.DataBufferInt;
-import java.nio.*;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-
 @PluginDescriptor(
 	name = "GPU",
 	description = "Offloads rendering to GPU",
@@ -1527,8 +1514,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		}
 		catch (RuntimeException ex)
 		{
-			// Notice that for some machines the GPU plugin might crash after long session
-			// Pause all scripts if this happens to avoid getting stuck
+			// Pause scripts if the GPU plugin fails during a long session.
 			Microbot.pauseAllScripts.compareAndSet(false, true);
 			// this is always fatal
 			if (!canvas.isValid())
