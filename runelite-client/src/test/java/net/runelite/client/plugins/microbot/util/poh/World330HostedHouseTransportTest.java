@@ -5,6 +5,7 @@ import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class World330HostedHouseTransportTest {
 
@@ -14,5 +15,7 @@ public class World330HostedHouseTransportTest {
                 World330HostedHouse.POH_INSTANCE_ANCHOR);
 
         assertEquals(World330HostedHouse.ADVERTISED_HOUSE.getDuration(), transport.getDuration());
+        assertTrue("W330 access may be provided by a spell, so the transport must not require a tablet",
+                transport.getItemIdRequirements().isEmpty());
     }
 }

@@ -803,8 +803,7 @@ public class PathfinderConfig {
                     player.distanceTo2D(target), WORLD330_MIN_TARGET_DISTANCE, player, target);
             return false;
         }
-        return Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)
-                || (useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE));
+        return World330HostedHouse.ADVERTISED_HOUSE.canReachAdvertisementBoard(useBankItems);
     }
 
     private boolean isInWorld330HostedHouse() {
@@ -1286,7 +1285,7 @@ public class PathfinderConfig {
      */
     private boolean isTeleportationItemUsable(Transport transport) {
         if (transport instanceof World330HostedHouseTransport) {
-            return shouldUseWorld330MaxHouse() && hasRequiredItems(transport);
+            return shouldUseWorld330MaxHouse();
         }
         if (useTeleportationItems == TeleportationItem.NONE) return false;
         // Check consumable items configuration
