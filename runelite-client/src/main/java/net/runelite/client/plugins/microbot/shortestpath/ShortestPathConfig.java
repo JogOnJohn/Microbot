@@ -876,7 +876,7 @@ public interface ShortestPathConfig extends Config {
             section = sectionDeveloper
     )
     default boolean useLiveCollision() {
-        return true;
+        return false;
     }
 
     @ConfigItem(
