@@ -8,11 +8,11 @@ from the pinned upstream data. Runtime truth remains the parser in
 
 | Component | Repository | Commit |
 |---|---|---|
-| Tooling | `osrs-pathfinding/shortest-path-tooling` | `86fbe2197c2dd192db33896c7ca47ab5cef14929` |
-| Data submodule | `Skretzo/shortest-path` | `7e7e5bf94bbb155c2454bcdf8c1036dec0fd9a79` |
+| Tooling | `osrs-pathfinding/shortest-path-tooling` | `07c9463ab6bd55756d8f8630586ed4f82ee4256f` |
+| Data submodule | `Skretzo/shortest-path` | `e3dc7c5a621ca9cdd4c404ca4da5654b603286e7` |
 
 The paired Microbot `collision-map.zip` SHA-256 is
-`3e1658cf4bd1ad34832b42c3896df61a7fe6421f96758d046e4a8aa39cbbc40a`. This upstream revision
+`4cb2d04f84898fc2f90c055ab45a98d3960ce67f57c5ff8786ec3e4e450b3bdd`. This upstream revision
 changes only the collision archive: all 25 transport TSVs are unchanged from the previous pin.
 The converter verifies the paired local hash while collision compatibility remains independently
 validated by the endpoint ratchet and golden routes.
