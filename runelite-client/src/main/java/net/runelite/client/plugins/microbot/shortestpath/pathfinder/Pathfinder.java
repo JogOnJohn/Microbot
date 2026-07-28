@@ -57,7 +57,7 @@ public class Pathfinder implements Runnable {
     private static final int MAX_BLOCKED_TARGET_ACCEPT_RADIUS = 3;
 
     private final PathfinderConfig config;
-    private final CollisionMap map;
+    private CollisionMap map;
     private final boolean targetInWilderness;
 
     // Walking subgraph uses A* (boundary is a PQ keyed on f = g + Chebyshev heuristic),
@@ -84,7 +84,7 @@ public class Pathfinder implements Runnable {
     private final Queue<Node> pending = new PriorityQueue<>(256);
     private final Queue<Node> boundaryBackward = new PriorityQueue<>(4096, NODE_ORDER);
     private final Queue<Node> pendingBackward = new PriorityQueue<>(256);
-    private final VisitedTiles visited;
+    private VisitedTiles visited;
 
     private volatile List<WorldPoint> path = Collections.emptyList();
     private volatile List<WorldPoint> smoothedPath = Collections.emptyList();
@@ -108,17 +108,14 @@ public class Pathfinder implements Runnable {
     public Pathfinder(PathfinderConfig config, int start, Set<Integer> targets) {
         stats = new PathfinderStats();
         this.config = config;
-        this.map = config.getMap();
         this.start = start;
         this.targets = targets;
         this.targetsPacked = new int[targets.size()];
         this.targetAcceptRadius = new int[targets.size()];
         int idx = 0;
         for (Integer t : targets) {
-            this.targetAcceptRadius[idx] = computeTargetAcceptRadius(t);
             this.targetsPacked[idx++] = t;
         }
-        visited = new VisitedTiles(map);
         targetInWilderness = PathfinderConfig.isInWildernessPackedPoint(targets);
         wildernessLevel = 31;
         WebWalkLog.pf("created src={} dst={} config={}",
@@ -900,6 +897,17 @@ public class Pathfinder implements Runnable {
         WebWalkLog.pf("run_start src={} dst={} cutoffMs={}",
                 WorldPointUtil.toString(start), WorldPointUtil.toString(targets), config.getCalculationCutoffMillis());
         joinedPath = null;
+        // Pathfinder instances are commonly constructed on the client thread and submitted to the
+        // shortest-path executor. Resolve both ThreadLocal-backed objects here so the collision map,
+        // visited state and pinned live snapshot all belong to the search thread for this run.
+        map = config.getMap();
+        for (int i = 0; i < targetsPacked.length; i++) {
+            targetAcceptRadius[i] = computeTargetAcceptRadius(targetsPacked[i]);
+        }
+        visited = new VisitedTiles(map);
+        // Pin the live-collision snapshot for this whole search so a mid-search swap on the client
+        // thread cannot mix two scenes into one path. No-op when live collision is disabled.
+        map.beginSearch();
         try {
             stats.start();
             computeNetworkLandmarks();
