@@ -12,12 +12,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -75,7 +78,17 @@ public class TransportSyncGeneratedResourcesTest
 		Path generatedRoot = Paths.get(generatedProperty);
 		assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
 
-		CollisionMap collisionMap = new CollisionMap(SplitFlagMap.fromResources());
+		Properties provenance = loadProvenance(generatedRoot);
+		assertEquals("staged payload hash does not match provenance",
+			provenance.getProperty("generated_payload_sha256"), payloadSha256(generatedRoot));
+		assertEquals("staged collision map hash does not match provenance",
+			provenance.getProperty("candidate_collision_map_sha256"),
+			sha256(Files.readAllBytes(generatedRoot.resolve("collision-map.zip"))));
+		CollisionMap candidateCollisionMap;
+		try (InputStream stream = Files.newInputStream(generatedRoot.resolve("collision-map.zip")))
+		{
+			candidateCollisionMap = new CollisionMap(SplitFlagMap.fromZip(stream));
+		}
 		int totalRows = 0;
 		for (Map.Entry<String, TransportType> category : CATEGORIES.entrySet())
 		{
@@ -91,13 +104,152 @@ public class TransportSyncGeneratedResourcesTest
 			// Ratchet against the shipped collision map: a sync must not introduce transports
 			// whose endpoints land on fully blocked tiles (door-into-wall = incompatible
 			// transport/collision revisions). Existing offenders are tolerated but not added to.
-			int generatedBlocked = countBlockedEndpoints(generated, category.getValue(), collisionMap);
-			int baselineBlocked = countBlockedEndpoints(baseline, category.getValue(), collisionMap);
+			int generatedBlocked = countBlockedEndpoints(generated, category.getValue(), candidateCollisionMap);
+			int baselineBlocked = countBlockedEndpoints(baseline, category.getValue(), candidateCollisionMap);
 			assertTrue(filename + " added transports with collision-blocked endpoints: generated=" +
 				generatedBlocked + " baseline=" + baselineBlocked, generatedBlocked <= baselineBlocked);
 			totalRows += generatedRows;
 		}
+		validateLocalOnlyResources(generatedRoot);
 		assertTrue("expected the full transport catalog, parsed only " + totalRows + " rows", totalRows > 7_000);
+	}
+
+	private static Properties loadProvenance(Path generatedRoot) throws IOException
+	{
+		Properties properties = new Properties();
+		try (InputStream stream = Files.newInputStream(generatedRoot.resolve("sync-provenance.properties")))
+		{
+			properties.load(stream);
+		}
+		for (String key : Arrays.asList("tooling_commit", "data_commit", "manifest_sha256",
+			"baseline_collision_map_sha256", "candidate_collision_map_sha256", "generated_payload_sha256"))
+		{
+			assertTrue("missing provenance property " + key, !properties.getProperty(key, "").isBlank());
+		}
+		return properties;
+	}
+
+	private static String payloadSha256(Path root) throws IOException
+	{
+		List<String> filenames = new java.util.ArrayList<>(CATEGORIES.keySet());
+		filenames.addAll(Arrays.asList("npcs.tsv", "restrictions.tsv", "blocked_edges.tsv",
+			"dangerous_tiles.tsv", "collision-map.zip"));
+		java.util.Collections.sort(filenames);
+		MessageDigest digest = sha256Digest();
+		for (String filename : filenames)
+		{
+			digest.update(filename.getBytes(StandardCharsets.UTF_8));
+			digest.update((byte) 0);
+			digest.update(Files.readAllBytes(root.resolve(filename)));
+			digest.update((byte) 0);
+		}
+		return hex(digest.digest());
+	}
+
+	private static String sha256(byte[] bytes)
+	{
+		MessageDigest digest = sha256Digest();
+		return hex(digest.digest(bytes));
+	}
+
+	private static MessageDigest sha256Digest()
+	{
+		try
+		{
+			return MessageDigest.getInstance("SHA-256");
+		}
+		catch (NoSuchAlgorithmException e)
+		{
+			throw new IllegalStateException(e);
+		}
+	}
+
+	private static String hex(byte[] bytes)
+	{
+		StringBuilder result = new StringBuilder(bytes.length * 2);
+		for (byte value : bytes)
+		{
+			result.append(String.format("%02x", value & 0xff));
+		}
+		return result.toString();
+	}
+
+	private static void validateLocalOnlyResources(Path root) throws IOException
+	{
+		validateRows("npcs.tsv", Files.readAllLines(root.resolve("npcs.tsv"), StandardCharsets.UTF_8),
+			TransportType.NPC);
+		for (Map<String, String> row : parseFieldMaps(root.resolve("restrictions.tsv")))
+		{
+			assertNotNull("restriction did not parse", new Restriction(row));
+		}
+		validateCoordinateTable(root.resolve("blocked_edges.tsv"), 4, true);
+		validateCoordinateTable(root.resolve("dangerous_tiles.tsv"), 2, false);
+	}
+
+	private static List<Map<String, String>> parseFieldMaps(Path path) throws IOException
+	{
+		List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+		assertTrue(path.getFileName() + " is empty", !lines.isEmpty());
+		String[] headers = lines.get(0).replaceFirst("^#\\s?", "").split("\\t", -1);
+		List<Map<String, String>> rows = new java.util.ArrayList<>();
+		for (int lineNumber = 2; lineNumber <= lines.size(); lineNumber++)
+		{
+			String line = lines.get(lineNumber - 1);
+			if (line.isBlank() || line.startsWith("#"))
+			{
+				continue;
+			}
+			// Match Restriction.loadAllFromResources(): Java's default split drops trailing empties,
+			// so absent optional values are not inserted into the field map.
+			String[] fields = line.split("\\t");
+			assertTrue(path.getFileName() + ":" + lineNumber + " has excess fields", fields.length <= headers.length);
+			Map<String, String> row = new HashMap<>();
+			for (int i = 0; i < headers.length; i++)
+			{
+				if (i < fields.length)
+				{
+					row.put(headers[i], fields[i]);
+				}
+			}
+			rows.add(row);
+		}
+		return rows;
+	}
+
+	private static void validateCoordinateTable(Path path, int expectedColumns, boolean validateEdge)
+		throws IOException
+	{
+		List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+		assertTrue(path.getFileName() + " is empty", !lines.isEmpty());
+		Set<String> rows = new HashSet<>();
+		for (int lineNumber = 2; lineNumber <= lines.size(); lineNumber++)
+		{
+			String line = lines.get(lineNumber - 1);
+			if (line.isBlank() || line.startsWith("#"))
+			{
+				continue;
+			}
+			String[] fields = line.split("\\t", -1);
+			assertTrue(path.getFileName() + ":" + lineNumber + " missing columns", fields.length >= expectedColumns);
+			parseWorldPoint(fields[0], path, lineNumber);
+			if (validateEdge)
+			{
+				WorldPoint origin = parseWorldPoint(fields[0], path, lineNumber);
+				WorldPoint destination = parseWorldPoint(fields[1], path, lineNumber);
+				assertTrue(path.getFileName() + ":" + lineNumber + " edge is not adjacent",
+					origin.getPlane() == destination.getPlane() && origin.distanceTo2D(destination) == 1);
+				assertTrue(path.getFileName() + ":" + lineNumber + " invalid boolean", fields[2].matches("(?i:true|false)"));
+			}
+			assertTrue(path.getFileName() + ":" + lineNumber + " duplicate row", rows.add(line));
+		}
+	}
+
+	private static WorldPoint parseWorldPoint(String value, Path path, int lineNumber)
+	{
+		String[] coordinates = value.trim().split("\\s+");
+		assertEquals(path.getFileName() + ":" + lineNumber + " invalid coordinate", 3, coordinates.length);
+		return new WorldPoint(Integer.parseInt(coordinates[0]), Integer.parseInt(coordinates[1]),
+			Integer.parseInt(coordinates[2]));
 	}
 
 	private static int countBlockedEndpoints(List<String> lines, TransportType type, CollisionMap collisionMap)
