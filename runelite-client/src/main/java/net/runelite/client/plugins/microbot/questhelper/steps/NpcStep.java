@@ -33,6 +33,7 @@ import net.runelite.client.plugins.microbot.questhelper.requirements.Requirement
 import net.runelite.client.plugins.microbot.questhelper.steps.overlay.DirectionArrow;
 import net.runelite.client.plugins.microbot.questhelper.steps.tools.DefinedPoint;
 import net.runelite.client.plugins.microbot.questhelper.steps.tools.QuestPerspective;
+import net.runelite.client.plugins.microbot.questhelper.util.QuestStepIcon;
 import lombok.Setter;
 import net.runelite.api.*;
 import net.runelite.api.Point;
@@ -48,6 +49,7 @@ import net.runelite.client.util.ColorUtil;
 import javax.inject.Inject;
 import java.awt.*;
 import java.awt.geom.Line2D;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -350,10 +352,20 @@ public class NpcStep extends DetailedQuestStep
 					? IMAGE_Z_OFFSET
 					: (npc.getLogicalHeight() / 2);
 
-				Point imageLocation = npc.getCanvasImageLocation(icon, zOffset);
+				BufferedImage iconToUse = icon;
+				for (QuestStepIcon customIcon : customIcons)
+				{
+					if (customIcon.getTargetId() == npc.getId())
+					{
+						iconToUse = customIcon.getIcon();
+						break;
+					}
+				}
+
+				Point imageLocation = npc.getCanvasImageLocation(iconToUse, zOffset);
 				if (imageLocation != null)
 				{
-					OverlayUtil.renderImageLocation(graphics, imageLocation, icon);
+					OverlayUtil.renderImageLocation(graphics, imageLocation, iconToUse);
 				}
 			}
 		}
