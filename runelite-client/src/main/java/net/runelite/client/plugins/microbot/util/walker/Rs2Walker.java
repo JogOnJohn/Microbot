@@ -255,17 +255,6 @@ public class Rs2Walker {
     // route-progress state migrated to WalkerRouteState (see routeState)
     private static final java.util.Deque<WorldPoint> expectedTransportDestinations = new ArrayDeque<>();
     private static final Set<String> startupPhasesLogged = ConcurrentHashMap.newKeySet();
-    private static final Set<Integer> AL_KHARID_TOLL_GATE_OBJECT_IDS = Set.of(
-            net.runelite.api.ObjectID.CITY_GATE_2786,
-            net.runelite.api.ObjectID.CITY_GATE_2787,
-            net.runelite.api.ObjectID.CITY_GATE_2788,
-            net.runelite.api.ObjectID.CITY_GATE_2789);
-    private static final Set<WorldPoint> AL_KHARID_TOLL_GATE_POINTS = Set.of(
-            new WorldPoint(3267, 3227, 0),
-            new WorldPoint(3267, 3228, 0),
-            new WorldPoint(3268, 3227, 0),
-            new WorldPoint(3268, 3228, 0));
-
     /**
      * Max Chebyshev "radius" for Quetzal / near-destination checks — guards use {@code distanceTo2D &lt; OFFSET}.
      * {@link WorldPoint#distanceTo(WorldPoint)} delegates to {@link WorldPoint#distanceTo2D(WorldPoint)} when both
@@ -8614,7 +8603,6 @@ public class Rs2Walker {
         }
 
         List<Transport> orderedTransports = new ArrayList<>(transports);
-        orderedTransports.sort(Comparator.comparingInt(Rs2Walker::transportHandlingPreference));
 
         for (Transport transport : orderedTransports) {
             Collection<WorldPoint> worldPointCollections;
@@ -8977,10 +8965,8 @@ public class Rs2Walker {
                     final boolean allowClosedVariant = "Climb-down".equalsIgnoreCase(transportAction)
                             || "Climb down".equalsIgnoreCase(transportAction);
 
-                    final boolean allowAlKharidTollGateVariant = isAlKharidTollGateObjectId(transportObjectId);
                     List<TileObject> objects = Rs2GameObject.getAll(o -> {
                         if (o.getId() == transportObjectId) return true;
-                        if (allowAlKharidTollGateVariant && isAlKharidTollGateObjectId(o.getId())) return true;
                         Integer legacyClosed = OPEN_TO_CLOSED_MAPPINGS.get(transportObjectId);
                         if (legacyClosed != null && o.getId() == legacyClosed) return true;
                         if (!allowClosedVariant) return false;
@@ -9057,7 +9043,9 @@ public class Rs2Walker {
                         if (destWait == null) {
                             return false;
                         }
-                        boolean landedAfterObject = waitForPostHandleObjectLanding(transport, destWait, maxInclusive);
+                        int landingWaitMs = objectTransportLandingWaitMs(transport);
+                        boolean landedAfterObject = waitForPostHandleObjectLanding(
+                                transport, destWait, maxInclusive, landingWaitMs);
                         if (!landedAfterObject) {
                             WorldPoint afterInteraction = Rs2Player.getWorldLocation();
                             // Adjacent same-plane transports demand landing on the EXACT destination
@@ -9076,7 +9064,7 @@ public class Rs2Walker {
                             }
                             WebWalkLog.spWarn(
                                     "post-handleObject landing unresolved (timeout={}ms) dest={} at={}",
-                                    POST_HANDLE_OBJECT_LANDING_WAIT_MS,
+                                    landingWaitMs,
                                     compactWorldPoint(destWait),
                                     compactWorldPoint(afterInteraction));
                         }
@@ -9092,9 +9080,17 @@ public class Rs2Walker {
         return false;
     }
 
+    static int objectTransportLandingWaitMs(Transport transport) {
+        long durationTicks = transport == null ? 0L : Math.max(0L, transport.getDuration());
+        long durationWaitMs = durationTicks * 600L + 2_000L;
+        return (int) Math.min(Integer.MAX_VALUE,
+                Math.max(POST_HANDLE_OBJECT_LANDING_WAIT_MS, durationWaitMs));
+    }
+
     private static boolean waitForPostHandleObjectLanding(Transport transport,
                                                           WorldPoint destWait,
-                                                          int maxInclusive) {
+                                                          int maxInclusive,
+                                                          int landingWaitMs) {
         long waitStartedAt = System.currentTimeMillis();
         AtomicBoolean settledAwayFromAdjacentDestination = new AtomicBoolean(false);
         AtomicBoolean settledNearAdjacentDestination = new AtomicBoolean(false);
@@ -9123,7 +9119,7 @@ public class Rs2Walker {
                 return true;
             }
             return false;
-        }, POST_HANDLE_OBJECT_LANDING_WAIT_MS);
+        }, landingWaitMs);
 
         if (settledNearAdjacentDestination.get()) {
             WebWalkLog.spInfo("post-handleObject adjacent landing accepted | dest={} at={}",
@@ -9689,55 +9685,6 @@ public class Rs2Walker {
         return points;
     }
 
-    private static int transportHandlingPreference(Transport transport) {
-        if (isAlKharidTollGateTransport(transport) && transport.getCurrencyAmount() > 0) {
-            return 1;
-        }
-        return 0;
-    }
-
-    private static boolean isAlKharidTollGateTransport(Transport transport) {
-        return transport != null
-                && isAlKharidTollGateObjectId(transport.getObjectId())
-                && AL_KHARID_TOLL_GATE_POINTS.contains(transport.getOrigin())
-                && AL_KHARID_TOLL_GATE_POINTS.contains(transport.getDestination());
-    }
-
-    private static boolean isAlKharidTollGateObjectId(int objectId) {
-        return AL_KHARID_TOLL_GATE_OBJECT_IDS.contains(objectId);
-    }
-
-    private static boolean isPayTollAction(String action) {
-        return action != null && action.toLowerCase(Locale.ROOT).startsWith("pay-toll");
-    }
-
-    private static boolean handleAlKharidTollGate(Transport transport) {
-        if (Rs2Player.isMoving()) {
-            Rs2Player.waitForWalking();
-        }
-
-        boolean confirmed = false;
-        if (sleepUntil(Rs2Dialogue::hasSelectAnOption, 2500)) {
-            confirmed = Rs2Dialogue.clickOption("Yes, okay", "Yes");
-        }
-
-        boolean reachedDestination = sleepUntil(() -> {
-            WorldPoint now = Rs2Player.getWorldLocation();
-            WorldPoint destination = transport.getDestination();
-            return now != null
-                    && destination != null
-                    && now.getPlane() == destination.getPlane()
-                    && now.distanceTo2D(destination) <= 1;
-        }, POST_HANDLE_OBJECT_LANDING_WAIT_MS);
-        if (!confirmed && !reachedDestination) {
-            WebWalkLog.spWarn(
-                    "Al Kharid toll gate confirmation unresolved dest={} at={}",
-                    compactWorldPoint(transport.getDestination()),
-                    compactWorldPoint(Rs2Player.getWorldLocation()));
-        }
-        return true;
-    }
-
     private static boolean handleObjectExceptions(Transport transport, TileObject tileObject) {
         for (Map.Entry<Integer, Integer> entry : OPEN_TO_CLOSED_MAPPINGS.entrySet()) {
             final int closedTrapdoorId = entry.getKey();
@@ -9767,10 +9714,6 @@ public class Rs2Walker {
                 }
                 return true;
             }
-        }
-
-        if (isAlKharidTollGateTransport(transport) && isPayTollAction(transport.getAction())) {
-            return handleAlKharidTollGate(transport);
         }
 
         //Al kharid broken wall will animate once and then stop and then animate again

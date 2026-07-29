@@ -62,6 +62,27 @@ public class Rs2WalkerUnitTest {
     }
 
     @Test
+    public void objectTransportLandingWaitHonorsDurationWithDefaultFloor() {
+        Transport ordinary = new Transport(
+                new WorldPoint(3123, 3360, 0),
+                new WorldPoint(3123, 3361, 0),
+                "Door",
+                TransportType.TRANSPORT,
+                false,
+                3);
+        Transport slowGate = new Transport(
+                new WorldPoint(3267, 3228, 0),
+                new WorldPoint(3268, 3228, 0),
+                "Gate",
+                TransportType.TRANSPORT,
+                false,
+                9);
+
+        assertEquals(5_000, Rs2Walker.objectTransportLandingWaitMs(ordinary));
+        assertEquals(7_400, Rs2Walker.objectTransportLandingWaitMs(slowGate));
+    }
+
+    @Test
     public void adjacentTransportSuppression_onlyAdjacentSamePlaneTransports() {
         Transport door = new Transport(
                 new WorldPoint(3123, 3360, 0),
