@@ -232,6 +232,16 @@ public class PathfinderConfig {
     public PathfinderConfig(SplitFlagMap mapData, Map<WorldPoint, Set<Transport>> transports,
                             List<Restriction> restrictions,
                             Client client, ShortestPathConfig config) {
+        this(mapData, transports, restrictions, client, config, true);
+    }
+
+    /**
+     * Alternate constructor for deterministic offline tooling and tests. Persisted learned edges belong to
+     * a user's live client state and must not silently alter checked-in route baselines.
+     */
+    public PathfinderConfig(SplitFlagMap mapData, Map<WorldPoint, Set<Transport>> transports,
+                            List<Restriction> restrictions,
+                            Client client, ShortestPathConfig config, boolean loadPersistedLearnedEdges) {
         this.mapData = mapData;
         this.map = ThreadLocal.withInitial(() -> new CollisionMap(this.mapData, this.liveCollisionOverlay));
         this.allTransports = Collections.synchronizedMap(new HashMap<>());
@@ -242,7 +252,9 @@ public class PathfinderConfig {
         this.blockedTransportEdgesPacked = ConcurrentHashMap.newKeySet();
         addStaticBlockedEdges();
         this.learnedBlockedEdgesFile = LearnedBlockedEdges.defaultFile();
-        loadLearnedBlockedEdges();
+        if (loadPersistedLearnedEdges) {
+            loadLearnedBlockedEdges();
+        }
         this.client = client;
         this.config = config;
         //START microbot variables

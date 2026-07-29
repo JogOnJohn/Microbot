@@ -679,7 +679,8 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             liveCollisionPersistence.deleteAllAsync();
         } else if (client != null) {
             // Flag is off, so no active store — delete the on-disk tree via a transient handle.
-            final LiveCollisionPersistence tmpStore = new LiveCollisionPersistence(client.getRevision());
+            final LiveCollisionPersistence tmpStore = new LiveCollisionPersistence(
+                    client.getRevision(), SplitFlagMap.collisionResourceSha256());
             tmpStore.deleteAllNow();
             tmpStore.shutdown();
         }
@@ -734,7 +735,8 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                 // Seed the freshly enabled store with everything learned in earlier sessions for this cache
                 // revision, then let live captures accumulate on top.
                 if (liveCollisionPersistence == null) {
-                    liveCollisionPersistence = new LiveCollisionPersistence(client.getRevision());
+                    liveCollisionPersistence = new LiveCollisionPersistence(
+                            client.getRevision(), SplitFlagMap.collisionResourceSha256());
                 }
                 liveCollisionPersistence.loadIntoAsync(overlay);
             } else if (liveCollisionPersistence != null) {

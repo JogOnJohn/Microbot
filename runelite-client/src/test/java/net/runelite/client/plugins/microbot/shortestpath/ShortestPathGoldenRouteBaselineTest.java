@@ -168,7 +168,7 @@ public class ShortestPathGoldenRouteBaselineTest
 			}
 		}
 		PathfinderConfig config = new PathfinderConfig(
-			collisionMap, filtered, Collections.emptyList(), null, null);
+			collisionMap, filtered, Collections.emptyList(), null, null, false);
 		try
 		{
 			Field cutoff = PathfinderConfig.class.getDeclaredField("calculationCutoffMillis");
