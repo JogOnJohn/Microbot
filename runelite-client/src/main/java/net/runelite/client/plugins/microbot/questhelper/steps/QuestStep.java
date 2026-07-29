@@ -40,6 +40,7 @@ import net.runelite.client.plugins.microbot.questhelper.steps.widget.Spell;
 import net.runelite.client.plugins.microbot.questhelper.steps.widget.SpellWidgetHighlight;
 import net.runelite.client.plugins.microbot.questhelper.steps.widget.WidgetHighlight;
 import net.runelite.client.plugins.microbot.questhelper.tools.VisibilityHelper;
+import net.runelite.client.plugins.microbot.questhelper.util.QuestStepIcon;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -135,6 +136,8 @@ public abstract class QuestStep implements Module
 	@Getter
 	protected int iconItemID = -1;
 	protected BufferedImage icon;
+	@NonNull
+	protected final List<QuestStepIcon> customIcons = new ArrayList<>();
 
 	@Getter
 	protected final QuestHelper questHelper;
@@ -519,6 +522,11 @@ public abstract class QuestStep implements Module
 		return this;
 	}
 
+	public void addCustomIcon(QuestStepIcon questStepIcon)
+	{
+		customIcons.add(questStepIcon);
+	}
+
 	public void makeWorldOverlayHint(Graphics2D graphics, QuestHelperPlugin plugin)
 	{
 	}
@@ -584,6 +592,11 @@ public abstract class QuestStep implements Module
 		else if (icon == null)
 		{
 			icon = getQuestImage();
+		}
+
+		for (QuestStepIcon customIcon : customIcons)
+		{
+			customIcon.setup(itemManager);
 		}
 	}
 
