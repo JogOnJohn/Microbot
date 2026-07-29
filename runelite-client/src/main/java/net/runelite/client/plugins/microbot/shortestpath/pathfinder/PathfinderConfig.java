@@ -18,6 +18,7 @@ import net.runelite.client.plugins.microbot.shortestpath.pathfinder.policy.Trans
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.magic.RuneFilter;
@@ -231,6 +232,16 @@ public class PathfinderConfig {
     public PathfinderConfig(SplitFlagMap mapData, Map<WorldPoint, Set<Transport>> transports,
                             List<Restriction> restrictions,
                             Client client, ShortestPathConfig config) {
+        this(mapData, transports, restrictions, client, config, true);
+    }
+
+    /**
+     * Alternate constructor for deterministic offline tooling and tests. Persisted learned edges belong to
+     * a user's live client state and must not silently alter checked-in route baselines.
+     */
+    public PathfinderConfig(SplitFlagMap mapData, Map<WorldPoint, Set<Transport>> transports,
+                            List<Restriction> restrictions,
+                            Client client, ShortestPathConfig config, boolean loadPersistedLearnedEdges) {
         this.mapData = mapData;
         this.map = ThreadLocal.withInitial(() -> new CollisionMap(this.mapData, this.liveCollisionOverlay));
         this.allTransports = Collections.synchronizedMap(new HashMap<>());
@@ -241,7 +252,9 @@ public class PathfinderConfig {
         this.blockedTransportEdgesPacked = ConcurrentHashMap.newKeySet();
         addStaticBlockedEdges();
         this.learnedBlockedEdgesFile = LearnedBlockedEdges.defaultFile();
-        loadLearnedBlockedEdges();
+        if (loadPersistedLearnedEdges) {
+            loadLearnedBlockedEdges();
+        }
         this.client = client;
         this.config = config;
         //START microbot variables
@@ -396,6 +409,7 @@ public class PathfinderConfig {
      */
     public void refreshTeleports(int packedLocation, int wildernessLevel) {
         Set<Transport> usableWildyTeleports = new HashSet<>(usableTeleports.size());
+        emitTeleportCandidates(packedLocation, wildernessLevel);
         if (ignoreTeleportAndItems) return;
 
         for (Transport teleport : usableTeleports) {
@@ -964,20 +978,7 @@ public class PathfinderConfig {
                     world330Transports.size(),
                     world330TransportCount,
                     Rs2Player.getWorldLocation());
-            if (inWorld330HostedHouse) {
-                mergedTransports.remove(null);
-            }
-            for (var entry : world330Transports.entrySet()) {
-                if (entry.getKey() == null) {
-                    if (!inWorld330HostedHouse) {
-                        mergedTransports.put(null, new HashSet<>(entry.getValue()));
-                    }
-                    continue;
-                }
-                mergedTransports
-                        .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
-                        .addAll(entry.getValue());
-            }
+            mergeWorld330Transports(mergedTransports, world330Transports, inWorld330HostedHouse);
         }
 
         if (!usePoh) {
@@ -1007,6 +1008,26 @@ public class PathfinderConfig {
         return mergedTransports;
     }
 
+    static void mergeWorld330Transports(Map<WorldPoint, Set<Transport>> mergedTransports,
+            Map<WorldPoint, Set<Transport>> world330Transports, boolean inWorld330HostedHouse) {
+        if (inWorld330HostedHouse) {
+            mergedTransports.remove(null);
+        }
+        for (var entry : world330Transports.entrySet()) {
+            if (entry.getKey() == null) {
+                if (!inWorld330HostedHouse) {
+                    mergedTransports
+                            .computeIfAbsent(null, k -> new HashSet<>())
+                            .addAll(entry.getValue());
+                }
+                continue;
+            }
+            mergedTransports
+                    .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
+                    .addAll(entry.getValue());
+        }
+    }
+
     private boolean shouldUseWorld330MaxHouse() {
         return shouldUseWorld330MaxHouse(null);
     }
@@ -1033,8 +1054,7 @@ public class PathfinderConfig {
                     player.distanceTo2D(target), WORLD330_MIN_TARGET_DISTANCE, player, target);
             return false;
         }
-        return Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)
-                || (useBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE));
+        return World330HostedHouse.ADVERTISED_HOUSE.canReachAdvertisementBoard(useBankItems);
     }
 
     private boolean isInWorld330HostedHouse() {
@@ -1206,7 +1226,48 @@ public class PathfinderConfig {
                 .orElse(0);
     }
 
+    // --- runtime transport blocklist ------------------------------------------------------------
+    // Transports whose EXECUTION failed at the object (spirit tree offering no such destination
+    // because the player's farmable tree isn't grown, glider/canoe menus refusing, ...). The data
+    // layer cannot model per-player farming states, so the first attempt may legitimately fail —
+    // but re-picking the same dead transport on every recalc strands the walker (live: Karamja
+    // routes kept selecting the ungrown Brimhaven spirit tree). Blocked entries are rejected by
+    // useTransport for a cooldown, mirroring PohTeleports' failed-teleport blocklist.
+    private static final Map<String, Long> runtimeBlockedTransports = new ConcurrentHashMap<>();
+    private static final long RUNTIME_TRANSPORT_BLOCK_MS = 10 * 60_000L;
+
+    private static String runtimeBlockKey(Transport t) {
+        WorldPoint d = t.getDestination();
+        return t.getType() + "@" + (d == null ? "null" : d.getX() + "," + d.getY() + "," + d.getPlane());
+    }
+
+    public static void blockTransportTemporarily(Transport t, String reason) {
+        if (t == null) {
+            return;
+        }
+        runtimeBlockedTransports.put(runtimeBlockKey(t), System.currentTimeMillis() + RUNTIME_TRANSPORT_BLOCK_MS);
+        Microbot.log("[Walker] blocking transport for " + (RUNTIME_TRANSPORT_BLOCK_MS / 60_000) + "min: "
+                + (t.getDisplayInfo() == null || t.getDisplayInfo().isEmpty() ? runtimeBlockKey(t) : t.getDisplayInfo())
+                + " (" + reason + ")");
+    }
+
+    private static boolean isTransportRuntimeBlocked(Transport t) {
+        Long until = runtimeBlockedTransports.get(runtimeBlockKey(t));
+        if (until == null) {
+            return false;
+        }
+        if (System.currentTimeMillis() >= until) {
+            runtimeBlockedTransports.remove(runtimeBlockKey(t));
+            return false;
+        }
+        return true;
+    }
+
     private boolean useTransport(Transport transport) {
+        if (isTransportRuntimeBlocked(transport)) {
+            log.debug("Transport ( O: {} D: {} ) is runtime-blocked after a failed execution", transport.getOrigin(), transport.getDestination());
+            return false;
+        }
         // Check if the feature flag is disabled
         if (!isFeatureEnabled(transport)) {
             log.debug("Transport Type {} is disabled by feature flag", transport.getType());
@@ -1475,7 +1536,7 @@ public class PathfinderConfig {
      */
     private boolean isTeleportationItemUsable(Transport transport) {
         if (transport instanceof World330HostedHouseTransport) {
-            return shouldUseWorld330MaxHouse() && hasRequiredItems(transport);
+            return shouldUseWorld330MaxHouse();
         }
         if (useTeleportationItems == TeleportationItem.NONE) return false;
         // Check consumable items configuration
@@ -1487,6 +1548,7 @@ public class PathfinderConfig {
 
     /** Dedupe for {@link #emitTeleportAudit}: hash of the last audit outcome logged. */
     private volatile int lastTeleportAuditHash = 0;
+    private volatile int lastTeleportCandidateHash = 0;
 
     /**
      * Logs (INFO, deduped on change) the inventory-teleport availability picture after a refresh:
@@ -1497,19 +1559,50 @@ public class PathfinderConfig {
      */
     private void emitTeleportAudit(List<String> rejected) {
         Set<String> usableNames = new TreeSet<>();
+        Set<String> usableSpellNames = new TreeSet<>();
         for (Transport t : usableTeleports) {
             if (t.getType() == TELEPORTATION_ITEM) {
                 usableNames.add(describeTeleport(t));
+            } else if (t.getType() == TELEPORTATION_SPELL) {
+                usableSpellNames.add(describeTeleport(t));
             }
         }
         Collections.sort(rejected);
-        int hash = Objects.hash(rejected, usableNames);
+        int hash = Objects.hash(rejected, usableNames, usableSpellNames);
         if (hash == lastTeleportAuditHash) {
             return;
         }
         lastTeleportAuditHash = hash;
-        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={}",
-                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames);
+        WebWalkLog.teleportAudit("carried-but-rejected={} usableItemTeleports({})={} usableSpellTeleports({})={}",
+                rejected.isEmpty() ? "none" : rejected, usableNames.size(), usableNames,
+                usableSpellNames.size(), usableSpellNames);
+    }
+
+    private void emitTeleportCandidates(int packedLocation, int wildernessLevel) {
+        Set<String> focused = new TreeSet<>();
+        for (Transport teleport : usableTeleports) {
+            if (teleport.getType() != TELEPORTATION_SPELL
+                    && !(teleport instanceof World330HostedHouseTransport)) {
+                continue;
+            }
+            boolean allowed = !ignoreTeleportAndItems
+                    && wildernessLevel <= teleport.getMaxWildernessLevel();
+            focused.add(describeTeleport(teleport)
+                    + " type=" + teleport.getType()
+                    + " duration=" + teleport.getDuration()
+                    + " maxWild=" + teleport.getMaxWildernessLevel()
+                    + " initialCost=" + (distanceBeforeUsingTeleport + teleport.getDuration())
+                    + " allowed=" + allowed);
+        }
+        int hash = Objects.hash(packedLocation, wildernessLevel, ignoreTeleportAndItems,
+                distanceBeforeUsingTeleport, focused);
+        if (hash == lastTeleportCandidateHash) {
+            return;
+        }
+        lastTeleportCandidateHash = hash;
+        WebWalkLog.teleportCandidates("attach={} wilderness={} globallyDisabled={} distanceBefore={} focused({})={}",
+                WorldPointUtil.toString(packedLocation), wildernessLevel, ignoreTeleportAndItems,
+                distanceBeforeUsingTeleport, focused.size(), focused);
     }
 
     private String describeTeleport(Transport t) {
@@ -1527,6 +1620,7 @@ public class PathfinderConfig {
      * drifted or a gate this doesn't model (e.g. currency) rejected it.
      */
     private String describeTeleportRejection(Transport t) {
+        if (isTransportRuntimeBlocked(t)) return "runtime-blocked-after-failed-execution";
         if (!isFeatureEnabled(t)) return "feature-toggle:" + t.getType();
         if (t.isMembers() && !client.getWorldType().contains(WorldType.MEMBERS)) return "members-world";
         if (!hasRequiredLevels(t)) return "skill-levels";
@@ -1923,6 +2017,7 @@ public class PathfinderConfig {
                 useBankItems,
                 useNpcs,
                 invFp,
+                Rs2RunePouch.getVarbitFingerprint(),
                 members,
                 Rs2Walker.disableTeleports,
                 Microbot.getVarbitValue(VarbitID.LEAGUE_TYPE),

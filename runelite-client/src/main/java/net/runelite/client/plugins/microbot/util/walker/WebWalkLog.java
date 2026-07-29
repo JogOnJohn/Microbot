@@ -102,12 +102,21 @@ public final class WebWalkLog {
     }
 
     /**
-     * Inventory-teleport availability audit from PathfinderConfig refresh: item teleports the player
-     * carries that were rejected from usableTeleports, and why. INFO (visible in client.log, unlike
-     * cfg) but hash-deduped by the caller so it only logs when the outcome changes.
+     * Teleport availability audit from PathfinderConfig refresh: carried item teleports rejected
+     * from usableTeleports, plus the item and spell teleports that passed. INFO (visible in
+     * client.log, unlike cfg) but hash-deduped by the caller so it only logs on change.
      */
     public static void teleportAudit(String fmt, Object... args) {
         LOG.info("[WebWalk] tp_audit | " + fmt, args);
+    }
+
+    /** Targeted origin-less teleport availability and pathfinder queue lifecycle. INFO for live route diagnosis. */
+    public static void teleportCandidates(String fmt, Object... args) {
+        LOG.info("[WebWalk] tp_candidates | " + fmt, args);
+    }
+
+    public static void teleportQueue(String fmt, Object... args) {
+        LOG.info("[WebWalk] tp_queue | " + fmt, args);
     }
 
     /** Which teleport transports a freshly computed path actually uses — choice vs availability. INFO, deduped by caller. */

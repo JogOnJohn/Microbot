@@ -99,6 +99,17 @@ public class QuestScript extends Script {
      * transition from in-dialogue to not-in-dialogue; zero means no cooldown.
      */
     private long dialogueCooldownEndsAt = 0;
+    /** Throttle for the dialogue space-step diagnostic line. */
+    private long lastDialogueSpaceDiagAtMs = 0;
+    /** Last game-response chat line (GAMEMESSAGE/SPAM/MESBOX/DIALOG) — see onChatMessage. */
+    private volatile long lastGameMessageAtMs = 0;
+
+    /** Cheap inventory content hash so an item appearing/disappearing counts as a click response. */
+    private static int inventoryFingerprint() {
+        return Rs2Inventory.all().stream()
+                .mapToInt(i -> i == null ? 0 : (i.getId() * 31 + i.getQuantity()))
+                .sum();
+    }
 
 
 
@@ -190,10 +201,15 @@ public class QuestScript extends Script {
                         getQuestHelperPlugin().getSelectedQuest().isCompleted()).orElse(null)) {
                     if (Rs2Widget.isWidgetVisible(ComponentID.DIALOG_OPTION_OPTIONS) && getQuestHelperPlugin().getSelectedQuest().getQuest().getId() != Quest.COOKS_ASSISTANT.getId() && !Rs2Bank.isOpen()) {
                         boolean hasOption = Rs2Dialogue.handleQuestOptionDialogueSelection();
+                        // This whole block was previously silent — a Creature of Fenkenstrain start
+                        // spun 70s of dialogue-space-steps with no way to tell which branch ran.
+                        Microbot.log(Level.INFO, "[QuestHelper] dialogue options visible; questOptionSelected=" + hasOption
+                                + " options=" + Rs2Dialogue.getDialogueOptions().stream().map(w -> w == null ? "null" : w.getText()).collect(java.util.stream.Collectors.toList()));
                         //if there is no quest option in the dialogue, just click player location to remove
                         // the dialogue to avoid getting stuck in an infinite loop of dialogues
                         if (!hasOption) {
                             if (Rs2Dialogue.acceptQuestStartDialogue()) {
+                                Microbot.log(Level.INFO, "[QuestHelper] accepted quest-start dialogue option");
                                 return;
                             }
                             if (getQuestHelperPlugin().getSelectedQuest() != null &&
@@ -202,6 +218,7 @@ public class QuestScript extends Script {
                                 Rs2Dialogue.keyPressForDialogueOption(1); // presses option 1
                                 sleep(1200,1800);
                             }
+                            Microbot.log(Level.INFO, "[QuestHelper] no matching dialogue option; dismissing dialogue via canvas click");
                             Rs2Walker.walkFastCanvas(Rs2Player.getWorldLocation());
                         }
                         return;
@@ -221,6 +238,16 @@ public class QuestScript extends Script {
 
                     if (Rs2Dialogue.isInDialogue() && dialogueStartedStep == questStep) {
                         Rs2Walker.clearWalkingRoute("quest-helper:dialogue-space-step");
+                        // Space only advances click-to-continue dialogue. When this branch repeats
+                        // without progress, the throttled state line below shows WHY space isn't
+                        // working (e.g. an option menu the options branch didn't recognise).
+                        long nowDialogue = System.currentTimeMillis();
+                        if (nowDialogue - lastDialogueSpaceDiagAtMs > 5_000) {
+                            lastDialogueSpaceDiagAtMs = nowDialogue;
+                            Microbot.log(Level.INFO, "[QuestHelper] dialogue space-step state: hasContinue=" + Rs2Dialogue.hasContinue()
+                                    + " optionsWidgetVisible=" + Rs2Widget.isWidgetVisible(ComponentID.DIALOG_OPTION_OPTIONS)
+                                    + " text='" + Rs2Dialogue.getDialogueText() + "'");
+                        }
                         Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
                         return;
                     } else {
@@ -1516,9 +1543,15 @@ public class QuestScript extends Script {
             // entry the server rejects produces NO response at all. The old code ignored this
             // wait's result, so a dead click burned the 5s timeout and was still marked handled,
             // and the step re-clicked forever (The Golem exam-centre bookcase). Verify a response
-            // (movement, animation, or a dialogue opening) and fall back to a genuine canvas
-            // click, which lets the client resolve the menu itself.
-            boolean responded = sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue(), 3000);
+            // and fall back to a genuine canvas click, which lets the client resolve the menu
+            // itself. Response = movement, animation, dialogue, a game chat line, or an inventory
+            // change — Search-style interactions respond with ONLY the last two (live: cupboard
+            // 5157 looped six re-clicks because chat/inventory responses were invisible here).
+            final long objectClickAtMs = System.currentTimeMillis();
+            final int invBeforeClick = inventoryFingerprint();
+            boolean responded = sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue()
+                    || lastGameMessageAtMs >= objectClickAtMs
+                    || inventoryFingerprint() != invBeforeClick, 3000);
             if (!responded && itemId == -1) {
                 responded = retryObjectClickViaCanvas(object, objectAction);
             }
@@ -1562,8 +1595,12 @@ public class QuestScript extends Script {
         if (Rs2AntibanSettings.naturalMouse) {
             Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
         }
+        final long retryClickAtMs = System.currentTimeMillis();
+        final int invBeforeRetry = inventoryFingerprint();
         Microbot.getMouse().click(point);
-        return sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue(), 3000);
+        return sleepUntil(() -> Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Dialogue.isInDialogue()
+                || lastGameMessageAtMs >= retryClickAtMs
+                || inventoryFingerprint() != invBeforeRetry, 3000);
     }
 
     /** Whether {@code action} is the object's first (left-click/default) menu option. */
@@ -1770,5 +1807,19 @@ public class QuestScript extends Script {
     public void onChatMessage(ChatMessage chatMessage) {
         if (chatMessage.getMessage().equalsIgnoreCase("I can't reach that!"))
             unreachableTarget = true;
+        // Game-response timestamp for the object-step click verification: Search-style interactions
+        // respond ONLY with a chat line ("You search the cupboard..."), no movement/animation/
+        // dialogue — the old predicate read those as "no response" and re-clicked forever
+        // (Creature of Fenkenstrain cupboard 5157, six re-click cycles in the live log).
+        switch (chatMessage.getType()) {
+            case GAMEMESSAGE:
+            case SPAM:
+            case MESBOX:
+            case DIALOG:
+                lastGameMessageAtMs = System.currentTimeMillis();
+                break;
+            default:
+                break;
+        }
     }
 }

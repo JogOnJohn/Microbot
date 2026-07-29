@@ -4,6 +4,11 @@ Written 2026-07-12 by Claude after reviewing, amending, and extending Codex's fo
 Read alongside [SHORTEST_PATH_DATA_SYNC_PLAN.md](SHORTEST_PATH_DATA_SYNC_PLAN.md) (the
 authoritative plan) and [TRANSPORT_SCHEMA.md](TRANSPORT_SCHEMA.md) (the contract inventory).
 
+The reusable converter and one-command upstream checkout workflow now live in the public
+[`JogOnJohn/microbot-shortest-path-sync`](https://github.com/JogOnJohn/microbot-shortest-path-sync)
+repository. `scripts/transport_sync/` remains a vendored integration snapshot so Microbot can pin
+the exact converter, overrides, JVM validator inputs, and resource adoption in the same commit.
+
 ## Review verdict (of Codex's foundation, commits `ccda6..a499a`)
 
 The foundation matches the plan. Verified directly against `Transport.java`'s parse code:
@@ -121,3 +126,30 @@ Duration deltas remain protected: local wins unless deliberately accepted.
 2. **Periodic pin re-check**: when upstream moves, run the refresh procedure above.
 3. `Region override` (League) rows remain retained-but-unsupported; revisit only if Microbot
    models league regions.
+
+## Post-PR #1824 repair (2026-07-29)
+
+The client merge exposed assumptions that the original pipeline did not make atomic. The repair
+branch `repair/shortest-path-post-1824` now addresses them:
+
+- pins tooling `07c9463ab6bd55756d8f8630586ed4f82ee4256f` and data
+  `e3dc7c5a621ca9cdd4c404ca4da5654b603286e7`, paired with collision SHA-256
+  `4cb2d04f84898fc2f90c055ab45a98d3960ce67f57c5ff8786ec3e4e450b3bdd`;
+- stages `collision-map.zip` with every catalog and writes payload/pin provenance hashes;
+- requires an explicit fresh `-PtransportSyncGeneratedDir=...`; the validator loads that staged
+  collision map and parses the four Microbot-only resources as well as managed transports;
+- restores object-transport landing waits to `max(5000ms, Duration * 600ms + 2000ms)`, so the
+  gate-190 duration overrides affect runtime behavior again;
+- makes offline route tests opt out of the user's persisted learned-blocked-edge file;
+- includes the static collision-map hash in live-collision persistence identity;
+- removes the obsolete Al Kharid toll-dialogue special case and updates its baseline test to the
+  current free `Open Gate` objects 44050/44051.
+
+PR #1824's transport data was audited semantically against both its pre-merge parent and the new
+official pin. Official upstream now contains all useful unique additions. The only eight PR-only
+identities left are the superseded Al Kharid `Pay-toll(10gp)` / quest-gated `Open` rows using object
+IDs 2786-2789; they must not be restored over the current 44050/44051 rows.
+
+The public wrapper now generates first, passes that exact output directory into the JVM validator,
+and runs the golden/resource tests. Use `-SkipMicrobotValidation` only for converter development;
+its warning means the output is not release-ready.

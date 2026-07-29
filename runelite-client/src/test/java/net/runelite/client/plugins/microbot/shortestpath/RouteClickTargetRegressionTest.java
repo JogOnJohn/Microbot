@@ -54,7 +54,7 @@ public class RouteClickTargetRegressionTest {
     private static List<WorldPoint> computeRawPath(WorldPoint start, WorldPoint goal) {
         HashMap<WorldPoint, Set<Transport>> transports = Transport.loadAllFromResources();
         PathfinderConfig config = new PathfinderConfig(collisionMap, transports,
-                Collections.emptyList(), null, null);
+                Collections.emptyList(), null, null, false);
         try {
             java.lang.reflect.Field f = PathfinderConfig.class.getDeclaredField("calculationCutoffMillis");
             f.setAccessible(true);

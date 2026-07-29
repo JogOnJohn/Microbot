@@ -1,6 +1,5 @@
 package net.runelite.client.plugins.microbot.shortestpath;
 
-import net.runelite.api.Quest;
 import net.runelite.api.VarPlayer;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
@@ -199,30 +198,17 @@ public class ShortestPathCoreTest {
 	}
 
 	@Test
-	public void testAlKharidTollGateTransportsLoaded() {
+	public void testAlKharidGateTransportsLoaded() {
 		HashMap<WorldPoint, Set<Transport>> transports = Transport.loadAllFromResources();
 
-		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_SOUTH, AL_KHARID_GATE_EAST_SOUTH,
-				"Pay-toll(10gp)", 10, false);
-		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_NORTH, AL_KHARID_GATE_EAST_NORTH,
-				"Pay-toll(10gp)", 10, false);
-		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_SOUTH, AL_KHARID_GATE_WEST_SOUTH,
-				"Pay-toll(10gp)", 10, false);
-		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_NORTH, AL_KHARID_GATE_WEST_NORTH,
-				"Pay-toll(10gp)", 10, false);
-
-		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_SOUTH, AL_KHARID_GATE_EAST_SOUTH,
-				"Open", 0, true);
-		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_NORTH, AL_KHARID_GATE_EAST_NORTH,
-				"Open", 0, true);
-		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_SOUTH, AL_KHARID_GATE_WEST_SOUTH,
-				"Open", 0, true);
-		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_NORTH, AL_KHARID_GATE_WEST_NORTH,
-				"Open", 0, true);
+		assertGateTransport(transports, AL_KHARID_GATE_WEST_SOUTH, AL_KHARID_GATE_EAST_SOUTH, 44050);
+		assertGateTransport(transports, AL_KHARID_GATE_EAST_SOUTH, AL_KHARID_GATE_WEST_SOUTH, 44050);
+		assertGateTransport(transports, AL_KHARID_GATE_WEST_NORTH, AL_KHARID_GATE_EAST_NORTH, 44051);
+		assertGateTransport(transports, AL_KHARID_GATE_EAST_NORTH, AL_KHARID_GATE_WEST_NORTH, 44051);
 	}
 
 	@Test
-	public void testAlKharidTollGateIsEdgeBlockedNotTileRestricted() {
+	public void testAlKharidGateIsEdgeBlockedNotTileRestricted() {
 		Set<Integer> gateTiles = new HashSet<>(Arrays.asList(
 				WorldPointUtil.packWorldPoint(AL_KHARID_GATE_WEST_SOUTH),
 				WorldPointUtil.packWorldPoint(AL_KHARID_GATE_WEST_NORTH),
@@ -310,25 +296,22 @@ public class ShortestPathCoreTest {
 		return lumbridgeHomeTeleport.get();
 	}
 
-	private static void assertTollGateTransport(HashMap<WorldPoint, Set<Transport>> transports,
-			WorldPoint origin, WorldPoint destination, String action, int currencyAmount, boolean princeAliRequired) {
+	private static void assertGateTransport(HashMap<WorldPoint, Set<Transport>> transports,
+			WorldPoint origin, WorldPoint destination, int objectId) {
 		Optional<Transport> match = transports.getOrDefault(origin, Collections.emptySet()).stream()
 				.filter(t -> destination.equals(t.getDestination()))
-				.filter(t -> action.equals(t.getAction()))
+				.filter(t -> "Open".equals(t.getAction()))
 				.filter(t -> "Gate".equals(t.getName()))
+				.filter(t -> objectId == t.getObjectId())
 				.findFirst();
 
-		assertTrue("Missing Al Kharid toll gate transport " + action + " from " + origin + " to " + destination,
+		assertTrue("Missing current Al Kharid gate transport from " + origin + " to " + destination,
 				match.isPresent());
 		Transport transport = match.get();
 		assertEquals("Gate transport should use normal TRANSPORT type",
 				TransportType.TRANSPORT, transport.getType());
-		assertEquals("Unexpected gate currency amount", currencyAmount, transport.getCurrencyAmount());
-		if (currencyAmount > 0) {
-			assertEquals("Unexpected gate currency name", "Coins", transport.getCurrencyName());
-		}
-		assertEquals("Unexpected Prince Ali Rescue requirement on gate transport",
-				princeAliRequired, transport.getQuests().containsKey(Quest.PRINCE_ALI_RESCUE));
+		assertEquals("Modern Al Kharid gate should not charge coins", 0, transport.getCurrencyAmount());
+		assertTrue("Modern Al Kharid gate should not require Prince Ali Rescue", transport.getQuests().isEmpty());
 	}
 
 	@Test
@@ -737,7 +720,8 @@ public class ShortestPathCoreTest {
 				allTransports,
 				Collections.emptyList(),
 				null,
-				null
+				null,
+				false
 		);
 		try {
 			java.lang.reflect.Field f = PathfinderConfig.class.getDeclaredField("calculationCutoffMillis");
@@ -766,7 +750,8 @@ public class ShortestPathCoreTest {
 				allTransports,
 				Collections.emptyList(),
 				null,
-				null
+				null,
+				false
 		);
 		try {
 			java.lang.reflect.Field f = PathfinderConfig.class.getDeclaredField("calculationCutoffMillis");
@@ -929,7 +914,8 @@ public class ShortestPathCoreTest {
 				new HashMap<>(),
 				Collections.emptyList(),
 				null,
-				null
+				null,
+				false
 		);
 		try {
 			java.lang.reflect.Field f = PathfinderConfig.class.getDeclaredField("calculationCutoffMillis");

@@ -137,6 +137,12 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     private PathMapTooltipOverlay pathMapTooltipOverlay;
 
     @Inject
+    private PreferredTeleportOverlay preferredTeleportOverlay;
+
+    @Inject
+    private PreferredTeleportAssistant preferredTeleportAssistant;
+
+    @Inject
     private ClientToolbar clientToolbar;
 
     @Inject
@@ -256,6 +262,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         overlayManager.add(pathMinimapOverlay);
         overlayManager.add(pathMapOverlay);
         overlayManager.add(pathMapTooltipOverlay);
+        overlayManager.add(preferredTeleportOverlay);
         if (config.showETA()) {
             overlayManager.add(etaOverlayPanel);
         }
@@ -305,6 +312,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         overlayManager.remove(pathMinimapOverlay);
         overlayManager.remove(pathMapOverlay);
         overlayManager.remove(pathMapTooltipOverlay);
+        overlayManager.remove(preferredTeleportOverlay);
         overlayManager.remove(debugOverlayPanel);
         clientToolbar.removeNavigation(navButton);
         clientToolbar.removeNavigation(pohNavButton);
@@ -318,6 +326,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         pohPanel = null;
 
         shortestPathScript.shutdown();
+        preferredTeleportAssistant.reset();
 
         exit();
     }
@@ -434,7 +443,14 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             "bankTripWhenCacheUnavailable",
             "preferNonConsumableTeleportAndSpells",
             "preferTransportToTarget",
-            "maxSimilarTransportDistance"
+            "maxSimilarTransportDistance",
+            // per-destination spirit tree toggles (SpiritTreeDestinationsPanel) — a toggle must
+            // rebuild transports immediately or the old route keeps using the disabled tree
+            "spiritTreeEtceteria",
+            "spiritTreeBrimhaven",
+            "spiritTreePortSarim",
+            "spiritTreeHosidius",
+            "spiritTreeFarmingGuild"
     );
     private static final String RELOAD_TRANSPORT_DEFINITIONS_KEY = "reloadTransportDefinitions";
     private static final String RESET_LEARNED_COLLISION_KEY = "resetLearnedCollision";
@@ -663,7 +679,8 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             liveCollisionPersistence.deleteAllAsync();
         } else if (client != null) {
             // Flag is off, so no active store — delete the on-disk tree via a transient handle.
-            final LiveCollisionPersistence tmpStore = new LiveCollisionPersistence(client.getRevision());
+            final LiveCollisionPersistence tmpStore = new LiveCollisionPersistence(
+                    client.getRevision(), SplitFlagMap.collisionResourceSha256());
             tmpStore.deleteAllNow();
             tmpStore.shutdown();
         }
@@ -718,7 +735,8 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                 // Seed the freshly enabled store with everything learned in earlier sessions for this cache
                 // revision, then let live captures accumulate on top.
                 if (liveCollisionPersistence == null) {
-                    liveCollisionPersistence = new LiveCollisionPersistence(client.getRevision());
+                    liveCollisionPersistence = new LiveCollisionPersistence(
+                            client.getRevision(), SplitFlagMap.collisionResourceSha256());
                 }
                 liveCollisionPersistence.loadIntoAsync(overlay);
             } else if (liveCollisionPersistence != null) {
@@ -823,6 +841,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     @Subscribe
     public void onGameTick(GameTick tick) {
         handlePendingLoginRefresh();
+        preferredTeleportAssistant.autoActivateVisibleChoice(config.autoSelectPreferredTeleport());
         refreshLiveCollision();
 
         if (Rs2Walker.getCurrentTarget() != null) {

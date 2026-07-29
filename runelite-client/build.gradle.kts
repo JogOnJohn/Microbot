@@ -219,10 +219,13 @@ tasks.register<Test>("validateTransportSync") {
     testClassesDirs = sourceSets.test.get().output.classesDirs
     classpath = sourceSets.test.get().runtimeClasspath
     include("**/TransportSyncGeneratedResourcesTest.class")
-    systemProperty(
-        "microbot.transport.generated.dir",
-        rootProject.layout.projectDirectory.dir("build/transport-sync/generated").asFile.absolutePath
-    )
+    doFirst {
+        val generatedDir = providers.gradleProperty("transportSyncGeneratedDir").orNull
+            ?: throw GradleException(
+                "validateTransportSync requires -PtransportSyncGeneratedDir=<fresh converter output>"
+            )
+        systemProperty("microbot.transport.generated.dir", file(generatedDir).absolutePath)
+    }
     useJUnit()
 
     testLogging {

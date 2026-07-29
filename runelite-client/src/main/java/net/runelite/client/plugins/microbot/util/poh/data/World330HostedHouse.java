@@ -4,9 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ObjectID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
@@ -35,6 +39,14 @@ public enum World330HostedHouse implements PohTeleport {
     private static final int SORT_ASCENDING_SPRITE = 1050;
     private static final int MAX_ADVERTISED_HOST_ATTEMPTS = 8;
     public static final WorldPoint POH_INSTANCE_ANCHOR = new WorldPoint(1877, 7052, 1);
+
+    enum HouseTeleportAction {
+        NONE,
+        TABLET_DEFAULT,
+        TABLET_OUTSIDE,
+        SPELL_DEFAULT,
+        SPELL_OUTSIDE
+    }
 
     @Override
     public boolean execute() {
@@ -75,7 +87,7 @@ public enum World330HostedHouse implements PohTeleport {
     }
 
     private boolean enterHostedHouse() {
-        if (!isNearHouseAdvertisement() && !breakHouseTablet()) {
+        if (!isNearHouseAdvertisement() && !teleportOutsideToAdvertisement()) {
             return false;
         }
         if (!isAdvertisementWidgetOpen() && !openAdvertisementBoard()) {
@@ -102,20 +114,61 @@ public enum World330HostedHouse implements PohTeleport {
         return POH_INSTANCE_ANCHOR;
     }
 
+    public boolean canReachAdvertisementBoard(boolean includeBankItems) {
+        boolean nearAdvertisement = isNearHouseAdvertisement();
+        boolean inventoryTablet = Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE);
+        boolean bankTablet = includeBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE);
+        boolean spellCastable = Rs2Magic.canCast(Rs2Spells.TELEPORT_TO_HOUSE);
+        return hasAdvertisementAccess(nearAdvertisement, inventoryTablet, bankTablet, spellCastable);
+    }
+
+    static boolean hasAdvertisementAccess(boolean nearAdvertisement, boolean inventoryTablet,
+            boolean bankTablet, boolean spellCastable) {
+        return nearAdvertisement || inventoryTablet || bankTablet || spellCastable;
+    }
+
     private boolean isNearHouseAdvertisement() {
         return Microbot.getRs2TileObjectCache().query()
                 .withId(ObjectID.HOUSE_ADVERTISEMENT)
                 .nearest() != null;
     }
 
-    private boolean breakHouseTablet() {
-        if (!Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE)) {
-            return false;
+    private boolean teleportOutsideToAdvertisement() {
+        boolean inventoryTablet = Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE);
+        boolean spellCastable = Rs2Magic.canCast(Rs2Spells.TELEPORT_TO_HOUSE);
+        boolean outsideIsDefault = Microbot.getVarbitValue(VarbitID.POH_TELE_TOGGLE) == 1;
+        HouseTeleportAction action = chooseHouseTeleportAction(
+                inventoryTablet, spellCastable, outsideIsDefault);
+
+        boolean teleportStarted;
+        switch (action) {
+            case TABLET_DEFAULT:
+                teleportStarted = Rs2Inventory.interact(ItemID.POH_TABLET_TELEPORTTOHOUSE, "Break");
+                break;
+            case TABLET_OUTSIDE:
+                teleportStarted = Rs2Inventory.interact(ItemID.POH_TABLET_TELEPORTTOHOUSE, "Outside");
+                break;
+            case SPELL_DEFAULT:
+                teleportStarted = Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
+                break;
+            case SPELL_OUTSIDE:
+                teleportStarted = Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE, "outside", 2);
+                break;
+            default:
+                return false;
         }
-        if (!Rs2Inventory.interact(ItemID.POH_TABLET_TELEPORTTOHOUSE, "Break")) {
-            return false;
+        return teleportStarted && sleepUntil(this::isNearHouseAdvertisement, 12000);
+    }
+
+    static HouseTeleportAction chooseHouseTeleportAction(boolean inventoryTablet,
+            boolean spellCastable, boolean outsideIsDefault) {
+        if (inventoryTablet) {
+            return outsideIsDefault ? HouseTeleportAction.TABLET_DEFAULT : HouseTeleportAction.TABLET_OUTSIDE;
         }
-        return sleepUntil(this::isNearHouseAdvertisement, 12000);
+        if (spellCastable) {
+            return outsideIsDefault ? HouseTeleportAction.SPELL_DEFAULT : HouseTeleportAction.SPELL_OUTSIDE;
+        }
+        return HouseTeleportAction.NONE;
     }
 
     private boolean openAdvertisementBoard() {

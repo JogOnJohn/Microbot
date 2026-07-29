@@ -197,7 +197,8 @@ public class PathfinderBenchmarkTest {
 			new HashMap<>(),
 			Collections.emptyList(),
 			null,
-			null);
+			null,
+			false);
 		setCalculationCutoff(config, 10_000);
 		return config;
 	}
@@ -208,7 +209,8 @@ public class PathfinderBenchmarkTest {
 			allTransports,
 			Collections.emptyList(),
 			null,
-			null);
+			null,
+			false);
 		setCalculationCutoff(config, 10_000);
 		for (Map.Entry<WorldPoint, Set<Transport>> entry : allTransports.entrySet()) {
 			if (entry.getKey() == null) {

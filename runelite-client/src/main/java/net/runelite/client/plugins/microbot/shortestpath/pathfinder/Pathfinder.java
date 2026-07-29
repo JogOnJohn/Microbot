@@ -7,6 +7,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
 import net.runelite.client.plugins.microbot.shortestpath.WorldPointUtil;
+import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
 import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 
 import java.util.*;
@@ -45,6 +46,15 @@ public class Pathfinder implements Runnable {
     // Primitive view of targets — iterated on every popped node in run().
     // Avoids autoboxing vs. iterating Set<Integer>.
     private final int[] targetsPacked;
+    // Parallel to targetsPacked: Chebyshev radius at which a target counts as reached. 0 for
+    // walkable goals (exact tile required). Goals on blocked tiles (object/NPC tiles — no cardinal
+    // exit in the collision map) can never be popped by the search, so exact-match-only made every
+    // such pathfind flood the entire reachable map until time-cutoff (observed: 1.4-2.1M nodes with
+    // bestLast already adjacent to the goal), and let teleport-chain partials beat the trivial
+    // walk-up. For those goals the radius is the smallest ring around the goal containing any
+    // walkable tile, so the search exits the moment it genuinely stands next to the target.
+    private final int[] targetAcceptRadius;
+    private static final int MAX_BLOCKED_TARGET_ACCEPT_RADIUS = 3;
 
     private final PathfinderConfig config;
     private CollisionMap map;
@@ -81,6 +91,8 @@ public class Pathfinder implements Runnable {
     private volatile boolean pathNeedsUpdate = false;
     private volatile boolean smoothed = false;
     private volatile Node bestLastNode;
+    private int focusedTeleportsEnqueued;
+    private int focusedTeleportsExpanded;
     /** When set, {@link #getPath()} returns this list (bidirectional join or early exact hit). */
     private volatile List<WorldPoint> joinedPath;
     /**
@@ -99,6 +111,7 @@ public class Pathfinder implements Runnable {
         this.start = start;
         this.targets = targets;
         this.targetsPacked = new int[targets.size()];
+        this.targetAcceptRadius = new int[targets.size()];
         int idx = 0;
         for (Integer t : targets) {
             this.targetsPacked[idx++] = t;
@@ -110,6 +123,80 @@ public class Pathfinder implements Runnable {
                 WorldPointUtil.toString(this.targets),
                 config
         );
+    }
+
+    /**
+     * The start node's actual wilderness band, using the same ratchet checks as the search loop.
+     * Searches previously seeded {@code refreshTeleports(start, 31)} ("assume deepest wilderness")
+     * and immediately re-refreshed at the real level on the first expanded node — a wasted double
+     * teleport refresh on EVERY pathfind, and the confusing tp_candidates wilderness=31
+     * allowed=false -> wilderness=0 allowed=true log pairs on all non-wilderness walks. Computing
+     * the start band once up front is identical to what the loop's first iteration produced.
+     */
+    private int initialWildernessLevel(int startPacked) {
+        if (!PathfinderConfig.isInWilderness(startPacked)) {
+            return 0;
+        }
+        if (!config.isInLevel20Wilderness(startPacked)) {
+            return 20;
+        }
+        if (!config.isInLevel30Wilderness(startPacked)) {
+            return 30;
+        }
+        return 31;
+    }
+
+    /**
+     * 0 when the goal tile is walkable (exact match required). For blocked goal tiles, the
+     * smallest Chebyshev ring around the goal containing at least one walkable same-plane tile,
+     * capped at {@link #MAX_BLOCKED_TARGET_ACCEPT_RADIUS} (multi-tile objects put the clicked
+     * tile up to a ring or two inside the footprint). Acceptance only fires on tiles the search
+     * actually pops, so a walkable-but-unreachable ring tile can never produce a false arrival.
+     */
+    private int computeTargetAcceptRadius(int targetPacked) {
+        int tx = WorldPointUtil.unpackWorldX(targetPacked);
+        int ty = WorldPointUtil.unpackWorldY(targetPacked);
+        int tz = WorldPointUtil.unpackWorldPlane(targetPacked);
+        if (!map.isBlocked(tx, ty, tz)) {
+            return 0;
+        }
+        for (int r = 1; r <= MAX_BLOCKED_TARGET_ACCEPT_RADIUS; r++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dy = -r; dy <= r; dy++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) != r) {
+                        continue;
+                    }
+                    if (!map.isBlocked(tx + dx, ty + dy, tz)) {
+                        WebWalkLog.pf("goal_tile_blocked target={} acceptRadius={}",
+                                WorldPointUtil.toString(targetPacked), r);
+                        return r;
+                    }
+                }
+            }
+        }
+        WebWalkLog.pf("goal_tile_blocked target={} no walkable ring within r={}; exact match required",
+                WorldPointUtil.toString(targetPacked), MAX_BLOCKED_TARGET_ACCEPT_RADIUS);
+        return 0;
+    }
+
+    /**
+     * True when the tile and its entire Chebyshev-1 ring are blocked in the collision map — i.e.
+     * nothing can ever walk out of or into it, not even via the puzzleAllow reverse-entry
+     * exception. Raw instance coordinates (e.g. a POH start at (13211,285,1)) are off-map, so
+     * every probe returns blocked and the tile reads as isolated.
+     */
+    private boolean isIsolatedInCollisionMap(int packed) {
+        int x = WorldPointUtil.unpackWorldX(packed);
+        int y = WorldPointUtil.unpackWorldY(packed);
+        int z = WorldPointUtil.unpackWorldPlane(packed);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (!map.isBlocked(x + dx, y + dy, z)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     public Pathfinder(PathfinderConfig config, WorldPoint start, Set<WorldPoint> targets) {
@@ -213,12 +300,48 @@ public class Pathfinder implements Runnable {
             if (neighbor instanceof TransportNode) {
                 pending.add(neighbor);
                 ++stats.transportsChecked;
+                logFocusedTeleportQueue("enqueued", node, neighbor,
+                        boundary.peek() == null ? null : boundary.peek().cost);
             } else {
                 neighbor.heuristic = afterTransport ? 0 : heuristicToNearestTarget(neighbor.packedPosition);
                 boundary.add(neighbor);
                 ++stats.nodesChecked;
             }
         }
+    }
+
+    private void logFocusedTeleportQueue(String event, Node from, Node to, Integer walkFrontierCost) {
+        if (from == null || to == null) {
+            return;
+        }
+        WorldPoint fromPoint = WorldPointUtil.unpackWorldPoint(from.packedPosition);
+        List<Transport> matches = config.getTransports().getOrDefault(fromPoint, Collections.emptySet()).stream()
+                .filter(transport -> transport.getOrigin() == null)
+                .filter(transport -> transport.getDestination() != null
+                        && WorldPointUtil.packWorldPoint(transport.getDestination()) == to.packedPosition)
+                .filter(transport -> transport.getType() == TransportType.TELEPORTATION_SPELL
+                        || transport instanceof World330HostedHouseTransport)
+                .sorted(Comparator.comparing(Transport::getDisplayInfo,
+                        Comparator.nullsLast(String::compareTo)))
+                .collect(Collectors.toList());
+        if (matches.isEmpty()) {
+            return;
+        }
+        if ("enqueued".equals(event)) {
+            focusedTeleportsEnqueued++;
+        } else if ("expanded".equals(event)) {
+            focusedTeleportsExpanded++;
+        }
+        List<String> descriptions = matches.stream()
+                .map(transport -> transport.getDisplayInfo()
+                        + " type=" + transport.getType()
+                        + " duration=" + transport.getDuration()
+                        + " maxWild=" + transport.getMaxWildernessLevel())
+                .collect(Collectors.toList());
+        WebWalkLog.teleportQueue("event={} goal={} from={} to={} nodeCost={} walkFrontierCost={} candidates={}",
+                event, WorldPointUtil.toString(targets), WorldPointUtil.toString(from.packedPosition),
+                WorldPointUtil.toString(to.packedPosition), to.cost,
+                walkFrontierCost == null ? "none" : walkFrontierCost, descriptions);
     }
 
     // Admissible A* heuristic: Chebyshev 2D to the nearest target, with a modulo-6400
@@ -455,6 +578,8 @@ public class Pathfinder implements Runnable {
             if (neighbor instanceof TransportNode) {
                 pending.add(neighbor);
                 ++stats.transportsChecked;
+                logFocusedTeleportQueue("enqueued", node, neighbor,
+                        boundary.peek() == null ? null : boundary.peek().cost);
             } else {
                 neighbor.heuristic = afterTransport ? 0 : heuristicToNearestTarget(neighbor.packedPosition);
                 boundary.add(neighbor);
@@ -504,15 +629,18 @@ public class Pathfinder implements Runnable {
         long bestHeuristic = Integer.MAX_VALUE;
         long cutoffDurationMillis = config.getCalculationCutoffMillis();
         long cutoffTimeMillis = System.currentTimeMillis() + cutoffDurationMillis;
-        config.refreshTeleports(start, 31);
+        wildernessLevel = initialWildernessLevel(start);
+        config.refreshTeleports(start, wildernessLevel);
         boolean reachedGoal = false;
         boolean timedOut = false;
         while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty())) {
             Node b = boundary.peek();
             Node p = pending.peek();
             Node node;
-            if (p != null && (b == null || p.cost < b.cost)) {
+            boolean expandingTransport = p != null && (b == null || p.cost < b.cost);
+            if (expandingTransport) {
                 node = pending.poll();
+                logFocusedTeleportQueue("expanded", node.previous, node, b == null ? null : b.cost);
             } else {
                 node = boundary.poll();
             }
@@ -539,8 +667,11 @@ public class Pathfinder implements Runnable {
 
             final int nodePos = node.packedPosition;
             boolean reached = false;
-            for (int target : targetsPacked) {
-                if (nodePos == target) {
+            for (int i = 0; i < targetsPacked.length; i++) {
+                int target = targetsPacked[i];
+                if (nodePos == target
+                        || (targetAcceptRadius[i] > 0
+                        && WorldPointUtil.distanceBetween(nodePos, target) <= targetAcceptRadius[i])) {
                     bestLastNode = node;
                     pathNeedsUpdate = true;
                     reached = true;
@@ -585,6 +716,10 @@ public class Pathfinder implements Runnable {
         WebWalkLog.pf("uni_loop_exit cancelled={} bEmpty={} pEmpty={} bestLast={}",
                 cancelled, boundary.isEmpty(), pending.isEmpty(),
                 bestLastNode == null ? "null" : WorldPointUtil.toString(bestLastNode.packedPosition));
+        WebWalkLog.teleportQueue("exit mode=uni goal={} reason={} nodes={} transports={} focusedEnqueued={} focusedExpanded={} pending={} bestLast={}",
+                WorldPointUtil.toString(targets), uniExit, stats.getNodesChecked(), stats.getTransportsChecked(),
+                focusedTeleportsEnqueued, focusedTeleportsExpanded, pending.size(),
+                bestLastNode == null ? "null" : WorldPointUtil.toString(bestLastNode.packedPosition));
     }
 
     private void runBidirectional() {
@@ -619,15 +754,37 @@ public class Pathfinder implements Runnable {
         long bestHeuristic = Integer.MAX_VALUE;
         long cutoffDurationMillis = config.getCalculationCutoffMillis();
         long cutoffTimeMillis = System.currentTimeMillis() + cutoffDurationMillis;
-        config.refreshTeleports(start, 31);
+        wildernessLevel = initialWildernessLevel(start);
+        config.refreshTeleports(start, wildernessLevel);
+
+        // Once one side's frontier is dead and its anchor tile is isolated in the collision map,
+        // no join can ever form — the other side would flood to time-cutoff for nothing (live:
+        // POH instance start (13211,285,1) with no usable teleports left the backward search
+        // expanding 785k nodes before giving up with an empty path).
+        final boolean startIsolated = isIsolatedInCollisionMap(start);
+        final boolean goalIsolated = isIsolatedInCollisionMap(goalPacked);
 
         while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty() || !boundaryBackward.isEmpty() || !pendingBackward.isEmpty())) {
+            if (bestMeetingCost[0] == Long.MAX_VALUE) {
+                if (startIsolated && boundary.isEmpty() && pending.isEmpty()) {
+                    WebWalkLog.pf("bidir_abort reason=forward-dead-isolated-start start={} nodes={}",
+                            WorldPointUtil.toString(start), stats.getNodesChecked());
+                    break;
+                }
+                if (goalIsolated && boundaryBackward.isEmpty() && pendingBackward.isEmpty()) {
+                    WebWalkLog.pf("bidir_abort reason=backward-dead-isolated-goal goal={} nodes={}",
+                            WorldPointUtil.toString(goalPacked), stats.getNodesChecked());
+                    break;
+                }
+            }
             if (!boundary.isEmpty() || !pending.isEmpty()) {
                 Node b = boundary.peek();
                 Node p = pending.peek();
                 Node node;
-                if (p != null && (b == null || p.cost < b.cost)) {
+                boolean expandingTransport = p != null && (b == null || p.cost < b.cost);
+                if (expandingTransport) {
                     node = pending.poll();
+                    logFocusedTeleportQueue("expanded", node.previous, node, b == null ? null : b.cost);
                 } else {
                     node = boundary.poll();
                 }
@@ -652,7 +809,9 @@ public class Pathfinder implements Runnable {
                 }
 
                 final int nodePos = node.packedPosition;
-                if (nodePos == goalPacked) {
+                if (nodePos == goalPacked
+                        || (targetAcceptRadius[0] > 0
+                        && WorldPointUtil.distanceBetween(nodePos, goalPacked) <= targetAcceptRadius[0])) {
                     joinedPath = node.getPath();
                     pathNeedsUpdate = false;
                     bestLastNode = null;
@@ -726,6 +885,11 @@ public class Pathfinder implements Runnable {
         WebWalkLog.pf("bidir_exit joined={} meetCost={}",
                 joinedPath == null ? "null" : Integer.toString(joinedPath.size()),
                 bestMeetingCost[0] == Long.MAX_VALUE ? "n/a" : Long.toString(bestMeetingCost[0]));
+        WebWalkLog.teleportQueue("exit mode=bidir goal={} joined={} meetCost={} nodes={} transports={} focusedEnqueued={} focusedExpanded={} pending={}",
+                WorldPointUtil.toString(targets), joinedPath == null ? "null" : joinedPath.size(),
+                bestMeetingCost[0] == Long.MAX_VALUE ? "n/a" : bestMeetingCost[0],
+                stats.getNodesChecked(), stats.getTransportsChecked(), focusedTeleportsEnqueued,
+                focusedTeleportsExpanded, pending.size());
     }
 
     @Override
@@ -737,6 +901,9 @@ public class Pathfinder implements Runnable {
         // shortest-path executor. Resolve both ThreadLocal-backed objects here so the collision map,
         // visited state and pinned live snapshot all belong to the search thread for this run.
         map = config.getMap();
+        for (int i = 0; i < targetsPacked.length; i++) {
+            targetAcceptRadius[i] = computeTargetAcceptRadius(targetsPacked[i]);
+        }
         visited = new VisitedTiles(map);
         // Pin the live-collision snapshot for this whole search so a mid-search swap on the client
         // thread cannot mix two scenes into one path. No-op when live collision is disabled.

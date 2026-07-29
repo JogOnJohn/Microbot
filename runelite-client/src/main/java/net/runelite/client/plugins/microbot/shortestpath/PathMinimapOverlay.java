@@ -39,8 +39,15 @@ public class PathMinimapOverlay extends Overlay {
         final Pathfinder pathfinder = ShortestPathPlugin.getPathfinder();
         if (pathfinder == null) return null;
 
+        // getMinimapClipArea() is null while the minimap widget is hidden; setClip(null) poisons
+        // the shared Graphics2D and every later overlay NPEs in OverlayRenderer per frame
+        Shape minimapClipArea = plugin.getMinimapClipArea();
+        if (minimapClipArea == null) {
+            return null;
+        }
+
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_OFF);
-        graphics.setClip(plugin.getMinimapClipArea());
+        graphics.setClip(minimapClipArea);
 
         List<WorldPoint> pathPoints = pathfinder.getPath();
         Color pathColor = pathfinder.isDone() ? plugin.colourPath : plugin.colourPathCalculating;

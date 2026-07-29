@@ -20,7 +20,7 @@
 3207 3217 0		Recipe for Disaster				
 3213 3222 0		Recipe for Disaster				
 3213 3221 0		Recipe for Disaster				
-# Al Kharid toll gate is modeled as transports plus blocked edge overrides.
+# Al Kharid gate is modeled as free Open transports plus blocked edge overrides.
 2936 9810 0			63 Agility			
 # Tree near Draynor Manor						
 3138 3352 0						

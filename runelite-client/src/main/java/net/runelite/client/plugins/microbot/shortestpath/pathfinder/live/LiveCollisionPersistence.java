@@ -23,10 +23,10 @@ import java.util.concurrent.TimeUnit;
  * restart and keeps overriding the static map's reconstruction permanently (until a game update).
  * <p>
  * One binary file per region under
- * {@code ~/.runelite/microbot/live-collision/<cacheRevision>-c<captureVersion>/<regionId>.lcr}.
- * The cache revision and {@link LiveCollisionCapture#CAPTURE_VERSION capture-semantics version} form the
- * invalidation key: after either changes, previous regions are never read (and can be pruned later) rather
- * than being trusted against changed geometry or capture rules.
+ * {@code ~/.runelite/microbot/live-collision/<cacheRevision>-c<captureVersion>-m<mapHash>/<regionId>.lcr}.
+ * The cache revision, {@link LiveCollisionCapture#CAPTURE_VERSION capture-semantics version}, and static
+ * collision-map hash form the invalidation key: after any changes, previous regions are never read (and can
+ * be pruned later) rather than being trusted against changed geometry or capture rules.
  * <p>
  * All I/O runs on a single daemon thread; loads and stores never touch the client or pathfinder threads.
  * {@link LiveCollisionOverlay#putRegion} and {@link LiveCollisionOverlay#drainDirty} are the only
@@ -46,13 +46,20 @@ public final class LiveCollisionPersistence {
         return t;
     });
 
-    public LiveCollisionPersistence(int cacheRevision) {
+    public LiveCollisionPersistence(int cacheRevision, String staticCollisionMapHash) {
         final File liveCollisionBase = new File(new File(RuneLite.RUNELITE_DIR, "microbot"), "live-collision");
-        // Store key = game cache revision + capture-semantics version. A change to either sends the
-        // store to a fresh directory; the old ones are inert and pruned by pruneStaleStores().
-        this.dir = new File(liveCollisionBase,
-                cacheRevision + "-c" + LiveCollisionCapture.CAPTURE_VERSION);
+        this.dir = new File(liveCollisionBase, storeDirectoryName(cacheRevision, staticCollisionMapHash));
         this.deleteRoot = liveCollisionBase;
+    }
+
+    static String storeDirectoryName(int cacheRevision, String staticCollisionMapHash) {
+        if (staticCollisionMapHash == null || !staticCollisionMapHash.matches("[0-9a-fA-F]{64}")) {
+            throw new IllegalArgumentException("static collision-map hash must be a SHA-256 value");
+        }
+        // Store key = game cache revision + capture semantics + static map. A change to any part sends
+        // the store to a fresh directory; the old ones are inert and pruned by pruneStaleStores().
+        return cacheRevision + "-c" + LiveCollisionCapture.CAPTURE_VERSION + "-m"
+                + staticCollisionMapHash.substring(0, 12).toLowerCase(java.util.Locale.ROOT);
     }
 
     /** Backs the store with an explicit directory instead of the shared user dir (tests, tooling). */

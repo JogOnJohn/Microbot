@@ -337,7 +337,8 @@ public class ShortestPathTier1RegressionTest {
                     new HashMap<net.runelite.api.coords.WorldPoint, Set<Transport>>(),
                     java.util.Collections.<Restriction>emptyList(),
                     null,
-                    null);
+                    null,
+                    false);
         }
     }
 }

@@ -255,17 +255,6 @@ public class Rs2Walker {
     // route-progress state migrated to WalkerRouteState (see routeState)
     private static final java.util.Deque<WorldPoint> expectedTransportDestinations = new ArrayDeque<>();
     private static final Set<String> startupPhasesLogged = ConcurrentHashMap.newKeySet();
-    private static final Set<Integer> AL_KHARID_TOLL_GATE_OBJECT_IDS = Set.of(
-            net.runelite.api.ObjectID.CITY_GATE_2786,
-            net.runelite.api.ObjectID.CITY_GATE_2787,
-            net.runelite.api.ObjectID.CITY_GATE_2788,
-            net.runelite.api.ObjectID.CITY_GATE_2789);
-    private static final Set<WorldPoint> AL_KHARID_TOLL_GATE_POINTS = Set.of(
-            new WorldPoint(3267, 3227, 0),
-            new WorldPoint(3267, 3228, 0),
-            new WorldPoint(3268, 3227, 0),
-            new WorldPoint(3268, 3228, 0));
-
     /**
      * Max Chebyshev "radius" for Quetzal / near-destination checks — guards use {@code distanceTo2D &lt; OFFSET}.
      * {@link WorldPoint#distanceTo(WorldPoint)} delegates to {@link WorldPoint#distanceTo2D(WorldPoint)} when both
@@ -373,6 +362,22 @@ public class Rs2Walker {
             return;
         }
         WebWalkLog.tmark(phase, System.currentTimeMillis() - startedAt, target, Rs2Player.getWorldLocation(), detail);
+    }
+
+    /**
+     * Per-loop-iteration startup trace for the dead zone between path_snapshot and
+     * click_candidate_found (live: median 11.7s, worst 40s, with NOTHING logged in between).
+     * markStartupPhase dedupes by name, so encoding the iteration into the phase name keeps
+     * repeated processWalk passes visible until the first movement click; capped so a
+     * long-stalled walk can't flood the log.
+     */
+    private static final int STARTUP_LOOP_TRACE_MAX_ITERS = 6;
+
+    private static void markStartupLoopPhase(int iteration, String stage, WorldPoint target, String detail) {
+        if (iteration >= STARTUP_LOOP_TRACE_MAX_ITERS) {
+            return;
+        }
+        markStartupPhase("iter" + iteration + "_" + stage, target, detail);
     }
 
     private static void tmarkPostTransport(String phase, WorldPoint target, String detail) {
@@ -1616,6 +1621,18 @@ public class Rs2Walker {
             Pathfinder pathfinder = Rs2PathApi.getPathfinder();
             if (pathfinder == null) {
                 markStartupPhase("pf_wait_enter", target, "reason=pathfinder_null");
+                // Kick FIRST, then wait. Nothing reliably starts a pathfinder before this loop on
+                // cold walks, and the old order waited the full 2s for one to appear before the
+                // recalculatePath fallback below finally started it — every cold walkTo paid
+                // 2.0-2.1s of dead air ahead of a ~100ms compute (live traces: pf_wait_enter at
+                // 0ms -> recalculate_path at ~2.0s -> pf_ready at ~2.1s, on every first walk).
+                // Same guard and same call as the fallback, just 2 seconds earlier; if a restart
+                // from setTarget was already in flight, restartPathfinding coalesces the double
+                // kick into a redundant background compute.
+                if (currentTarget != null && currentTarget.equals(target)) {
+                    walkerDiag("pathfinder null; kicking recalculatePath immediately");
+                    recalculatePath();
+                }
                 walkerDiag("pathfinder null; waiting up to %dms", PATHFINDER_NULL_WAIT_MS);
                 pathfinder = sleepUntilNotNull(Rs2PathApi::getPathfinder, PATHFINDER_NULL_WAIT_MS);
                 if (walkCancelledDiag(target, "processWalk:after-wait-pathfinder", processWalkTail)) {
@@ -1823,6 +1840,7 @@ public class Rs2Walker {
             primeExpectedTransportDestinations(path, indexOfStartPoint);
 
             lastPosition = playerLocForIndex;
+            logWalkIdleIfStalled(processWalkTail, target, lastPosition);
             boolean clearedInterimTarget = clearInterimTargetIfReachedOrExpired(lastPosition, path, System.currentTimeMillis());
             WorldPoint plImmediate = lastPosition;
 
@@ -1849,6 +1867,7 @@ public class Rs2Walker {
             }
 
             manageRunEnergy(path.size());
+            markStartupLoopPhase(processWalkTail, "run_energy_done", target, "-");
 
             // Edgeville/ardy wilderness lever warning
             if (Rs2Widget.isWidgetVisible(229, 1)) {
@@ -1885,6 +1904,7 @@ public class Rs2Walker {
             if (Rs2Widget.enterWilderness()) {
                 sleepUntil(Rs2Player::isAnimating);
             }
+            markStartupLoopPhase(processWalkTail, "widgets_done", target, "-");
 
             boolean doorOrTransportResult = false;
             boolean inInstance = Microbot.getClient().getTopLevelWorldView().isInstance();
@@ -1942,6 +1962,11 @@ public class Rs2Walker {
                     && handleNearbyRawPathSceneObjects(rawPath, HANDLER_RANGE, target, !postTransportWindow);
             tmarkPostTransport("post_transport_raw_scene_scan", target,
                     "handled=" + rawSceneHandled + " ms=" + (System.currentTimeMillis() - rawSceneStartAt));
+            // tmarkPostTransport is mute outside a post-transport window, which hid this scan's cost
+            // entirely on transportless walks (Wintertodt: 7-8s of the ~12s first-click delay).
+            markStartupLoopPhase(processWalkTail, "raw_scene_scan_done", target,
+                    "handled=" + rawSceneHandled + " ms=" + (System.currentTimeMillis() - rawSceneStartAt)
+                            + " allowed=" + allowRawSceneScan);
             if (rawSceneHandled) {
                 doorOrTransportResult = true;
                 exitReason = "raw-path-scene-object-handled";
@@ -1952,6 +1977,8 @@ public class Rs2Walker {
                     && startupPolicy.allowBroadRawHandlers()
                     && handleCurrentTileTransportTowardPath(rawPath, path, target);
             tmarkPostTransport("post_transport_current_tile_transport", target,
+                    "handled=" + currentTileTransportHandled + " ms=" + (System.currentTimeMillis() - currentTileTransportStartAt));
+            markStartupLoopPhase(processWalkTail, "cur_tile_transport_done", target,
                     "handled=" + currentTileTransportHandled + " ms=" + (System.currentTimeMillis() - currentTileTransportStartAt));
             if (currentTileTransportHandled) {
                 doorOrTransportResult = true;
@@ -1966,8 +1993,12 @@ public class Rs2Walker {
             }
 
             WorldPoint currentPlayerLoc = Rs2Player.getWorldLocation();
+            long segScanBfsStartMs = System.currentTimeMillis();
             reachableTilesCache = Rs2Tile.getReachableTilesFromTile(currentPlayerLoc, HANDLER_RANGE * 3);
             reachableTilesCacheOrigin = currentPlayerLoc;
+            markStartupLoopPhase(processWalkTail, "segment_scan_enter", target,
+                    "bfsMs=" + (System.currentTimeMillis() - segScanBfsStartMs)
+                            + " idxStart=" + indexOfStartPoint + " pathLen=" + path.size());
             final int currentPlayerPlane = currentPlayerLoc != null ? currentPlayerLoc.getPlane() : -1;
 
             for (int i = indexOfStartPoint; !doorOrTransportResult && i < path.size(); i++) {
@@ -5761,6 +5792,94 @@ public class Rs2Walker {
     // findReachableTransportOriginAhead extracted to recovery/RouteRecovery as a pure, unit-tested function (P1)
 
 
+    // --- door-scan scene snapshot ---------------------------------------------------------------
+    // Every Rs2GameObject.getWallObject/getGameObject lookup does a client-thread invoke PLUS a
+    // full 104x104xplanes scene walk (getSceneObjects) — per call. handleDoors runs up to ~24 such
+    // lookups per path tile (2 offsets x ~3 probes x 4 lookups), which measured at ~600ms/tile:
+    // doorsMs=8700 of totalMs=10036 on live Wintertodt walks, the bulk of the 12-14s first-click
+    // stall. The scene cannot meaningfully change within one sub-second scan pass, so snapshot the
+    // wall/game object lists once and serve every probe from memory; the TTL keeps reads fresh
+    // enough that a door opened by an interaction (followed by its own settle sleeps) is re-read.
+    private static final long DOOR_SCAN_SNAPSHOT_TTL_MS = 600;
+    private static List<WallObject> doorScanWallSnapshot = Collections.emptyList();
+    private static List<GameObject> doorScanGameObjectSnapshot = Collections.emptyList();
+    private static long doorScanSnapshotAtMs = 0;
+
+    /**
+     * While a scan pass holds a pin, the snapshot is NOT re-walked even past its TTL: a 3s raw
+     * scene scan was re-snapshotting every 600ms (2 scene walks each), ~1s of the residual
+     * doorsMs after the snapshot landed. Pins are per-pass (try/finally), so freshness between
+     * passes is unchanged.
+     */
+    private static int doorScanSnapshotPinDepth = 0;
+
+    private static void pinDoorScanSnapshot() {
+        refreshDoorScanSnapshotIfStale();
+        doorScanSnapshotPinDepth++;
+    }
+
+    private static void unpinDoorScanSnapshot() {
+        doorScanSnapshotPinDepth = Math.max(0, doorScanSnapshotPinDepth - 1);
+    }
+
+    private static void refreshDoorScanSnapshotIfStale() {
+        long now = System.currentTimeMillis();
+        if (doorScanSnapshotPinDepth > 0 && doorScanSnapshotAtMs > 0) {
+            return;
+        }
+        if (now - doorScanSnapshotAtMs < DOOR_SCAN_SNAPSHOT_TTL_MS) {
+            return;
+        }
+        doorScanSnapshotAtMs = now;
+        doorScanWallSnapshot = Rs2GameObject.getWallObjects();
+        doorScanGameObjectSnapshot = Rs2GameObject.getGameObjects();
+    }
+
+    /**
+     * Base + probe-resolved composition in ONE client-thread hop, replicating exactly
+     * convertToObjectComposition(object) (single impostor hop) and
+     * resolveCompositionForDoorProbe (impostor walk to depth 4, falling back to base).
+     * handleDoors previously paid three separate invokes per probe-hit object for the same
+     * reads; with walls near every Wintertodt path tile this was the other big chunk of
+     * doorsMs. Impostor resolution stays live — door open/close flips impostors — only the
+     * round-trips are batched.
+     */
+    private static ObjectComposition[] resolveDoorProbeCompositionsBatched(int objectId) {
+        ObjectComposition[] result = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            ObjectComposition raw = Microbot.getClient().getObjectDefinition(objectId);
+            if (raw == null) {
+                return new ObjectComposition[]{null, null};
+            }
+            ObjectComposition base = raw.getImpostorIds() == null ? raw : raw.getImpostor();
+            ObjectComposition resolved = base;
+            for (int depth = 0; depth < 4 && resolved != null && resolved.getImpostorIds() != null; depth++) {
+                resolved = resolved.getImpostor();
+            }
+            return new ObjectComposition[]{base, resolved != null ? resolved : base};
+        }).orElse(null);
+        return result != null ? result : new ObjectComposition[]{null, null};
+    }
+
+    private static WallObject findDoorScanWallObject(Predicate<WallObject> predicate) {
+        refreshDoorScanSnapshotIfStale();
+        for (WallObject o : doorScanWallSnapshot) {
+            if (o != null && predicate.test(o)) {
+                return o;
+            }
+        }
+        return null;
+    }
+
+    private static GameObject findDoorScanGameObject(Predicate<GameObject> predicate) {
+        refreshDoorScanSnapshotIfStale();
+        for (GameObject o : doorScanGameObjectSnapshot) {
+            if (o != null && predicate.test(o)) {
+                return o;
+            }
+        }
+        return null;
+    }
+
     private static boolean handleDoors(List<WorldPoint> path, int index) {
         return handleDoors(path, index, false);
     }
@@ -6018,7 +6137,6 @@ public class Rs2Walker {
 
         return false;
     }
-
 
 
 
@@ -8309,6 +8427,10 @@ public class Rs2Walker {
         if (goal == null) {
             return;
         }
+        WorldPoint start = Rs2Player.getWorldLocation();
+        if (start != null) {
+            WebWalkLog.recalc("recalculate_path from=" + compactWorldPoint(start) + " goal=" + compactWorldPoint(goal));
+        }
         // Must not call setTarget(null)+setTarget(goal): that briefly clears {@link #currentTarget},
         // and processWalk on another thread treats null as cancel (isWalkCancelled).
         Rs2WalkerLifecycleRuntime.applyWalkerDestination(goal);
@@ -8481,7 +8603,6 @@ public class Rs2Walker {
         }
 
         List<Transport> orderedTransports = new ArrayList<>(transports);
-        orderedTransports.sort(Comparator.comparingInt(Rs2Walker::transportHandlingPreference));
 
         for (Transport transport : orderedTransports) {
             Collection<WorldPoint> worldPointCollections;
@@ -8698,7 +8819,17 @@ public class Rs2Walker {
                             log.debug("[Walker] skip spirit tree transport — setting is off");
                             continue;
                         }
-                        if (attemptObserved(transport, () -> handleSpiritTree(transport))) {
+                        boolean spiritHandled = attemptObserved(transport, () -> handleSpiritTree(transport));
+                        if (!spiritHandled) {
+                            // e.g. a farmable destination (Brimhaven / Port Sarim / Etceteria...)
+                            // whose tree the player hasn't grown: the tree's menu simply doesn't
+                            // offer it and the data layer can't know. Block it and rebuild
+                            // transports so the next recalc genuinely routes another way instead
+                            // of re-picking the same dead tree forever.
+                            PathfinderConfig.blockTransportTemporarily(transport, "spirit tree execute failed");
+                            ShortestPathPlugin.getPathfinderConfig().invalidateTransportRefreshCache();
+                        }
+                        if (spiritHandled) {
                             sleepUntil(() -> !Rs2Player.isAnimating());
                             boolean spiritLanded = Rs2WalkerRuntimeAwaits.awaitCondition(
                                     () -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),
@@ -8834,10 +8965,8 @@ public class Rs2Walker {
                     final boolean allowClosedVariant = "Climb-down".equalsIgnoreCase(transportAction)
                             || "Climb down".equalsIgnoreCase(transportAction);
 
-                    final boolean allowAlKharidTollGateVariant = isAlKharidTollGateObjectId(transportObjectId);
                     List<TileObject> objects = Rs2GameObject.getAll(o -> {
                         if (o.getId() == transportObjectId) return true;
-                        if (allowAlKharidTollGateVariant && isAlKharidTollGateObjectId(o.getId())) return true;
                         Integer legacyClosed = OPEN_TO_CLOSED_MAPPINGS.get(transportObjectId);
                         if (legacyClosed != null && o.getId() == legacyClosed) return true;
                         if (!allowClosedVariant) return false;
@@ -8914,7 +9043,9 @@ public class Rs2Walker {
                         if (destWait == null) {
                             return false;
                         }
-                        boolean landedAfterObject = waitForPostHandleObjectLanding(transport, destWait, maxInclusive);
+                        int landingWaitMs = objectTransportLandingWaitMs(transport);
+                        boolean landedAfterObject = waitForPostHandleObjectLanding(
+                                transport, destWait, maxInclusive, landingWaitMs);
                         if (!landedAfterObject) {
                             WorldPoint afterInteraction = Rs2Player.getWorldLocation();
                             // Adjacent same-plane transports demand landing on the EXACT destination
@@ -8933,7 +9064,7 @@ public class Rs2Walker {
                             }
                             WebWalkLog.spWarn(
                                     "post-handleObject landing unresolved (timeout={}ms) dest={} at={}",
-                                    POST_HANDLE_OBJECT_LANDING_WAIT_MS,
+                                    landingWaitMs,
                                     compactWorldPoint(destWait),
                                     compactWorldPoint(afterInteraction));
                         }
@@ -8949,9 +9080,17 @@ public class Rs2Walker {
         return false;
     }
 
+    static int objectTransportLandingWaitMs(Transport transport) {
+        long durationTicks = transport == null ? 0L : Math.max(0L, transport.getDuration());
+        long durationWaitMs = durationTicks * 600L + 2_000L;
+        return (int) Math.min(Integer.MAX_VALUE,
+                Math.max(POST_HANDLE_OBJECT_LANDING_WAIT_MS, durationWaitMs));
+    }
+
     private static boolean waitForPostHandleObjectLanding(Transport transport,
                                                           WorldPoint destWait,
-                                                          int maxInclusive) {
+                                                          int maxInclusive,
+                                                          int landingWaitMs) {
         long waitStartedAt = System.currentTimeMillis();
         AtomicBoolean settledAwayFromAdjacentDestination = new AtomicBoolean(false);
         AtomicBoolean settledNearAdjacentDestination = new AtomicBoolean(false);
@@ -8980,7 +9119,7 @@ public class Rs2Walker {
                 return true;
             }
             return false;
-        }, POST_HANDLE_OBJECT_LANDING_WAIT_MS);
+        }, landingWaitMs);
 
         if (settledNearAdjacentDestination.get()) {
             WebWalkLog.spInfo("post-handleObject adjacent landing accepted | dest={} at={}",
@@ -9546,55 +9685,6 @@ public class Rs2Walker {
         return points;
     }
 
-    private static int transportHandlingPreference(Transport transport) {
-        if (isAlKharidTollGateTransport(transport) && transport.getCurrencyAmount() > 0) {
-            return 1;
-        }
-        return 0;
-    }
-
-    private static boolean isAlKharidTollGateTransport(Transport transport) {
-        return transport != null
-                && isAlKharidTollGateObjectId(transport.getObjectId())
-                && AL_KHARID_TOLL_GATE_POINTS.contains(transport.getOrigin())
-                && AL_KHARID_TOLL_GATE_POINTS.contains(transport.getDestination());
-    }
-
-    private static boolean isAlKharidTollGateObjectId(int objectId) {
-        return AL_KHARID_TOLL_GATE_OBJECT_IDS.contains(objectId);
-    }
-
-    private static boolean isPayTollAction(String action) {
-        return action != null && action.toLowerCase(Locale.ROOT).startsWith("pay-toll");
-    }
-
-    private static boolean handleAlKharidTollGate(Transport transport) {
-        if (Rs2Player.isMoving()) {
-            Rs2Player.waitForWalking();
-        }
-
-        boolean confirmed = false;
-        if (sleepUntil(Rs2Dialogue::hasSelectAnOption, 2500)) {
-            confirmed = Rs2Dialogue.clickOption("Yes, okay", "Yes");
-        }
-
-        boolean reachedDestination = sleepUntil(() -> {
-            WorldPoint now = Rs2Player.getWorldLocation();
-            WorldPoint destination = transport.getDestination();
-            return now != null
-                    && destination != null
-                    && now.getPlane() == destination.getPlane()
-                    && now.distanceTo2D(destination) <= 1;
-        }, POST_HANDLE_OBJECT_LANDING_WAIT_MS);
-        if (!confirmed && !reachedDestination) {
-            WebWalkLog.spWarn(
-                    "Al Kharid toll gate confirmation unresolved dest={} at={}",
-                    compactWorldPoint(transport.getDestination()),
-                    compactWorldPoint(Rs2Player.getWorldLocation()));
-        }
-        return true;
-    }
-
     private static boolean handleObjectExceptions(Transport transport, TileObject tileObject) {
         for (Map.Entry<Integer, Integer> entry : OPEN_TO_CLOSED_MAPPINGS.entrySet()) {
             final int closedTrapdoorId = entry.getKey();
@@ -9624,10 +9714,6 @@ public class Rs2Walker {
                 }
                 return true;
             }
-        }
-
-        if (isAlKharidTollGateTransport(transport) && isPayTollAction(transport.getAction())) {
-            return handleAlKharidTollGate(transport);
         }
 
         //Al kharid broken wall will animate once and then stop and then animate again
@@ -10306,6 +10392,35 @@ public class Rs2Walker {
             }
         }
         return false;
+    }
+
+    /** Throttle for {@link #logWalkIdleIfStalled}. */
+    private static long lastWalkIdleLogAtMs = 0;
+
+    /**
+     * INFO visibility for the "walk active but nothing happens" failure mode: live Wintertodt run
+     * spun 62 processWalk iterations over 78s at the same tile without one click, stall recalc, or
+     * log line (walkerDiag is DEBUG; startup tmarks stop after the first click). Logs at most every
+     * 4s while the player has been stationary >4s mid-walk, with the decision state needed to name
+     * the guilty gate: stall threshold vs elapsed, the stall-accounting skip flag, interim target,
+     * and the raw-scan door focus.
+     */
+    private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc) {
+        long now = System.currentTimeMillis();
+        if (lastMovedTimeMs <= 0 || now - lastMovedTimeMs < 4_000 || now - lastWalkIdleLogAtMs < 4_000) {
+            return;
+        }
+        lastWalkIdleLogAtMs = now;
+        WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={}",
+                iteration,
+                now - lastMovedTimeMs,
+                stallThresholdMs(),
+                isStuckTooLong(),
+                Rs2WalkerStallPolicy.shouldSkipStallAccounting(LEAGUES_AREA_PENDING_STALL_MAX_AGE_MS),
+                routeState.interimTargetWp == null ? "none" : compactWorldPoint(routeState.interimTargetWp),
+                rawScanFocusedDoorIdx,
+                compactWorldPoint(playerLoc),
+                compactWorldPoint(target));
     }
 
     private static long stallThresholdMs() {

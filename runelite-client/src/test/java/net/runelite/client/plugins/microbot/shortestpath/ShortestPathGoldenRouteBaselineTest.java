@@ -99,6 +99,59 @@ public class ShortestPathGoldenRouteBaselineTest
 		}
 	}
 
+	/**
+	 * Live incident 2026-07-15 18:17: goals on blocked tiles (object/NPC tiles with no cardinal
+	 * exit) could never be popped, so every such pathfind flooded 1.4-2.1M nodes to time-cutoff
+	 * with bestLast already adjacent to the goal, and from-anywhere teleports (Falador etc.) were
+	 * enqueued for a 30-tile walk. Blocked goals now accept the surrounding walkable ring.
+	 */
+	@Test
+	public void blockedGoalTileExitsAtAdjacentRingInsteadOfFlooding()
+	{
+		PathfinderConfig config = configFor(TransportType.TRANSPORT);
+		WorldPoint start = point(2629, 2997, 0);
+		WorldPoint goal = point(2601, 2967, 0);
+		assertTrue("incident goal tile should be blocked in the collision map",
+			config.getMap().isBlocked(goal.getX(), goal.getY(), goal.getPlane()));
+
+		Pathfinder pathfinder = new Pathfinder(config, start, goal);
+		pathfinder.run();
+		List<WorldPoint> path = pathfinder.getPath();
+		WorldPoint last = path.isEmpty() ? null : path.get(path.size() - 1);
+		String evidence = "path=" + path.size() + " last=" + last
+			+ " nodes=" + pathfinder.getStats().getNodesChecked();
+
+		assertTrue(evidence, pathfinder.isDone());
+		assertFalse(evidence, path.isEmpty());
+		assertTrue(evidence, last.distanceTo(goal) >= 1 && last.distanceTo(goal) <= 3);
+		assertTrue("blocked-goal pathfind should exit at the ring, not flood the map: " + evidence,
+			pathfinder.getStats().getNodesChecked() < 20_000);
+	}
+
+	/**
+	 * Live incident 2026-07-17 18:10-18:12: quest helper posted a path request while the player
+	 * stood inside their POH, so the pathfind started from a raw instance coordinate that is
+	 * off the collision map. The forward frontier died instantly, but the bidirectional backward
+	 * search flooded 617k-785k nodes to time-cutoff before returning an empty path. A dead
+	 * frontier anchored on an isolated tile now aborts the search immediately.
+	 */
+	@Test
+	public void isolatedInstanceStartAbortsBidirectionalSearchInsteadOfFlooding()
+	{
+		PathfinderConfig config = configFor(TransportType.TRANSPORT);
+		WorldPoint instanceStart = point(13211, 285, 1);
+		WorldPoint goal = point(3491, 3230, 0);
+
+		Pathfinder pathfinder = new Pathfinder(config, instanceStart, goal);
+		pathfinder.run();
+		String evidence = "nodes=" + pathfinder.getStats().getNodesChecked()
+			+ " path=" + pathfinder.getPath().size();
+
+		assertTrue(evidence, pathfinder.isDone());
+		assertTrue("isolated-start bidir search should abort, not flood the map: " + evidence,
+			pathfinder.getStats().getNodesChecked() < 10_000);
+	}
+
 	private static PathfinderConfig configFor(TransportType focusType)
 	{
 		HashMap<WorldPoint, Set<Transport>> all = Transport.loadAllFromResources();
@@ -115,7 +168,7 @@ public class ShortestPathGoldenRouteBaselineTest
 			}
 		}
 		PathfinderConfig config = new PathfinderConfig(
-			collisionMap, filtered, Collections.emptyList(), null, null);
+			collisionMap, filtered, Collections.emptyList(), null, null, false);
 		try
 		{
 			Field cutoff = PathfinderConfig.class.getDeclaredField("calculationCutoffMillis");

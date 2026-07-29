@@ -6,7 +6,10 @@ import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
 import net.runelite.client.plugins.microbot.shortestpath.Util;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.ZipEntry;
@@ -100,8 +103,35 @@ public class SplitFlagMap {
     }
 
     public static SplitFlagMap fromResources() {
+        InputStream resource = ShortestPathPlugin.class.getResourceAsStream("collision-map.zip");
+        if (resource == null) {
+            throw new IllegalStateException("Missing collision-map.zip resource");
+        }
+        return fromZip(resource);
+    }
+
+    public static String collisionResourceSha256() {
+        try (InputStream resource = ShortestPathPlugin.class.getResourceAsStream("collision-map.zip")) {
+            if (resource == null) {
+                throw new IllegalStateException("Missing collision-map.zip resource");
+            }
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(Util.readAllBytes(resource));
+            StringBuilder value = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                value.append(String.format("%02x", b & 0xff));
+            }
+            return value.toString();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    public static SplitFlagMap fromZip(InputStream source) {
         Map<Integer, byte[]> compressedRegions = new HashMap<>();
-        try (ZipInputStream in = new ZipInputStream(ShortestPathPlugin.class.getResourceAsStream("collision-map.zip"))) {
+        try (ZipInputStream in = new ZipInputStream(source)) {
             int minX = Integer.MAX_VALUE;
             int minY = Integer.MAX_VALUE;
             int maxX = 0;
