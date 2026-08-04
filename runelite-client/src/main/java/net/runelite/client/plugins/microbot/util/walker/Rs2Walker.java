@@ -5097,8 +5097,8 @@ public class Rs2Walker {
             return now != null && (!now.equals(before) || now.getPlane() != before.getPlane() || Rs2Player.isMoving());
         }, 1_500);
         sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Player.isAnimating(), 5_000);
-        lastMovedTimeMs = System.currentTimeMillis();
-        stuckCount = 0;
+        routeState.lastMovedTimeMs = System.currentTimeMillis();
+        routeState.stuckCount = 0;
         return true;
     }
 
@@ -11181,18 +11181,20 @@ public class Rs2Walker {
      */
     private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc) {
         long now = System.currentTimeMillis();
-        if (lastMovedTimeMs <= 0 || now - lastMovedTimeMs < 4_000 || now - lastWalkIdleLogAtMs < 4_000) {
+        if (routeState.lastMovedTimeMs <= 0
+                || now - routeState.lastMovedTimeMs < 4_000
+                || now - lastWalkIdleLogAtMs < 4_000) {
             return;
         }
         lastWalkIdleLogAtMs = now;
         WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={}",
                 iteration,
-                now - lastMovedTimeMs,
+                now - routeState.lastMovedTimeMs,
                 stallThresholdMs(),
                 isStuckTooLong(),
                 Rs2WalkerStallPolicy.shouldSkipStallAccounting(LEAGUES_AREA_PENDING_STALL_MAX_AGE_MS),
                 routeState.interimTargetWp == null ? "none" : compactWorldPoint(routeState.interimTargetWp),
-                rawScanFocusedDoorIdx,
+                routeState.rawScanFocusedDoorIdx,
                 compactWorldPoint(playerLoc),
                 compactWorldPoint(target));
     }
