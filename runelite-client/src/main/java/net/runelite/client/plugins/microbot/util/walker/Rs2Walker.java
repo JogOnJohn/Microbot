@@ -9689,6 +9689,13 @@ public class Rs2Walker {
         return ((PohTransport)transport).execute();
     }
 
+    private static boolean isAlKharidTollGateObjectId(int objectId) {
+        return objectId == net.runelite.api.ObjectID.CITY_GATE_2786
+                || objectId == net.runelite.api.ObjectID.CITY_GATE_2787
+                || objectId == net.runelite.api.ObjectID.CITY_GATE_2788
+                || objectId == net.runelite.api.ObjectID.CITY_GATE_2789;
+    }
+
     private static List<String> getTransportActionOptions(String action) {
         if (action == null || action.isBlank()) {
             return Collections.emptyList();
