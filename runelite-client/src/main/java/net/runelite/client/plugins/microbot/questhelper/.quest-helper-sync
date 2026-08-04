@@ -2,6 +2,6 @@
 # External Repository: https://github.com/Zoinkwiz/quest-helper
 # Local Integration: runelite-client/src/main/java/net/runelite/client/plugins/microbot/questhelper/
 # Current sync position - this is the last external commit that has been integrated
-ae1f441248783c57e573f64a1a8988e3e4478607
-# Last sync date: 2026-07-15
+5ea99d5ea9ba3fb096ebe7b5ed02d80883e9819d
+# Last sync date: 2026-07-29
 # Sync method: controlled vendor refresh of library directories with package transformation
