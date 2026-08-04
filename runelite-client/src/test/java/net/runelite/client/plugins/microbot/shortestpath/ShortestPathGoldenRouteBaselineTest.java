@@ -43,7 +43,7 @@ public class ShortestPathGoldenRouteBaselineTest
 			new RouteCase("paterdomus-trapdoor", point(3405, 3506, 0), point(3405, 9894, 0),
 				2, 80, TransportType.TRANSPORT, "TRANSPORT:Climb-down:Trapdoor:1581"),
 			new RouteCase("lumbridge-bank-stairs", point(3222, 3218, 0), point(3208, 3220, 2),
-				10, 120, TransportType.TRANSPORT, "TRANSPORT:Climb-up:Staircase"),
+				10, 120, TransportType.TRANSPORT, "TRANSPORT:Top-floor:Staircase"),
 			new RouteCase("rimmington-to-aldarin-charter", point(2957, 3214, 0), point(1455, 2968, 0),
 				20, 500, TransportType.CHARTER_SHIP, "CHARTER_SHIP:Charter:Trader Crewmember:1330"),
 			new RouteCase("paterdomus-holy-barrier", point(3440, 9887, 0), point(3423, 3485, 0),
