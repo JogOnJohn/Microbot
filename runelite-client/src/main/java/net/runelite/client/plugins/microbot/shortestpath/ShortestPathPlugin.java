@@ -217,11 +217,10 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     @Getter(AccessLevel.PACKAGE)
     private ShortestPathScript shortestPathScript;
 
-    // Set by onGameStateChanged when the client transitions to LOGGED_IN. Consumed on the next
-    // game tick so varbits, quest states, inventory, and bank containers are hydrated before
-    // PathfinderConfig#refresh rebuilds the transport availability cache. Without this the
-    // cache holds pre-login state after world-hops or re-logins.
+    // Set by onGameStateChanged when the client transitions to LOGGED_IN. Scheduled from the next
+    // game tick so hydrated client state can be captured before the worker rebuilds transports.
     volatile boolean pendingLoginRefresh = false;
+    volatile Future<?> pendingLoginRefreshFuture;
     @Provides
     public ShortestPathConfig provideConfig(ConfigManager configManager) {
         return configManager.getConfig(ShortestPathConfig.class);
@@ -372,43 +371,57 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     }
 
     public void restartPathfinding(WorldPoint start, Set<WorldPoint> ends, boolean canReviveFiltered) {
-        ExecutorService executor;
+        final Set<WorldPoint> requestedEnds = new HashSet<>(ends);
+        final Pathfinder pending = new Pathfinder(pathfinderConfig, start, requestedEnds);
         synchronized (pathfinderMutex) {
             if (pathfinder != null) {
                 pathfinder.cancel();
-                pathfinderFuture.cancel(true);
-            }
-
-            if ((executor = pathfindingExecutor) == null) {
-                ThreadFactory shortestPathNaming = new ThreadFactoryBuilder().setNameFormat("shortest-path-%d").build();
-                executor = Executors.newSingleThreadExecutor(shortestPathNaming);
-                pathfindingExecutor = executor;
-            }
-        }
-
-        final ExecutorService finalExecutor = executor;
-        final long scheduleTime = System.currentTimeMillis();
-        getClientThread().invokeLater(() -> {
-            long invokeLaterDelay = System.currentTimeMillis() - scheduleTime;
-            long refreshStart = System.currentTimeMillis();
-            // Thread a representative target into refresh() even for multi-tile end sets:
-            // area-based ends (quest-helper zones, bank sets) previously refreshed with null,
-            // which bypassed target-aware gating (e.g. the W330 POH near-target skip). The end
-            // nearest the player is the cheapest sound representative.
-            pathfinderConfig.refresh(nearestEnd(start, ends));
-            long refreshTime = System.currentTimeMillis() - refreshStart;
-            pathfinderConfig.filterLocations(ends, canReviveFiltered);
-            synchronized (pathfinderMutex) {
-                if (ends.isEmpty()) {
-                    setTarget(null);
-                } else {
-                    pathfinder = new Pathfinder(pathfinderConfig, start, ends);
-                    pathfinderFuture = finalExecutor.submit(pathfinder);
+                if (pathfinderFuture != null) {
+                    pathfinderFuture.cancel(true);
                 }
             }
-            log.info("[ShortestPath] restartPathfinding: invokeLater delay={}ms, config.refresh={}ms",
-                    invokeLaterDelay, refreshTime);
-        });
+
+            ExecutorService executor = ensurePathfindingExecutor();
+            pathfinder = pending;
+            pathfinderFuture = executor.submit(() -> {
+                Set<WorldPoint> filteredEnds = new HashSet<>(requestedEnds);
+                try {
+                    synchronized (pathfinderConfig) {
+                        if (!isCurrentPathfinder(pending)) {
+                            return;
+                        }
+                        // Keep target-aware W330 transport filtering while the expensive work runs
+                        // entirely on the shortest-path worker.
+                        pathfinderConfig.refresh(nearestEnd(start, filteredEnds));
+                        pathfinderConfig.filterLocations(filteredEnds, canReviveFiltered);
+                        if (!filteredEnds.isEmpty()) {
+                            Pathfinder calculated = new Pathfinder(pathfinderConfig, start, filteredEnds);
+                            synchronized (pathfinderMutex) {
+                                if (pathfinder != pending) {
+                                    return;
+                                }
+                                pathfinder = calculated;
+                            }
+                            calculated.run();
+                        }
+                    }
+                } catch (RuntimeException failure) {
+                    log.warn("[ShortestPath] background refresh failed; using the last planner snapshot", failure);
+                    synchronized (pathfinderConfig) {
+                        if (isCurrentPathfinder(pending)) {
+                            pending.run();
+                        }
+                    }
+                }
+                if (filteredEnds.isEmpty() && isCurrentPathfinder(pending)) {
+                    getClientThread().invokeLater(() -> {
+                        if (isCurrentPathfinder(pending)) {
+                            setTarget(null);
+                        }
+                    });
+                }
+            });
+        }
     }
 
     public void restartPathfinding(WorldPoint start, Set<WorldPoint> ends) {
@@ -659,13 +672,45 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     }
 
     void handlePendingLoginRefresh() {
-        if (pendingLoginRefresh && pathfinderConfig != null) {
+        PathfinderConfig refreshConfig = pathfinderConfig;
+        if (!pendingLoginRefresh || refreshConfig == null) {
+            return;
+        }
+        Future<?> inFlight = pendingLoginRefreshFuture;
+        if (inFlight != null && !inFlight.isDone()) {
+            return;
+        }
+
+        pendingLoginRefresh = false;
+        pendingLoginRefreshFuture = ensurePathfindingExecutor().submit(() -> {
             try {
-                pathfinderConfig.refresh();
-                pendingLoginRefresh = false;
+                synchronized (refreshConfig) {
+                    refreshConfig.refresh();
+                }
             } catch (Exception e) {
+                pendingLoginRefresh = true;
                 log.warn("[ShortestPath] post-login refresh failed", e);
             }
+        });
+    }
+
+    private static boolean isCurrentPathfinder(Pathfinder expected) {
+        synchronized (pathfinderMutex) {
+            return pathfinder == expected;
+        }
+    }
+
+    private static ExecutorService ensurePathfindingExecutor() {
+        synchronized (pathfinderMutex) {
+            ExecutorService executor = pathfindingExecutor;
+            if (executor == null || executor.isShutdown()) {
+                ThreadFactory shortestPathNaming = new ThreadFactoryBuilder()
+                        .setNameFormat("shortest-path-%d")
+                        .build();
+                executor = Executors.newSingleThreadExecutor(shortestPathNaming);
+                pathfindingExecutor = executor;
+            }
+            return executor;
         }
     }
 
