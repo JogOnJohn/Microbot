@@ -938,6 +938,12 @@ public class DetailedQuestStep extends QuestStep
 		}
 	}
 
+	@Override
+	public void refreshAfterSceneLoad()
+	{
+		setShortestPath();
+	}
+
 	private boolean isLineDrawn()
 	{
 		return linePoints != null && !linePoints.isEmpty();

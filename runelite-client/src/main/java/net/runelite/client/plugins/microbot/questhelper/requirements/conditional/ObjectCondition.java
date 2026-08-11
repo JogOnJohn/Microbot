@@ -112,6 +112,10 @@ public class ObjectCondition extends ConditionForStep
 		WorldPoint wp = WorldPoint.fromLocalInstance(client, tile.getLocalLocation());
 		if (zone != null && !zone.contains(wp)) return false;
 
+		if (client.getLocalPlayer() == null)
+		{
+			return false;
+		}
 		WorldPoint playerLocation = client.getLocalPlayer().getWorldLocation();
 		boolean playerClose = maxDistanceFromPlayer == -1 ||
 			(playerLocation.distanceTo(wp) < maxDistanceFromPlayer);

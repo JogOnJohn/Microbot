@@ -167,6 +167,7 @@ public class QuestHelperPlugin extends Plugin
 	private NavigationButton navButton;
 
 	boolean profileChanged;
+	private boolean sceneReloadPending;
 
 	private final Collection<String> configEvents = Arrays.asList("orderListBy", "filterListBy", "questDifficulty", "showCompletedQuests");
 	private final Collection<String> configItemEvents = Arrays.asList("highlightNeededQuestItems", "highlightNeededMiniquestItems", "highlightNeededAchievementDiaryItems");
@@ -260,6 +261,12 @@ public class QuestHelperPlugin extends Plugin
 	public void onGameTick(GameTick event)
 	{
 		questBankManager.loadInitialStateFromConfig(client);
+		if (sceneReloadPending && client.getGameState() == GameState.LOGGED_IN
+			&& client.getLocalPlayer() != null && client.getTopLevelWorldView() != null)
+		{
+			sceneReloadPending = false;
+			questManager.refreshAfterSceneLoad();
+		}
 		questManager.updateQuestState();
 	}
 
@@ -308,9 +315,14 @@ public class QuestHelperPlugin extends Plugin
 	public void onGameStateChanged(final GameStateChanged event)
 	{
 		final GameState state = event.getGameState();
+		if (state == GameState.HOPPING || state == GameState.LOADING || state == GameState.CONNECTION_LOST)
+		{
+			sceneReloadPending = true;
+		}
 
 		if (state == GameState.LOGIN_SCREEN)
 		{
+			sceneReloadPending = false;
 			questBankManager.saveBankToConfig();
 			SwingUtilities.invokeLater(() -> panel.refresh(Collections.emptyList(), true, new HashMap<>()));
 			questBankManager.emptyState();

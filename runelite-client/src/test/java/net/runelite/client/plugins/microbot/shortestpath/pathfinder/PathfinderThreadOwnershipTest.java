@@ -15,6 +15,7 @@ public class PathfinderThreadOwnershipTest {
 
     @Test
     public void collisionMapIsResolvedWhenRunStartsRatherThanDuringConstruction() {
+        SplitFlagMap.fromResources();
         PathfinderConfig config = mock(PathfinderConfig.class);
         CollisionMap map = mock(CollisionMap.class);
         when(config.getMap()).thenReturn(map);

@@ -34,6 +34,7 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -90,10 +91,15 @@ public final class DefinedPoint
 	public List<LocalPoint> resolveLocalPoints(Client client)
 	{
 		var topLevelWorldView = client.getTopLevelWorldView();
+		if (topLevelWorldView == null)
+		{
+			return new ArrayList<>();
+		}
 		List<LocalPoint> lps = QuestPerspective.getLocalPointsFromWorldPointInInstance(topLevelWorldView, worldPoint);
-		var playerWorldView = client.getLocalPlayer().getWorldView();
+		var localPlayer = client.getLocalPlayer();
+		var playerWorldView = localPlayer == null ? null : localPlayer.getWorldView();
 
-		if (topLevelWorldView != playerWorldView)
+		if (playerWorldView != null && topLevelWorldView != playerWorldView)
 		{
 			var moreLps = QuestPerspective.getLocalPointsFromWorldPointInInstance(playerWorldView, worldPoint);
 			if (!moreLps.isEmpty()) lps.addAll(moreLps);

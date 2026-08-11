@@ -137,6 +137,27 @@ public class QuestManager
 		handleQuestListUpdate();
 	}
 
+	public void refreshAfterSceneLoad()
+	{
+		if (selectedQuest == null)
+		{
+			return;
+		}
+
+		QuestStep currentStep = selectedQuest.getCurrentStep();
+		if (currentStep == null)
+		{
+			return;
+		}
+
+		QuestStep activeStep = currentStep.getActiveStep();
+		if (activeStep != null)
+		{
+			activeStep.refreshAfterSceneLoad();
+		}
+		lastStep = null;
+	}
+
 	/**
 	 * Handles the currently selected quest.
 	 * Updates steps, highlights, and item requirements.

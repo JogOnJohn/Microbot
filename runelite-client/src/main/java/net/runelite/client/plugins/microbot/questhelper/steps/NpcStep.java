@@ -202,16 +202,37 @@ public class NpcStep extends DetailedQuestStep
 
 	public void scanForNpcs()
 	{
-		for (NPC npc : client.getTopLevelWorldView().npcs())
+		WorldView topLevelWorldView = client.getTopLevelWorldView();
+		Player localPlayer = client.getLocalPlayer();
+		if (topLevelWorldView == null || localPlayer == null)
 		{
-			addNpcToListGivenMatchingID(npc, this::npcPassesChecks, npcs);
+			return;
 		}
-		var playerWorldView = client.getLocalPlayer().getWorldView();
+
+		if (topLevelWorldView.npcs() != null)
+		{
+			for (NPC npc : topLevelWorldView.npcs())
+			{
+				addNpcToListGivenMatchingID(npc, this::npcPassesChecks, npcs);
+			}
+		}
+		WorldView playerWorldView = localPlayer.getWorldView();
 		if (playerWorldView == null || playerWorldView.npcs() == null) return;
-		for (NPC npc : playerWorldView.npcs())
+		if (playerWorldView != topLevelWorldView)
 		{
-			addNpcToListGivenMatchingID(npc, this::npcPassesChecks, npcs);
+			for (NPC npc : playerWorldView.npcs())
+			{
+				addNpcToListGivenMatchingID(npc, this::npcPassesChecks, npcs);
+			}
 		}
+	}
+
+	@Override
+	public void refreshAfterSceneLoad()
+	{
+		super.refreshAfterSceneLoad();
+		npcs.clear();
+		scanForNpcs();
 	}
 
 	public NpcStep addAlternateNpcs(Integer... alternateNpcIDs)
