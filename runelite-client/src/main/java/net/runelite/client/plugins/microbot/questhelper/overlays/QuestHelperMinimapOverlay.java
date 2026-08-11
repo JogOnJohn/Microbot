@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.questhelper.overlays;
 
 import net.runelite.client.plugins.microbot.questhelper.QuestHelperPlugin;
 import net.runelite.client.plugins.microbot.questhelper.questhelpers.QuestHelper;
+import net.runelite.client.plugins.microbot.questhelper.steps.QuestStep;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -27,10 +28,21 @@ public class QuestHelperMinimapOverlay extends Overlay
 	public Dimension render(Graphics2D graphics)
 	{
 		QuestHelper quest = plugin.getSelectedQuest();
-
-		if (quest != null && quest.getCurrentStep() != null && quest.getCurrentStep().getActiveStep() != null)
+		if (quest == null)
 		{
-			quest.getCurrentStep().getActiveStep().makeDirectionOverlayHint(graphics, plugin);
+			return null;
+		}
+
+		QuestStep currentStep = quest.getCurrentStep();
+		if (currentStep == null)
+		{
+			return null;
+		}
+
+		QuestStep activeStep = currentStep.getActiveStep();
+		if (activeStep != null)
+		{
+			activeStep.makeDirectionOverlayHint(graphics, plugin);
 		}
 		return null;
 	}
