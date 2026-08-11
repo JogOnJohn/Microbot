@@ -82,14 +82,15 @@ public class ItemOnTileRequirement extends ConditionForStep
 
 	private boolean checkAllTiles(Client client)
 	{
-		if (client.getTopLevelWorldView().getScene() == null) return false;
+		WorldView topLevelWorldView = client.getTopLevelWorldView();
+		if (topLevelWorldView == null || topLevelWorldView.getScene() == null) return false;
 
 		if (definedPoint != null)
 		{
 			var localPoints = definedPoint.resolveLocalPoints(client);
 			for (LocalPoint localPoint : localPoints)
 			{
-				Tile tile = client.getTopLevelWorldView().getScene().getTiles()[client.getTopLevelWorldView().getPlane()][localPoint.getSceneX()][localPoint.getSceneY()];
+				Tile tile = topLevelWorldView.getScene().getTiles()[topLevelWorldView.getPlane()][localPoint.getSceneX()][localPoint.getSceneY()];
 				if (tile != null)
 				{
 					List<TileItem> items = tile.getGroundItems();
@@ -107,8 +108,8 @@ public class ItemOnTileRequirement extends ConditionForStep
 		}
 
 		var worldViews = new ArrayList<WorldView>();
-		var topLevelWorldView = client.getTopLevelWorldView();
-		var playerWorldView = client.getLocalPlayer().getWorldView();
+		var localPlayer = client.getLocalPlayer();
+		var playerWorldView = localPlayer == null ? null : localPlayer.getWorldView();
 		if (topLevelWorldView != null)
 		{
 			worldViews.add(topLevelWorldView);

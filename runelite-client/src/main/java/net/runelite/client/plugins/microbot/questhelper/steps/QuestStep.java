@@ -723,6 +723,10 @@ public abstract class QuestStep implements Module
 	{
 	}
 
+	public void refreshAfterSceneLoad()
+	{
+	}
+
 	public PuzzleWrapperStep puzzleWrapStep()
 	{
 		return new PuzzleWrapperStep(getQuestHelper(), this);

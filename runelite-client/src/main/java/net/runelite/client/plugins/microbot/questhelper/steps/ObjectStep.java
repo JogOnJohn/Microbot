@@ -148,16 +148,27 @@ public class ObjectStep extends DetailedQuestStep
 	{
 		// TODO: This needs to be tested in Shadow of the Storm's Demon Room
 		objects.clear();
-		loadObjectsInWorldView(client.getTopLevelWorldView());
-		var playerWorldView = client.getLocalPlayer().getWorldView();
-		if (playerWorldView != client.getTopLevelWorldView())
+		WorldView topLevelWorldView = client.getTopLevelWorldView();
+		Player localPlayer = client.getLocalPlayer();
+		if (topLevelWorldView == null || localPlayer == null)
 		{
-			loadObjectsInWorldView(client.getLocalPlayer().getWorldView());
+			return;
+		}
+
+		loadObjectsInWorldView(topLevelWorldView);
+		WorldView playerWorldView = localPlayer.getWorldView();
+		if (playerWorldView != null && playerWorldView != topLevelWorldView)
+		{
+			loadObjectsInWorldView(playerWorldView);
 		}
 	}
 
 	protected void loadObjectsInWorldView(WorldView worldView)
 	{
+		if (worldView == null || worldView.getScene() == null)
+		{
+			return;
+		}
 		Tile[][] tiles = worldView.getScene().getTiles()[worldView.getPlane()];
 		for (Tile[] lineOfTiles : tiles)
 		{
@@ -182,11 +193,16 @@ public class ObjectStep extends DetailedQuestStep
 	public void onGameTick(final GameTick event)
 	{
 		super.onGameTick(event);
+		WorldView topLevelWorldView = client.getTopLevelWorldView();
+		if (topLevelWorldView == null)
+		{
+			return;
+		}
 		if (revalidateObjects)
 		{
-			if (lastPlane != client.getTopLevelWorldView().getPlane())
+			if (lastPlane != topLevelWorldView.getPlane())
 			{
-				lastPlane = client.getTopLevelWorldView().getPlane();
+				lastPlane = topLevelWorldView.getPlane();
 				loadObjects();
 			}
 		}
@@ -206,10 +222,20 @@ public class ObjectStep extends DetailedQuestStep
 			return;
 		}
 
-		LocalPoint localPoint = point.resolveLocalPoint(client, client.getTopLevelWorldView());
+		WorldView topLevelWorldView = client.getTopLevelWorldView();
+		if (topLevelWorldView == null)
+		{
+			return;
+		}
+
+		LocalPoint localPoint = point.resolveLocalPoint(client, topLevelWorldView);
 		if (localPoint == null) return;
 
 		var wv = client.getWorldView(localPoint.getWorldView());
+		if (wv == null || wv.getScene() == null)
+		{
+			return;
+		}
 		Tile[][][] tiles = wv.getScene().getTiles();
 
 		Tile tile = tiles[wv.getPlane()][localPoint.getSceneX()][localPoint.getSceneY()];
@@ -466,13 +492,15 @@ public class ObjectStep extends DetailedQuestStep
 
 	protected void handleObjects(TileObject object)
 	{
-		if (object == null)
+		Player localPlayer = client.getLocalPlayer();
+		if (object == null || localPlayer == null)
 		{
 			return;
 		}
 
-		var worldViewsToConsider = List.of(client.getTopLevelWorldView(), client.getLocalPlayer().getWorldView());
-		if (!worldViewsToConsider.contains(object.getWorldView()))
+		WorldView topLevelWorldView = client.getTopLevelWorldView();
+		WorldView playerWorldView = localPlayer.getWorldView();
+		if (object.getWorldView() != topLevelWorldView && object.getWorldView() != playerWorldView)
 		{
 			return;
 		}
@@ -494,6 +522,22 @@ public class ObjectStep extends DetailedQuestStep
 			{
 				setObjects(object);
 			}
+		}
+	}
+
+	@Override
+	public void refreshAfterSceneLoad()
+	{
+		super.refreshAfterSceneLoad();
+		closestObject = null;
+		if (definedPoint != null && !showAllInArea)
+		{
+			objects.clear();
+			checkTileForObject(definedPoint);
+		}
+		else
+		{
+			loadObjects();
 		}
 	}
 
