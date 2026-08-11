@@ -1,7 +1,6 @@
 package net.runelite.client.plugins.microbot.util.poh.data;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import net.runelite.api.GameObject;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ObjectID;
@@ -21,7 +20,6 @@ import static net.runelite.api.gameval.VarbitID.VARROCK_DIARY_MEDIUM_COMPLETE;
  *
  */
 @Getter
-@RequiredArgsConstructor
 public enum NexusPortal implements PohTeleport {
     VARROCK(TeleportType.NORMAL_MAGIC, "Varrock", TeleportLocationData.VARROCK.getLocation()),
     VARROCK_GE(TeleportType.NORMAL_MAGIC, "Grand Exchange", TeleportLocationData.VARROCK_GE.getLocation()),
@@ -54,13 +52,26 @@ public enum NexusPortal implements PohTeleport {
     CEMETERY(TeleportType.ARCEUUS_MAGIC, "Cemetery", TeleportLocationData.CEMETERY.getLocation()),
     BARROWS(TeleportType.ARCEUUS_MAGIC, "Barrows", TeleportLocationData.BARROWS.getLocation()),
     APE_ATOLL_DUNGEON(TeleportType.ARCEUUS_MAGIC, "Ape Atoll Dungeon", TeleportLocationData.APE_ATOLL_ARCEUUS.getLocation()),
-    CIVITAS_ILLA_FORTIS(TeleportType.NORMAL_MAGIC, "Civitas illa Fortis", TeleportLocationData.CIVITAS_ILLA_FORTIS.getLocation());
+    CIVITAS_ILLA_FORTIS(TeleportType.NORMAL_MAGIC, "Civitas illa Fortis", TeleportLocationData.CIVITAS_ILLA_FORTIS.getLocation()),
+    LASSAR(TeleportType.ANCIENT_MAGICKS, "Lassar", new WorldPoint(3004, 3470, 0), 34);
 
     private final TeleportType type;
     private final String text;
     private final WorldPoint location;
+    private final Integer nexusValue;
 
     private final int duration = 6;
+
+    NexusPortal(TeleportType type, String text, WorldPoint location) {
+        this(type, text, location, null);
+    }
+
+    NexusPortal(TeleportType type, String text, WorldPoint location, Integer nexusValue) {
+        this.type = type;
+        this.text = text;
+        this.location = location;
+        this.nexusValue = nexusValue;
+    }
 
     @Override
     public String displayInfo() {
@@ -73,9 +84,17 @@ public enum NexusPortal implements PohTeleport {
     }
 
     public int varbitValue() {
-        int ordinal = ordinal();
         //Since you get Varrock GE for free with Varrock, there's no varbit value for it
-        return ordinal;
+        return nexusValue == null ? ordinal() : nexusValue;
+    }
+
+    static NexusPortal fromVarbitValue(int value) {
+        for (NexusPortal portal : values()) {
+            if (portal.varbitValue() == value) {
+                return portal;
+            }
+        }
+        return null;
     }
 
 
@@ -115,8 +134,10 @@ public enum NexusPortal implements PohTeleport {
                 }
                 continue;
             }
-            NexusPortal tp = NexusPortal.values()[value];
-            teleports.add(tp);
+            NexusPortal tp = fromVarbitValue(value);
+            if (tp != null) {
+                teleports.add(tp);
+            }
         }
         return teleports;
     }
@@ -157,6 +178,16 @@ public enum NexusPortal implements PohTeleport {
             VarbitID.POH_NEXUS_TELE_33,
             VarbitID.POH_NEXUS_TELE_34,
             VarbitID.POH_NEXUS_TELE_35,
+            VarbitID.POH_NEXUS_TELE_36,
+            VarbitID.POH_NEXUS_TELE_37,
+            VarbitID.POH_NEXUS_TELE_38,
+            VarbitID.POH_NEXUS_TELE_39,
+            VarbitID.POH_NEXUS_TELE_40,
+            VarbitID.POH_NEXUS_TELE_41,
+            VarbitID.POH_NEXUS_TELE_42,
+            VarbitID.POH_NEXUS_TELE_43,
+            VarbitID.POH_NEXUS_TELE_44,
+            VarbitID.POH_NEXUS_TELE_45,
     };
 
     @Override
