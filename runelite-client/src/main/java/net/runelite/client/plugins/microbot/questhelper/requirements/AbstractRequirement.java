@@ -24,8 +24,8 @@
  */
 package net.runelite.client.plugins.microbot.questhelper.requirements;
 
-import net.runelite.api.Client;
 import net.runelite.client.plugins.microbot.questhelper.QuestHelperConfig;
+import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.components.LineComponent;
 
 import javax.annotation.Nonnull;
@@ -103,7 +103,7 @@ public abstract class AbstractRequirement implements Requirement
 	public void appendToTooltip(String text)
 	{
 		StringBuilder builder = new StringBuilder();
-		String currentTooltip = getTooltip();
+		String currentTooltip = this.tooltip;
 		if (currentTooltip != null)
 		{
 			builder.append(currentTooltip);
