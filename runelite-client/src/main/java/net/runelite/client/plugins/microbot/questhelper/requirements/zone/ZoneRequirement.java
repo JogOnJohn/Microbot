@@ -31,8 +31,11 @@ import net.runelite.client.plugins.microbot.questhelper.questhelpers.QuestUtil;
 import net.runelite.client.plugins.microbot.questhelper.requirements.AbstractRequirement;
 import net.runelite.client.plugins.microbot.questhelper.util.Utils;
 import lombok.Getter;
+import lombok.Setter;
 import net.runelite.api.Client;
 import net.runelite.api.Player;
+import net.runelite.api.WorldEntity;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 
 import javax.annotation.Nonnull;
@@ -44,7 +47,15 @@ public class ZoneRequirement extends AbstractRequirement
 	@Getter
 	private final List<Zone> zones;
 	private final boolean checkInZone;
+	@Setter
 	private String displayText;
+
+	/// Contains the value of the most recent successful zone check.
+	/// null = no check has succeeded
+	/// true = the last check was deemed a success (check returned true)
+	/// false = the last check was deemed a failure (check returned false)
+	@Getter
+	private Boolean matchedZoneLastCheck = null;
 
 	/**
 	 * Check if the player is either in the specified zone.
@@ -107,7 +118,8 @@ public class ZoneRequirement extends AbstractRequirement
 		if (player != null && zones != null)
 		{
 			boolean inZone = zones.stream().anyMatch(z -> z.contains(client, player.getLocalLocation()));
-			return inZone == checkInZone;
+			matchedZoneLastCheck = inZone == checkInZone;
+			return matchedZoneLastCheck;
 		}
 		return false;
 	}
