@@ -243,4 +243,15 @@ public interface GpuPluginConfig extends Config
 	{
 		return 3;
 	}
+
+	@ConfigItem(
+		keyName = "fboDiagnostics",
+		name = "FBO diagnostics",
+		description = "Writes focused GPU framebuffer diagnostics to gpu-fbo-debug.log. Disable to stop capture.",
+		position = 21
+	)
+	default boolean fboDiagnostics()
+	{
+		return true;
+	}
 }

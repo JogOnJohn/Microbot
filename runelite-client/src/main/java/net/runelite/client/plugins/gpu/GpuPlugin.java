@@ -31,6 +31,10 @@ import java.awt.Canvas;
 import java.awt.Dimension;
 import java.awt.GraphicsConfiguration;
 import java.awt.Image;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
@@ -137,6 +141,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	private Canvas canvas;
 	private AWTContext awtContext;
 	private Callback debugCallback;
+	private ComponentAdapter fboComponentListener;
+	private FocusAdapter fboFocusListener;
 
 	private boolean lwjglInitted = false;
 	private GLCapabilities glCapabilities;
@@ -316,6 +322,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				awtContext.createGLContext();
 
 				canvas.setIgnoreRepaint(true);
+				installFboDiagnostics();
 
 				// lwjgl defaults to lwjgl- + user.name, but this breaks if the username would cause an invalid path
 				// to be created.
@@ -325,6 +332,9 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 				log.info("Using device: {}", glGetString(GL_RENDERER));
 				log.info("Using driver: {}", glGetString(GL_VERSION));
+				fboDiagnostic("GPU_START vendor=%s renderer=%s version=%s maxRenderbuffer=%d maxSamples=%d",
+					glGetString(GL_VENDOR), glGetString(GL_RENDERER), glGetString(GL_VERSION),
+					glGetInteger(GL_MAX_RENDERBUFFER_SIZE), glGetInteger(GL_MAX_SAMPLES));
 
 				if (!glCapabilities.OpenGL33)
 				{
@@ -467,6 +477,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				shutdownBuffers();
 				shutdownFbo();
 			}
+			removeFboDiagnostics();
 
 			if (awtContext != null)
 			{
@@ -780,6 +791,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		width = getScaledValue(transform.getScaleX(), width);
 		height = getScaledValue(transform.getScaleY(), height);
 
+		fboDiagnostic("FBO_CREATE_REQUEST width=%d height=%d samples=%d scaleX=%.3f scaleY=%.3f canvasValid=%s canvasShowing=%s canvasFocus=%s",
+			width, height, aaSamples, transform.getScaleX(), transform.getScaleY(),
+			canvas.isValid(), canvas.isShowing(), canvas.hasFocus());
+
 		if (aaSamples > 0)
 		{
 			glEnable(GL_MULTISAMPLE);
@@ -806,8 +821,13 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepthBuffer);
 
 		int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+		fboDiagnostic("FBO_CREATE_RESULT fbo=%d color=%d depth=%d status=0x%04X colorSize=%dx%d depthSize=%dx%d",
+			fboScene, rboColorBuffer, rboDepthBuffer, status,
+			getRenderbufferWidth(rboColorBuffer), getRenderbufferHeight(rboColorBuffer),
+			getRenderbufferWidth(rboDepthBuffer), getRenderbufferHeight(rboDepthBuffer));
 		if (status != GL_FRAMEBUFFER_COMPLETE)
 		{
+			fboDiagnostic("FBO_INCOMPLETE status=0x%04X requestedWidth=%d requestedHeight=%d samples=%d", status, width, height, aaSamples);
 			throw new RuntimeException("FBO is incomplete. status: " + status);
 		}
 
@@ -919,6 +939,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				|| lastStretchedCanvasHeight != stretchedCanvasHeight
 				|| lastAntiAliasingMode != antiAliasingMode)
 			{
+				fboDiagnostic("FBO_REBUILD_TRIGGER previous=%dx%d/%s next=%dx%d/%s canvas=%dx%d viewport=%dx%d stretched=%s",
+					lastStretchedCanvasWidth, lastStretchedCanvasHeight, lastAntiAliasingMode,
+					stretchedCanvasWidth, stretchedCanvasHeight, antiAliasingMode,
+					canvasWidth, canvasHeight, viewportWidth, viewportHeight, client.isStretchedEnabled());
 				shutdownFbo();
 
 				// Bind default FBO to check whether anti-aliasing is forced
@@ -1426,6 +1450,71 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 				log.debug("Rebuilt zone wv={} x={} z={}", wv.getId(), x, z);
 			}
+		}
+	}
+
+	private void installFboDiagnostics()
+	{
+		fboComponentListener = new ComponentAdapter()
+		{
+			@Override
+			public void componentResized(ComponentEvent event)
+			{
+				fboDiagnostic("CANVAS_RESIZED size=%dx%d valid=%s showing=%s focus=%s", canvas.getWidth(), canvas.getHeight(), canvas.isValid(), canvas.isShowing(), canvas.hasFocus());
+			}
+		};
+		fboFocusListener = new FocusAdapter()
+		{
+			@Override
+			public void focusGained(FocusEvent event)
+			{
+				fboDiagnostic("CANVAS_FOCUS_GAINED temporary=%s", event.isTemporary());
+			}
+
+			@Override
+			public void focusLost(FocusEvent event)
+			{
+				fboDiagnostic("CANVAS_FOCUS_LOST temporary=%s", event.isTemporary());
+			}
+		};
+		canvas.addComponentListener(fboComponentListener);
+		canvas.addFocusListener(fboFocusListener);
+	}
+
+	private void removeFboDiagnostics()
+	{
+		if (canvas != null)
+		{
+			if (fboComponentListener != null)
+			{
+				canvas.removeComponentListener(fboComponentListener);
+				fboComponentListener = null;
+			}
+			if (fboFocusListener != null)
+			{
+				canvas.removeFocusListener(fboFocusListener);
+				fboFocusListener = null;
+			}
+		}
+	}
+
+	private int getRenderbufferWidth(int renderbuffer)
+	{
+		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+		return glGetRenderbufferParameteri(GL_RENDERBUFFER, GL_RENDERBUFFER_WIDTH);
+	}
+
+	private int getRenderbufferHeight(int renderbuffer)
+	{
+		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+		return glGetRenderbufferParameteri(GL_RENDERBUFFER, GL_RENDERBUFFER_HEIGHT);
+	}
+
+	private void fboDiagnostic(String format, Object... args)
+	{
+		if (config.fboDiagnostics())
+		{
+			GpuFboDiagnostics.write(format, args);
 		}
 	}
 
