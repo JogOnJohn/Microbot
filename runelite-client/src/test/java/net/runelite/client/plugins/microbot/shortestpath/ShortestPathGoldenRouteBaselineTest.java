@@ -43,7 +43,7 @@ public class ShortestPathGoldenRouteBaselineTest
 			new RouteCase("paterdomus-trapdoor", point(3405, 3506, 0), point(3405, 9894, 0),
 				2, 80, TransportType.TRANSPORT, "TRANSPORT:Climb-down:Trapdoor:1581"),
 			new RouteCase("lumbridge-bank-stairs", point(3222, 3218, 0), point(3208, 3220, 2),
-				10, 120, TransportType.TRANSPORT, "TRANSPORT:Top-floor:Staircase"),
+				10, 120, TransportType.TRANSPORT, "TRANSPORT:Climb-up:Staircase:16671"),
 			new RouteCase("rimmington-to-aldarin-charter", point(2957, 3214, 0), point(1455, 2968, 0),
 				20, 500, TransportType.CHARTER_SHIP, "CHARTER_SHIP:Charter:Trader Crewmember:1330"),
 			new RouteCase("paterdomus-holy-barrier", point(3440, 9887, 0), point(3423, 3485, 0),
@@ -75,7 +75,7 @@ public class ShortestPathGoldenRouteBaselineTest
 			new RouteCase("sea-slug-boat-to-fishing-platform", point(2720, 3301, 0), point(2782, 3273, 0),
 				1, 40, TransportType.BOAT, "BOAT:Travel:Holgart:7789"),
 			new RouteCase("lumbridge-to-al-kharid-toll-gate", point(3222, 3218, 0), point(3269, 3167, 0),
-				40, 250, TransportType.TRANSPORT, "TRANSPORT:Pay-toll(10gp):Gate:2786"),
+				40, 250, TransportType.TRANSPORT, "TRANSPORT:Open:Gate:44050"),
 			new RouteCase("marim-stairs", point(2795, 2793, 0), point(2795, 2797, 1),
 				1, 10, TransportType.TRANSPORT, "TRANSPORT:Climb-up:Stairs:4756")
 		);

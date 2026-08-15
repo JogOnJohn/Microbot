@@ -153,3 +153,35 @@ IDs 2786-2789; they must not be restored over the current 44050/44051 rows.
 The public wrapper now generates first, passes that exact output directory into the JVM validator,
 and runs the golden/resource tests. Use `-SkipMicrobotValidation` only for converter development;
 its warning means the output is not release-ready.
+## 2026-08-15 refresh and catalog repair
+
+Official upstream now pins tooling `c68fba975a7e6e45bc69e55f2dd5a109b8f631b7` and data
+`3208646f33c8f155d0262c5fc84f8e29f7599838`. Relative to the previous public-tool pin, all 25
+transport TSVs are unchanged; the only official payload change is `collision-map.zip`, SHA-256
+`21180462094d7e011bf70623ce4bd2ba58e1d13fa895b1f601a6fe4c29155e6c`.
+
+The refresh exposed older branch drift: the spikes retained the managed resource catalog from
+Microbot PR #1832 after upstream reverted that PR in #1835. The repair restores all managed TSVs
+from the pinned official payload, then reapplies 34 explicit local overrides. Fourteen intentional
+post-foundation Microbot transports are now durable UPSERT overrides: Port Sarim back-room doors,
+coin-gated Shantay passes, Corsair Cove stairs, and the Taverley Sturdy door. The existing Gnome
+gate, Elemental Workshop, Piscatoris, and Marim fixes remain overrides as before. Microbot-owned
+`blocked_edges.tsv`, `dangerous_tiles.tsv`, `npcs.tsv`, and `restrictions.tsv` were not replaced.
+
+The semantic comparator now treats parser-equivalent `Action;Target;123` and
+`Action Target 123` interactions identically and ignores blank non-identity columns. This removes
+false drift without hiding requirements, duration, endpoint, adjacency, or handler changes. The
+Gradle validator also declares the staged generated directory as an input, preventing an unsafe
+`UP-TO-DATE` result after the candidate payload changes.
+
+Final playable-spike validation: converter 0 added / 0 removed / 0 changed after 34 overrides;
+Python converter tests pass; the real-parser/collision validator passes; all 20 golden routes and
+`TransportResourceLoadTest` pass; `:client:compileJava` is clean. Two golden signatures were
+updated to the restored executable official interactions: Lumbridge bank uses staircase IDs 16671
+and 16672, and the modern Al Kharid route uses gate 44050 instead of obsolete toll gate 2786.
+No jar was rebuilt because a Microbot client from this worktree was running during the refresh.
+
+The canonical repeatable maintainer guide lives in the public converter repository:
+<https://github.com/JogOnJohn/microbot-shortest-path-sync/blob/main/docs/UPDATE_WORKFLOW.md>.
+It covers pin discovery, provenance, review, deliberate adoption, validation, promotion to both
+spikes, author identity, push, and handoff requirements.
