@@ -220,6 +220,9 @@ tasks.register<Test>("validateTransportSync") {
     classpath = sourceSets.test.get().runtimeClasspath
     include("**/TransportSyncGeneratedResourcesTest.class")
     val generatedDir = providers.gradleProperty("transportSyncGeneratedDir")
+    inputs.property("transportSyncGeneratedDir", generatedDir)
+    inputs.dir(generatedDir.map { file(it) })
+        .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
     if (generatedDir.isPresent) {
         systemProperty("microbot.transport.generated.dir", file(generatedDir.get()).absolutePath)
     }

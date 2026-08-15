@@ -2,6 +2,8 @@
 
 Canonical standalone repository:
 [`JogOnJohn/microbot-shortest-path-sync`](https://github.com/JogOnJohn/microbot-shortest-path-sync).
+The complete maintainer workflow is documented in
+[`docs/UPDATE_WORKFLOW.md`](https://github.com/JogOnJohn/microbot-shortest-path-sync/blob/main/docs/UPDATE_WORKFLOW.md).
 This directory is the vendored Microbot integration snapshot used by the JVM validator and branch
 history. Develop general converter, wrapper, fixtures, and reporting changes in the standalone
 repository first, then deliberately vendor a reviewed version here alongside any Microbot-specific
