@@ -1,60 +1,157 @@
-# Handoff — Microbot spike: walker/pathfinder + agility + QoL
+# Microbot Shortest-Path Playable Handoff
 
-_Last refreshed 2026-07-07. Untracked scratch doc; git is the source of truth, this is just orientation._
+Last refreshed: 2026-08-15
 
-## Two repos in play
-1. **Engine** — `C:\Users\Billy\IdeaProjects\Microbot-shortestpath-sync` (worktree of `C:\Users\Billy\IdeaProjects\Microbot`), branch **`spike/shortest-path-upstream`**. The RuneLite/Microbot client.
-2. **Plugin hub** — `C:\Users\Billy\IdeaProjects\Microbot-Hub`. Sideloaded plugins (agility, QoL, etc.), compiled against the client jar.
+## Checkout
 
-## Build & deploy cheatsheet
-- Engine module is **`:client`** (not `:runelite-client`).
-  - Compile only: `./gradlew :client:compileJava --console=plain`
-  - Full launcher jar: `./gradlew :client:microbotReleaseJar` → `runelite-client/build/libs/microbot-<version>.jar`.
-  - **Version is now 2.6.12** (bumped by a merged `local/development`). The desktop bat `Launch Microbot - Shortest Path Spike.bat` auto-reads `microbot.version` from `gradle.properties`, so it always launches the right jar — no edit needed.
-- Hub plugin jars: `./gradlew <PluginName>Jar` → `build/libs/<PluginName>-<ver>.jar`, then copy over the sideload target `~/.runelite/microbot-plugins/<PluginName>.jar` (no version in the deployed name).
-  - Agility: `./gradlew MicroAgilityPluginJar` → deploy to `MicroAgilityPlugin.jar`
-  - QoL: `./gradlew QoLPluginJar` → deploy to `QoLPlugin.jar`
-  - Compile-only for a source set: `./gradlew compileAgilityJava` (or `compileQualityoflifeJava`).
+- Repository: `https://github.com/JogOnJohn/Microbot`
+- Worktree: `C:\Users\Billy\IdeaProjects\Microbot-shortestpath-sync`
+- Playable branch: `spike/shortest-path-upstream`
+- Current handoff base: `7b9f1754ee2ebdd13c51f43f4151b83d0105a644`
+- Upstream Microbot: `https://github.com/chsami/Microbot`
+- RuneLite remote is vendor-only; do not treat it as the Microbot upstream.
 
-## CRITICAL deploy rule (learned the hard way)
-- **Never rebuild the CLIENT jar while the client is running** — overwriting the live `microbot-*.jar` corrupts the running JVM's lazy class/resource loading (`ZipException: invalid LOC header`, `NoClassDefFoundError`, questhelper `iconBackground` NPE). Close the client first, then build.
-- Sideloaded **plugin** jars can be copied while running, but the running client keeps the OLD plugin classes until a **full client restart** (toggling the plugin off/on does NOT reload the jar).
+The playable branch is the source of truth for this work. `repair/shortest-path-post-1824`
+is not the launch branch. `spike/shortest-path-data-sync` is separate and was not rebuilt or
+promoted during the latest sync.
 
-## Agent server (live game-state introspection) — USE THIS
-- **Preferred: the `/agent-server-gamestate` skill** (user set this up) — invoke it to query live player position, inventory, NPCs, objects, ground items, widgets, dialogue, banking, etc. Use it whenever you need ground truth about the running client instead of guessing from logs.
-- Under the hood it's localhost HTTP on `127.0.0.1:8081`, token auto-read from `~/.runelite/.agent-token` (Agent Server plugin, currently on). Raw fallback if needed:
-  - `curl -s -H "X-Agent-Token: $(cat ~/.runelite/.agent-token)" http://127.0.0.1:8081/state`
-  - Endpoints: `/state /objects?name=&maxDistance= /ground-items?name= /dialogue /widgets/search?q= /inventory /skills` … (`/objects` returns per-object `reachable`). Full docs: `docs/AGENT_SERVER.md`.
+## Current Versions
 
-## Current branch state
-### Engine `spike/shortest-path-upstream` (HEAD a8b81930dc — a merge of local/development)
-Key fixes landed this session (all ancestors of HEAD):
-- W330 hosted-house POH routing spike (enter advertised max house, drink ornate pool, use jewellery box/nexus/portals as transports).
-- `PathfinderConfig.refresh` **coalescing + bounded re-runs** (`MAX_COALESCED_REFRESH_RUNS=3`) — fixes concurrent transport-map corruption AND the client-thread stall when refresh() is hammered during heavy questing.
-- `tryDirectLocalWalkBeforePathfinder` no longer reports ARRIVED for collision-blind-near-but-unreachable targets.
-- `processWalk` guards null player location (loading screens) instead of NPE-ing the walk task.
-- Teleport-label overlay ("Show teleport labels", on by default) — shows the path's spell/item/PoH teleport on the player; fixed a `transports.get(null)` ConcurrentHashMap NPE that spammed the overlay renderer.
-- Quest order: The Red Reef placed after Troubled Tortugans.
+- Microbot: `2.6.19`
+- RuneLite: `1.12.35`
+- Plugin Hub compatibility version: `1.12.35`
+- Release jar: `runelite-client/build/libs/microbot-2.6.19.jar`
 
-### Hub `fix/agility-mark-reachability` (HEAD 9e5964e1)
-Agility fixes (Seers-driven but mostly general):
-- `9df8b5e1` mark reachability via `Rs2Tile.isTileReachable` (not the collision-blind `Rs2Walker.canReach`).
-- `48df0fcf` Seers: don't webwalk back to start when an obstacle is reachable (breaks stall loop + dodges cold-pathfinder delay).
-- `c299f592` re-scan for the next obstacle before "No obstacle found" (rides plane-transition/flicker window).
-- `bb62bbbd` blocklist marks that fail to pick up (20s cooldown) — stops loop thrash.
-- `eea8a5b5` lifted the walk-back guard into the BASE `AgilityCourseHandler.handleWalkToStart` → all rooftop courses.
-- `9e5964e1` **sticky mark pickup** — keep re-issuing Take + blocking the course until the mark is grabbed or 5s timeout; fixes the first bank-roof mark being skipped.
-- (`829cfde1` is a stray GildedAltar whitespace commit that rode along — drop/relocate before any PR.)
-- Deployed: `MicroAgilityPlugin.jar` (2026-07-07 17:04).
+The desktop launcher reads `microbot.version` from `gradle.properties` and launches the jar from
+this worktree:
 
-### Hub `feat/qol-auto-pay-tree-removal` (off `main`, HEAD 488a7e78) — PR-ready
-- Single commit: "Auto Pay Tree Removal" toggle in QoL → Dialogue (default on). Clicks "Yes." on the farming "Pay X Coins to have your tree chopped down?" prompt. Matched on the question title (widget 219,1), amount-agnostic. Deployed: `QoLPlugin.jar` (2026-07-07 12:28). User will PR once tested on a real farm run.
+`C:\Users\Billy\Desktop\Microbot Shortest Path Clients\Shortest Path Spike\Launch Microbot - Shortest Path Spike.bat`
 
-## Seers course reference (for future agility work)
-Obstacles in order (x,y,plane): wallclimb 2729,3489,0 · gap(bank) 2720,3492,3 · tightrope 2710,3489,2 · gap(mid house) 2710,3476,2 · gap(upper house) 2700,3469,3 · edge(church leapdown) 2703,3461,3. Key insight: obstacles/marks on a different plane than the player are visible but NOT interactable until you complete the prior obstacle and enter that plane.
-Mark spawns: bank roof 2727,3498,z3 · Elem WS 2707,3493,z2 & 2710,3493,z2 · mid house 2712,3481,z2 · church 2698,3465.
+Never overwrite the client jar while that jar is running. Stop the exact Microbot Java process,
+build, and then relaunch through the desktop batch file.
 
-## Parked / next
-1. **Core-walker cold-start delay** (engine): every `walkTo` waits ~2s on a null pathfinder + multi-second to first click. The Seers guard routes around it for lap resets, but it's still there for long/off-course walks. Needs a careful, live-tested pass — do NOT patch the core walker blind (this session had multiple walker regressions). Client-jar change → build only with client closed.
-2. **Prifddinas** course overrides `handleWalkToStart` itself, so it didn't get the base walk-back guard. Add when the account reaches lvl 75.
-3. **QoL PR** after farm-run test; drop the stray GildedAltar commit if PRing agility work.
+## Branch Sync State
+
+The 2026-08-15 upstream sync was promoted through:
+
+1. `upstream/development` -> `development`
+2. `development` -> `local/development`
+3. `local/development` -> `spike/shortest-path-upstream`
+
+Relevant heads after the sync and walker fix:
+
+- `main`: `3157a6b430`
+- `development`: `19915968c8`
+- `local/development`: `7cfa078182`
+- `spike/shortest-path-upstream`: `7b9f1754ee`
+
+All four branches were pushed to `origin`. A fresh fetch reported `0 ahead / 0 behind` for each.
+The upstream walker rewrite from PR 1832 was reverted by Microbot upstream, so its net walker code
+was not introduced. The surviving upstream development change was the Death/grave recovery API.
+
+## Walker Regression And Fix
+
+After the sync, live Gem Crab walking was visibly slow. The log proved that route planning was not
+the main delay:
+
+- Pathfinder ready: `682ms`
+- First minimap click: `9589ms`
+- A raw scene pass: `9518ms`
+- Raw scan attribution: `doorFind=1944ms`, `transports=7517ms`
+
+Root cause: the new transport-owned door classification could perform client-thread object and
+composition work before checking whether a scene object intersected the route segment. That cost
+was multiplied across scene objects and candidate route edges.
+
+Fix commit:
+
+`7b9f1754ee fix(walker): avoid off-route door classification stalls`
+
+The fix moves cheap route-geometry rejection ahead of transport ownership checks in:
+
+- `runelite-client/src/main/java/net/runelite/client/plugins/microbot/util/walker/Rs2Walker.java`
+- `runelite-client/src/main/java/net/runelite/client/plugins/microbot/util/walker/door/Rs2DoorProbe.java`
+
+A headless regression test was added to:
+
+- `runelite-client/src/test/java/net/runelite/client/plugins/microbot/util/walker/door/Rs2DoorProbeTest.java`
+
+## Validation Completed
+
+The patched source compiled and the focused suite passed:
+
+- Door probe, geometry, classifier, ahead resolver, and await tests
+- `Rs2WalkerUnitTest`
+- W330 merge and hosted-house transport tests
+- `ShortestPathGoldenRouteBaselineTest`
+- All 20 named golden route cases passed
+
+The release jar was rebuilt and relaunched successfully on the original machine. The user asked to
+push immediately and continue on another machine, so a second live route was not awaited. The next
+machine should capture a fresh `path_snapshot` to `first_minimap_click` interval and confirm that the
+previous 8-10 second classification gap is gone.
+
+Two one-off exceptions appeared during login before the welcome screen completed:
+
+- RuneLite LootTracker read a null local player.
+- GemCrabKiller read a null actor.
+
+They were startup races and are separate from the walker timing regression. Do not attribute them
+to the door-filter change unless they recur after the client is fully logged in.
+
+## W330 And Shortest-Path Invariants
+
+Preserve the playable branch's existing behavior:
+
+- World 330 hosted-house entry and POH facility transports
+- Spell access to W330 without requiring a house tablet
+- Off-thread path planning and current-route handoff behavior
+- Generated transport validation path
+- Custom route-state diagnostics and recovery logic
+
+Do not replace `Rs2Walker.java`, `PathfinderConfig.java`, or transport resources wholesale from
+upstream. Merge selectively and rerun W330 plus golden-route coverage.
+
+## Resume On Another Machine
+
+```powershell
+git fetch --all --prune
+git switch spike/shortest-path-upstream
+git pull --ff-only origin spike/shortest-path-upstream
+git status --short --branch
+```
+
+Run the focused regression set:
+
+```powershell
+.\gradlew.bat :client:runUnitTests `
+  --tests net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorProbeTest `
+  --tests net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorGeometryTest `
+  --tests net.runelite.client.plugins.microbot.util.walker.Rs2WalkerUnitTest `
+  --tests net.runelite.client.plugins.microbot.shortestpath.ShortestPathGoldenRouteBaselineTest `
+  --tests net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderConfigWorld330MergeTest `
+  --tests net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransportTest `
+  --console=plain
+```
+
+With no Microbot jar process running:
+
+```powershell
+.\gradlew.bat :client:microbotReleaseJar --console=plain
+```
+
+Inspect `~/.runelite/logs/client.log` during the first real web walk. Compare these markers:
+
+- `phase=path_snapshot`
+- `phase=click_candidate_found`
+- `phase=first_minimap_click`
+- `[Walker] slow raw scene scan`
+
+Before claiming completion, fetch `origin` again and verify:
+
+```powershell
+git rev-list --left-right --count `
+  spike/shortest-path-upstream...origin/spike/shortest-path-upstream
+```
+
+Expected result: `0 0`.
