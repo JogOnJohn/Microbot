@@ -6629,12 +6629,12 @@ public class Rs2Walker {
         if (probe != null && loc.getPlane() != probe.getPlane()) {
             return false;
         }
-        if (Rs2DoorProbe.isTransportOwnedSceneObject(null, object)) {
-            return false;
-        }
         boolean nearProbe = probe != null && loc.distanceTo2D(probe) <= 2;
         boolean onSegment = fromWp != null && toWp != null && Rs2DoorGeometry.isDoorOnSegment(object, fromWp, toWp);
         if (!nearProbe && !onSegment) {
+            return false;
+        }
+        if (Rs2DoorProbe.isTransportOwnedSceneObject(null, object)) {
             return false;
         }
         ObjectComposition composition = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
@@ -7617,8 +7617,10 @@ public class Rs2Walker {
         WorldPoint location = object.getWorldLocation();
         if (location.getPlane() != playerLoc.getPlane()
                 || location.distanceTo2D(playerLoc) > radiusTiles
-                || Rs2DoorProbe.isTransportOwnedSceneObject(null, object)
                 || !Rs2DoorGeometry.isDoorOnSegment(object, fromWp, toWp)) {
+            return false;
+        }
+        if (Rs2DoorProbe.isTransportOwnedSceneObject(null, object)) {
             return false;
         }
 
@@ -7642,8 +7644,10 @@ public class Rs2Walker {
         if (location.getPlane() != playerLoc.getPlane()
                 || location.distanceTo2D(playerLoc) > radiusTiles
                 || sessionBlacklistedDoors.contains(location)
-                || Rs2DoorProbe.isTransportOwnedSceneObject(null, object)
                 || !Rs2DoorGeometry.isDoorOnSegment(object, fromWp, toWp)) {
+            return false;
+        }
+        if (Rs2DoorProbe.isTransportOwnedSceneObject(null, object)) {
             return false;
         }
 

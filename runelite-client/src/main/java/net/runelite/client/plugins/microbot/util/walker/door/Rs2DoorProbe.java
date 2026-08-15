@@ -205,11 +205,13 @@ public final class Rs2DoorProbe {
                 || (!(object instanceof WallObject) && !(object instanceof GameObject))) {
             return false;
         }
-        if (isTransportOwnedSceneObject(ctx, object)) {
-            return false;
-        }
         // Snapshot location, not object.getWorldLocation(): this runs per candidate per segment.
         if (!Rs2DoorGeometry.isDoorOnSegment(object, loc, fromWp, toWp)) {
+            return false;
+        }
+        // Transport ownership can require a client-thread composition lookup. Keep it behind the
+        // route-geometry gate so unrelated scene objects never pay that cost for every segment.
+        if (isTransportOwnedSceneObject(ctx, object)) {
             return false;
         }
         ObjectComposition comp = resolveDoorComposition(ctx, object);
