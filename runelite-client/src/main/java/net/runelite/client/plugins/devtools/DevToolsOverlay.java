@@ -84,9 +84,14 @@ class DevToolsOverlay extends Overlay {
 
     @Override
     public Dimension render(Graphics2D graphics) {
+		CameraFocusableEntity cameraFocusable = client.getCameraFocusEntity();
+		if (cameraFocusable == null)
+		{
+			return null;
+		}
 
         WorldView tlwv = client.getTopLevelWorldView();
-        WorldView playerWv = client.getLocalPlayer().getWorldView();
+        WorldView playerWv = cameraFocusable.getWorldView();
 
         graphics.setFont(FONT);
 
@@ -207,9 +212,12 @@ class DevToolsOverlay extends Overlay {
 			}
 		}
 
-        String text = local.getName() + " (A: " + local.getAnimation() + ") (P: " + local.getPoseAnimation() + ") (G: " + local.getGraphic() + ")";
-        OverlayUtil.renderActorOverlay(graphics, local, text, CYAN);
-    }
+		if (local != null)
+		{
+			String text = local.getName() + " (A: " + local.getAnimation() + ") (P: " + local.getPoseAnimation() + ") (G: " + local.getGraphic() + ")";
+			OverlayUtil.renderActorOverlay(graphics, local, text, CYAN);
+		}
+	}
 
 	private void renderNpcs(WorldView wv, Graphics2D graphics)
 	{
