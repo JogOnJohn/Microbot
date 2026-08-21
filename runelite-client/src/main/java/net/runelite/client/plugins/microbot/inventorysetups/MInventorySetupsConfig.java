@@ -27,11 +27,15 @@ package net.runelite.client.plugins.microbot.inventorysetups;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_ENABLE_LAYOUT_WARNING;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_HIDE_BUTTON;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_LAYOUT_DEFAULT;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_PERSIST_HOTKEYS_CHAT_INPUT;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_USE_OLD_ITEM_SEARCH;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_ZIGZAG_TYPE;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_LAYOUT_DUPLICATES;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_MANUAL_BANK_FILTER;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_PANEL_VIEW;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_PERSIST_HOTKEYS;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_SECTION_MODE;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_SECTION_SORTING;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_SORTING_MODE;
 import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_USE_LAYOUTS;
 
@@ -198,17 +202,6 @@ public interface MInventorySetupsConfig extends Config
 	}
 
 	@ConfigItem(
-			keyName = "locked",
-			name = "Default Locked",
-			description = "Configures the default setting for Locked Slot in new setups",
-			section = defaultSection
-	)
-	default boolean locked()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 			keyName = "stackCompare",
 			name = "Default Stack Compare",
 			description = "Configures the default setting for stack compare in new setups",
@@ -217,6 +210,17 @@ public interface MInventorySetupsConfig extends Config
 	default InventorySetupsStackCompareID stackCompareType()
 	{
 		return InventorySetupsStackCompareID.None;
+	}
+
+	@ConfigItem(
+			keyName = "attackOption",
+			name = "Default Attack Option",
+			description = "Configures new setups to include the player's current attack option",
+			section = defaultSection
+	)
+	default boolean attackOption()
+	{
+		return false;
 	}
 
 	@ConfigItem(
@@ -292,9 +296,22 @@ public interface MInventorySetupsConfig extends Config
 			keyName = CONFIG_KEY_PERSIST_HOTKEYS,
 			name = "Persist Hotkeys Outside Bank",
 			description = "Configures hotkeys to persist even outside the bank",
-			section = hotkeySection
+			section = hotkeySection,
+			position = 1
 	)
 	default boolean persistHotKeysOutsideBank()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+			keyName = CONFIG_KEY_PERSIST_HOTKEYS_CHAT_INPUT,
+			name = "Persist Hotkeys In Chat Inputs",
+			description = "Configures hotkeys to persist even during a chat input (searching the bank, PMs, etc.)",
+			section = hotkeySection,
+			position = 2
+	)
+	default boolean persistHotKeysDuringChatInput()
 	{
 		return false;
 	}
@@ -319,6 +336,17 @@ public interface MInventorySetupsConfig extends Config
 	default InventorySetupLayoutType defaultLayout()
 	{
 		return InventorySetupLayoutType.PRESET;
+	}
+
+	@ConfigItem(
+			keyName = CONFIG_KEY_ZIGZAG_TYPE,
+			name = "ZigZag Type",
+			description = "Configures ZigZag type when creating or updating a setup",
+			section = layoutSection
+	)
+	default InventorySetupsZigZagTypeID zigZagType()
+	{
+		return InventorySetupsZigZagTypeID.TOP_TO_BOTTOM;
 	}
 
 	@ConfigItem(
@@ -422,6 +450,17 @@ public interface MInventorySetupsConfig extends Config
 	}
 
 	@ConfigItem(
+			keyName = CONFIG_KEY_SECTION_SORTING,
+			name = "Section Sorting",
+			description = "Sorts sections according to the sorting mode.",
+			section = otherSection
+	)
+	default boolean sectionSorting()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 			keyName = CONFIG_KEY_HIDE_BUTTON,
 			name = "Hide Help Button",
 			description = "Hide the help button",
@@ -510,6 +549,14 @@ public interface MInventorySetupsConfig extends Config
 		return true;
 	}
 
-
-
+	@ConfigItem(
+			keyName = CONFIG_KEY_USE_OLD_ITEM_SEARCH,
+			name = "Use Old Item Search",
+			description = "Use original item search instead of the GE search.",
+			section = otherSection
+	)
+	default boolean useOldItemSearch()
+	{
+		return false;
+	}
 }

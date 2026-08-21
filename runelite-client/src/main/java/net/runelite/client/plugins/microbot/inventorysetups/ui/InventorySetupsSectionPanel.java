@@ -81,12 +81,12 @@ public class InventorySetupsSectionPanel extends JPanel implements InventorySetu
 
 	static
 	{
-		final BufferedImage minMaxSectionImg = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "down_arrow.png");
+		final BufferedImage minMaxSectionImg = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/down_arrow.png");
 		final BufferedImage minMaxSectionHoverImg = ImageUtil.luminanceOffset(minMaxSectionImg, -150);
 		MIN_MAX_SECTION_ICON = new ImageIcon(minMaxSectionImg);
 		MIN_MAX_SECTION_HOVER_ICON = new ImageIcon(minMaxSectionHoverImg);
 
-		final BufferedImage noMinMaxSectionImg = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "right_arrow.png");
+		final BufferedImage noMinMaxSectionImg = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/right_arrow.png");
 		final BufferedImage noMaxSectionHoverImg = ImageUtil.luminanceOffset(noMinMaxSectionImg, -150);
 		NO_MIN_MAX_SECTION_ICON = new ImageIcon(noMinMaxSectionImg);
 		NO_MIN_MAX_SECTION_HOVER_ICON = new ImageIcon(noMaxSectionHoverImg);

@@ -24,7 +24,6 @@
  */
 package net.runelite.client.plugins.microbot.inventorysetups.ui;
 
-
 import net.runelite.client.plugins.microbot.inventorysetups.InventorySetup;
 import net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin;
 import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsSection;
