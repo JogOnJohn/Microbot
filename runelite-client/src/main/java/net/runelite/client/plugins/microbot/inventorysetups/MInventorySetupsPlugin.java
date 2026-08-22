@@ -245,6 +245,9 @@ public class MInventorySetupsPlugin extends Plugin
 	private BankSearch bankSearch;
 
 	@Inject
+	private InventorySetupsBankFilterButton bankFilterButton;
+
+	@Inject
 	@Getter
 	private LayoutManager layoutManager;
 
@@ -960,6 +963,7 @@ public class MInventorySetupsPlugin extends Plugin
 	{
 		if (event.getGroupId() == InterfaceID.BANKMAIN)
 		{
+			bankFilterButton.destroy();
 			clientThread.invokeLater(this::handleRegistrationOfHotkeys);
 
 			if (isInventorySetupTagOpen() && config.manualBankFilter())
@@ -979,6 +983,7 @@ public class MInventorySetupsPlugin extends Plugin
 	{
 		if (event.getGroupId() == InterfaceID.BANKMAIN)
 		{
+			clientThread.invokeLater(bankFilterButton::init);
 			clientThread.invokeLater(this::handleRegistrationOfHotkeys);
 		}
 	}
@@ -1272,6 +1277,20 @@ public class MInventorySetupsPlugin extends Plugin
 		});
 	}
 
+	public void toggleBankFilterFromButton()
+	{
+		if (isInventorySetupTagOpen())
+		{
+			resetBankSearch();
+		}
+		else
+		{
+			doBankSearch();
+		}
+
+		clientThread.invokeLater(bankFilterButton::refresh);
+	}
+
 	public void resetBankScrollBar()
 	{
 		// Reset the scroll bar position to 0
@@ -1382,6 +1401,8 @@ public class MInventorySetupsPlugin extends Plugin
 				chatboxPanelManager.close();
 			});
 		}
+
+		clientThread.invokeLater(bankFilterButton::refresh);
 	}
 
 	public boolean isInventorySetupTagOpen()
