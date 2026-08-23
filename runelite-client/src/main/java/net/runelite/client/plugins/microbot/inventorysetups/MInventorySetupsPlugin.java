@@ -1239,6 +1239,9 @@ public class MInventorySetupsPlugin extends Plugin
 
 			if (currentSelectedSetup == null || !currentSelectedSetup.isFilterBank() || !isFilteringAllowed())
 			{
+				log.debug("Inventory Setups bank filter skipped: setup={}, filterEnabled={}, filteringAllowed={}",
+					currentSelectedSetup == null ? null : currentSelectedSetup.getName(),
+					currentSelectedSetup != null && currentSelectedSetup.isFilterBank(), isFilteringAllowed());
 				// There is a chance Bank Tags is remembering the last tag opened, and will try to open an Inventory Setup
 				// tag even if the current selected setup is null.
 				if (isInventorySetupTagOpen())
@@ -1248,28 +1251,69 @@ public class MInventorySetupsPlugin extends Plugin
 				return;
 			}
 
-			if (client.getWidget(InterfaceID.Bankmain.UNIVERSE) == null)
+			openBankFilter(currentSelectedSetup);
+		});
+	}
+
+	public void toggleBankFilter(final InventorySetup setup)
+	{
+		clientThread.invoke(() ->
+		{
+			final String tagName = InventorySetupLayoutUtilities.getTagNameForLayout(setup.getName());
+			if (!setup.isFilterBank())
 			{
+				log.info("Inventory Setups bank filter disabled for '{}'", setup.getName());
+				if (tagName.equals(bankTagsService.getActiveTag()))
+				{
+					resetBankScrollBar();
+					bankTagsService.closeBankTag();
+				}
 				return;
 			}
 
-			final String tagName = InventorySetupLayoutUtilities.getTagNameForLayout(currentSelectedSetup.getName());
-			if (!config.useLayouts())
-			{
-				bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS | BankTagsService.OPTION_NO_LAYOUT);
-			}
-			else
-			{
-				String activeTag = bankTagsService.getActiveTag();
-				if (activeTag == null || !activeTag.equals(tagName))
-				{
-					// Reset the scrollbar if we are selecting a new setup.
-					resetBankScrollBar();
-				}
-				bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS);
-			}
-
+			log.info("Inventory Setups bank filter enabled for '{}'", setup.getName());
+			openBankFilter(setup);
 		});
+	}
+
+	private void openBankFilter(final InventorySetup setup)
+	{
+		if (client.getWidget(InterfaceID.Bankmain.UNIVERSE) == null)
+		{
+			log.debug("Inventory Setups bank filter deferred for '{}': bank is closed", setup.getName());
+			return;
+		}
+
+		final String tagName = InventorySetupLayoutUtilities.getTagNameForLayout(setup.getName());
+		Layout layout = layoutManager.loadLayout(tagName);
+		if (layout == null)
+		{
+			log.info("Creating missing Bank Tags layout for Inventory Setup '{}'", setup.getName());
+			layout = layoutUtilities.createSetupLayout(setup);
+			layoutManager.saveLayout(layout);
+			tagManager.setHidden(layout.getTag(), true);
+		}
+		else
+		{
+			layoutUtilities.recalculateLayout(setup);
+		}
+
+		if (!config.useLayouts())
+		{
+			bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS | BankTagsService.OPTION_NO_LAYOUT);
+		}
+		else
+		{
+			String activeTag = bankTagsService.getActiveTag();
+			if (activeTag == null || !activeTag.equals(tagName))
+			{
+				// Reset the scrollbar if we are selecting a new setup.
+				resetBankScrollBar();
+			}
+			bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS);
+		}
+
+		log.info("Opened Bank Tags filter '{}' for Inventory Setup '{}'", tagName, setup.getName());
 	}
 
 	public void resetBankScrollBar()

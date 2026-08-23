@@ -196,6 +196,7 @@ public class InventorySetupsStandardPanel extends InventorySetupsPanel implement
 					bankFilterIndicator.setToolTipText(inventorySetup.isFilterBank() ? "Disable bank filtering" : "Enable bank filtering");
 					updateBankFilterLabel();
 					plugin.getDataManager().updateConfig(true, false);
+					plugin.toggleBankFilter(inventorySetup);
 					panel.redrawOverviewPanel(false);
 				}
 			}
