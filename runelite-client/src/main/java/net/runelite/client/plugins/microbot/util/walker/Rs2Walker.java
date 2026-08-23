@@ -8550,6 +8550,9 @@ public class Rs2Walker {
     }
 
     private static boolean handleStrongholdOfSecurityAnswer(TileObject object, String action) {
+        if (object == null) return false;
+        WorldPoint positionBefore = Rs2Player.getWorldLocation();
+
         Rs2GameObject.interact(object, action);
         boolean isInDialogue = Rs2Dialogue.sleepUntilInDialogue();
 
@@ -8584,7 +8587,13 @@ public class Rs2Walker {
             Rs2Dialogue.clickOption(dialogueAnswer);
             Rs2Dialogue.sleepUntilHasContinue();
             sleepUntil(() -> !Rs2Dialogue.hasContinue(), Rs2Dialogue::clickContinue, 5000, Rs2Random.between(600, 800));
-            Rs2Player.waitForAnimation(1200);
+            sleepUntil(() -> {
+                WorldPoint currentPosition = Rs2Player.getWorldLocation();
+                return currentPosition != null
+                        && !currentPosition.equals(positionBefore)
+                        && !Rs2Player.isMoving()
+                        && !Rs2Player.isAnimating();
+            }, 4000);
             return true;
         }
 
