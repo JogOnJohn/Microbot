@@ -254,6 +254,7 @@ public class OptimalQuestGuide
 		QuestHelperQuest.SHADOWS_OF_CUSTODIA,
 		QuestHelperQuest.TROUBLED_TORTUGANS,
 		QuestHelperQuest.THE_RED_REEF,
+		QuestHelperQuest.FALLEN_FROM_GRACE,
 		QuestHelperQuest.MONKEY_MADNESS_II,
 		//QuestHelperQuest.INTO_THE_TOMBS, - Placeholder for future addition.
 		QuestHelperQuest.A_NIGHT_AT_THE_THEATRE,
