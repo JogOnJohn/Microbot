@@ -6,7 +6,7 @@ description: Work on the Microbot engine's webwalker, pathfinder, or transport d
 # Walker / pathfinder / transports playbook
 
 Engine repo: `C:\Users\Billy\IdeaProjects\Microbot-shortestpath-sync` (worktree of Microbot),
-branch `spike/shortest-path-upstream`. Gradle module is **`:client`** (NOT `:runelite-client`).
+branch `playable/shortest-path`. Gradle module is **`:client`** (NOT `:runelite-client`).
 
 ## HARD BUILD RULES
 - **NEVER run `:client:microbotReleaseJar` while the client is running.** It overwrites the live

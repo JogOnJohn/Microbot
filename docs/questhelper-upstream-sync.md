@@ -43,7 +43,7 @@ git merge --ff-only update/questhelper-<date>
 .\gradlew.bat --no-daemon :client:microbotReleaseJar
 ```
 
-Test the `local/development` jar before merging it into `spike/shortest-path-upstream`. Preserve spike-only Quest Helper changes during that merge, including the local optimal-route placement of `THE_RED_REEF` after `TROUBLED_TORTUGANS`.
+Test the `local/development` jar before merging it into `playable/shortest-path`. Preserve playable-only Quest Helper changes during that merge, including the local optimal-route placement of `THE_RED_REEF` after `TROUBLED_TORTUGANS`.
 
 ## Refresh Remotes
 
