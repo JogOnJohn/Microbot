@@ -24,11 +24,33 @@
  */
 package net.runelite.client.plugins.microbot.inventorysetups.ui;
 
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupUtilities;
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetup;
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsItem;
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsPanelViewID;
+import net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_PANEL_VIEW;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_SECTION_MODE;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.CONFIG_KEY_UNASSIGNED_MAXIMIZED;
+import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.TUTORIAL_LINK;
+
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsSection;
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsSlotID;
+import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsSortingID;
+
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import net.runelite.client.plugins.microbot.inventorysetups.serialization.InventorySetupPortable;
 import lombok.Getter;
 import lombok.Setter;
+import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.game.ItemManager;
-import net.runelite.client.plugins.microbot.inventorysetups.*;
-import net.runelite.client.plugins.microbot.inventorysetups.serialization.InventorySetupPortable;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
 import net.runelite.client.ui.components.IconTextField;
@@ -36,21 +58,22 @@ import net.runelite.client.ui.components.PluginErrorPanel;
 import net.runelite.client.util.ImageUtil;
 import net.runelite.client.util.LinkBrowser;
 
-import javax.swing.*;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
+import javax.swing.JLabel;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
-import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.util.List;
-import java.util.*;
 import java.util.stream.Collectors;
-
-import static net.runelite.api.gameval.InventoryID.INV;
-import static net.runelite.api.gameval.InventoryID.WORN;
-import static net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.*;
 
 // The main panel of the plugin that contains all viewing components
 public class InventorySetupsPluginPanel extends PluginPanel
@@ -141,11 +164,11 @@ public class InventorySetupsPluginPanel extends PluginPanel
 
 	static
 	{
-		final BufferedImage helpIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "help_button.png");
+		final BufferedImage helpIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/help_button.png");
 		HELP_ICON = new ImageIcon(helpIcon);
 		HELP_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(helpIcon, 0.53f));
 
-		final BufferedImage sectionIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "section_mode_icon.png");
+		final BufferedImage sectionIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/section_mode_icon.png");
 		final BufferedImage sectionIconHover = ImageUtil.luminanceOffset(sectionIcon, -150);
 		SECTION_VIEW_ICON = new ImageIcon(sectionIcon);
 		SECTION_VIEW_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(sectionIcon, 0.53f));
@@ -153,19 +176,19 @@ public class InventorySetupsPluginPanel extends PluginPanel
 		NO_SECTION_VIEW_ICON = new ImageIcon(sectionIconHover);
 		NO_SECTION_VIEW_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(sectionIconHover, -100));
 
-		final BufferedImage standardIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "standard_mode_icon.png");
+		final BufferedImage standardIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/standard_mode_icon.png");
 		STANDARD_VIEW_ICON = new ImageIcon(standardIcon);
 		STANDARD_VIEW_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(standardIcon, -100));
 
-		final BufferedImage compactIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "compact_mode_icon.png");
+		final BufferedImage compactIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/compact_mode_icon.png");
 		COMPACT_VIEW_ICON = new ImageIcon(compactIcon);
 		COMPACT_VIEW_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(compactIcon, 0.53f));
 
-		final BufferedImage iconIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "icon_mode_icon.png");
+		final BufferedImage iconIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/icon_mode_icon.png");
 		ICON_VIEW_ICON = new ImageIcon(iconIcon);
 		ICON_VIEW_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(iconIcon, 0.53f));
 
-		final BufferedImage alphabeticalIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "alphabetical_icon.png");
+		final BufferedImage alphabeticalIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/alphabetical_icon.png");
 		final BufferedImage alphabeticalIconHover = ImageUtil.luminanceOffset(alphabeticalIcon, -150);
 		ALPHABETICAL_ICON = new ImageIcon(alphabeticalIcon);
 		ALPHABETICAL_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(alphabeticalIcon, 0.53f));
@@ -173,19 +196,19 @@ public class InventorySetupsPluginPanel extends PluginPanel
 		NO_ALPHABETICAL_ICON = new ImageIcon(alphabeticalIconHover);
 		NO_ALPHABETICAL_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(alphabeticalIconHover, -100));
 
-		final BufferedImage addIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "add_icon.png");
+		final BufferedImage addIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/add_icon.png");
 		ADD_ICON = new ImageIcon(addIcon);
 		ADD_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(addIcon, 0.53f));
 
-		final BufferedImage importIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "import_icon.png");
+		final BufferedImage importIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/import_icon.png");
 		IMPORT_ICON = new ImageIcon(importIcon);
 		IMPORT_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(importIcon, 0.53f));
 
-		final BufferedImage updateIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "update_icon.png");
+		final BufferedImage updateIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/update_icon.png");
 		UPDATE_ICON = new ImageIcon(updateIcon);
 		UPDATE_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(updateIcon, 0.53f));
 
-		final BufferedImage backIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "back_arrow_icon.png");
+		final BufferedImage backIcon = ImageUtil.loadImageResource(MInventorySetupsPlugin.class, "/back_arrow_icon.png");
 		BACK_ICON = new ImageIcon(backIcon);
 		BACK_HOVER_ICON = new ImageIcon(ImageUtil.alphaOffset(backIcon, 0.53f));
 
@@ -781,8 +804,8 @@ public class InventorySetupsPluginPanel extends PluginPanel
 			return;
 		}
 
-		final List<InventorySetupsItem> inv = plugin.getNormalizedContainer(INV);
-		final List<InventorySetupsItem> eqp = plugin.getNormalizedContainer(WORN);
+		final List<InventorySetupsItem> inv = plugin.getNormalizedContainer(InventoryID.INV);
+		final List<InventorySetupsItem> eqp = plugin.getNormalizedContainer(InventoryID.WORN);
 
 		highlightContainerPanel(inv, inventoryPanel);
 		highlightContainerPanel(eqp, equipmentPanel);
@@ -807,13 +830,13 @@ public class InventorySetupsPluginPanel extends PluginPanel
 
 	public void highlightInventory()
 	{
-		final List<InventorySetupsItem> inv = plugin.getNormalizedContainer(INV);
+		final List<InventorySetupsItem> inv = plugin.getNormalizedContainer(InventoryID.INV);
 		highlightContainerPanel(inv, inventoryPanel);
 	}
 
 	public void highlightEquipment()
 	{
-		final List<InventorySetupsItem> eqp = plugin.getNormalizedContainer(WORN);
+		final List<InventorySetupsItem> eqp = plugin.getNormalizedContainer(InventoryID.WORN);
 		highlightContainerPanel(eqp, equipmentPanel);
 	}
 
@@ -951,7 +974,12 @@ public class InventorySetupsPluginPanel extends PluginPanel
 	private void layoutSections(final List<InventorySetup> setups, final GridBagConstraints constraints)
 	{
 		Set<String> setupNamesToBeIncluded = setups.stream().map(InventorySetup::getName).collect(Collectors.toSet());
-		for (final InventorySetupsSection section : plugin.getSections())
+		List<InventorySetupsSection> sections = new ArrayList<>(plugin.getSections());
+		if (plugin.getConfig().sortingMode() == InventorySetupsSortingID.ALPHABETICAL && plugin.getConfig().sectionSorting())
+		{
+			sections.sort(Comparator.comparing(InventorySetupsSection::getName));
+		}
+		for (final InventorySetupsSection section : sections)
 		{
 			// For quick look up
 			Set<String> setupsInSection = plugin.getCache().getSectionSetupsMap().get(section.getName()).keySet();

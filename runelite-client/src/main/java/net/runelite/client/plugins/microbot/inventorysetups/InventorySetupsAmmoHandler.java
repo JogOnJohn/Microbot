@@ -169,7 +169,7 @@ public class InventorySetupsAmmoHandler
 				int runeAmount = client.getVarbitValue(RUNE_POUCH_AMOUNT_VARBITS.get(i));
 				String runeName = itemManager.getItemComposition(runeId).getName();
 				InventorySetupsStackCompareID stackCompareType = panel.isStackCompareForSlotAllowed(InventorySetupsSlotID.RUNE_POUCH, i) ? config.stackCompareType() : InventorySetupsStackCompareID.None;
-				runePouchData.add(new InventorySetupsItem(runeId, runeName, runeAmount, false, stackCompareType, false, -1));
+				runePouchData.add(new InventorySetupsItem(runeId, runeName, runeAmount, false, stackCompareType));
 			}
 		}
 
@@ -209,7 +209,7 @@ public class InventorySetupsAmmoHandler
 				InventorySetupsStackCompareID stackCompareType =
 						panel.isStackCompareForSlotAllowed(InventorySetupsSlotID.BOLT_POUCH, i)
 								? config.stackCompareType() : InventorySetupsStackCompareID.None;
-				boltPouchData.add(new InventorySetupsItem(boltItemId, boltName, boltAmount, false, stackCompareType, false, -1));
+				boltPouchData.add(new InventorySetupsItem(boltItemId, boltName, boltAmount, false, stackCompareType));
 			}
 		}
 
@@ -247,7 +247,7 @@ public class InventorySetupsAmmoHandler
 							? config.stackCompareType() : InventorySetupsStackCompareID.None;
 
 			final InventorySetupsItem quiverItem = new InventorySetupsItem(quiverAmmoId, ammoName,
-					quiverAmmoCount, false, stackCompareType, false, -1);
+					quiverAmmoCount, false, stackCompareType);
 			quiverData.add(quiverItem);
 		}
 

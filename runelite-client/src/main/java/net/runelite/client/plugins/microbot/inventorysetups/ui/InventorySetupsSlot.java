@@ -34,14 +34,14 @@ import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsVaria
 import lombok.Getter;
 import lombok.Setter;
 import net.runelite.client.game.ItemManager;
-import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.util.AsyncBufferedImage;
 
 import javax.swing.*;
-import javax.swing.border.BevelBorder;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -76,13 +76,19 @@ public class InventorySetupsSlot extends JPanel
 	@Getter
 	private JPopupMenu shiftRightClickMenu;
 
+	private final Color defaultBackgroundColor;
+
+	public static final int SLOT_WIDTH = 46;
+	public static final int SLOT_HEIGHT = 42;
+
 	public InventorySetupsSlot(Color color, InventorySetupsSlotID id, int indexInSlot)
 	{
-		this(color, id, indexInSlot, 46, 42);
+		this(color, id, indexInSlot, SLOT_WIDTH, SLOT_HEIGHT);
 	}
 
 	public InventorySetupsSlot(Color color, InventorySetupsSlotID id, int indexInSlot, int width, int height)
 	{
+		this.defaultBackgroundColor = color;
 		this.slotID = id;
 		this.imageLabel = new JLabel();
 		this.parentSetup = null;
@@ -127,8 +133,14 @@ public class InventorySetupsSlot extends JPanel
 		this.imageLabel.addMouseListener(menuAdapter);
 
 		setPreferredSize(new Dimension(width, height));
+
+		// Swing assumes opaque components paint an opaque background. If the
+		// background color has an alpha < 255, previous pixels may show through.
+		// We set Slots to be non-opaque and handle painting ourselves in `PaintComponent`.
+		setOpaque(false);
 		setBackground(color);
 		setLayout(new GridBagLayout());
+
 		// Set constraints to put it in the north east (top right)
 		GridBagConstraints fuzzyConstraints = new GridBagConstraints(0, 0, 1, 1, 1, 1,
 																		GridBagConstraints.NORTHEAST, GridBagConstraints.NONE,
@@ -142,7 +154,35 @@ public class InventorySetupsSlot extends JPanel
 		add(stackIndicator, stackConstraints);
 	}
 
-	public void setImageLabel(String toolTip, BufferedImage itemImage, boolean isFuzzy, InventorySetupsStackCompareID stackCompare, boolean locked)
+	@Override
+	protected void paintComponent(Graphics g)
+	{
+		// Since this panel is non-opaque, Swing does not clear its background.
+		// Paint an opaque default background first so translucent background
+		// colors don't blend with pixels from previous repaints.
+		Graphics2D g2d = (Graphics2D) g.create();
+		try
+		{
+			g2d.setColor(defaultBackgroundColor);
+			g2d.fillRect(0, 0, getWidth(), getHeight());
+
+			Color bg = getBackground();
+			if (bg != null && !bg.equals(defaultBackgroundColor))
+			{
+				g2d.setColor(bg);
+				g2d.fillRect(0, 0, getWidth(), getHeight());
+			}
+		}
+		finally
+		{
+			g2d.dispose();
+		}
+
+		// Call super last to paint images and text over the now correctly filled-in background
+		super.paintComponent(g);
+	}
+
+	public void setImageLabel(String toolTip, BufferedImage itemImage, boolean isFuzzy, InventorySetupsStackCompareID stackCompare)
 	{
 		if (itemImage == null || toolTip == null)
 		{
@@ -168,29 +208,13 @@ public class InventorySetupsSlot extends JPanel
 		fuzzyIndicator.setText(isFuzzy ? "*" : "");
 		stackIndicator.setText(InventorySetupsStackCompareID.getStringFromValue(stackCompare));
 
-		if (locked)
-		{
-			this.setBorder(
-					BorderFactory.createBevelBorder(
-							BevelBorder.RAISED,
-							new Color(139, 0, 0),
-							new Color(139, 0, 0).darker(),
-							new Color(139, 0, 0),
-							new Color(139, 0, 0).darker()
-					));
-		}
-		else
-		{
-			this.setBorder(null);
-		}
-
 		validate();
 		repaint();
 	}
 
 	public void setImageLabel(String toolTip, BufferedImage itemImage)
 	{
-		setImageLabel(toolTip, itemImage, false, InventorySetupsStackCompareID.None, false);
+		setImageLabel(toolTip, itemImage, false, InventorySetupsStackCompareID.None);
 	}
 
 	// adds the menu option to update a slot from the container it presides in
@@ -275,17 +299,6 @@ public class InventorySetupsSlot extends JPanel
 		});
 	}
 
-	public static void addLockMouseListenerToSlot(final MInventorySetupsPlugin plugin, final InventorySetupsSlot slot)
-	{
-		JMenuItem toggleLock = new JMenuItem("Toggle Lock");
-		slot.getRightClickMenu().add(toggleLock);
-		toggleLock.addActionListener(e ->
-		{
-			plugin.toggleLockOnSlot(slot);
-		});
-	}
-
-
 	// adds the menu option to update set a slot to fuzzy
 	public static void addStackMouseListenerToSlot(final MInventorySetupsPlugin plugin, final InventorySetupsSlot slot)
 	{
@@ -321,6 +334,26 @@ public class InventorySetupsSlot extends JPanel
 		slot.getRightClickMenu().add(stackIndicatorMainMenu);
 	}
 
+	public static void addAttackOptionListenerToSlot(final MInventorySetupsPlugin plugin, final InventorySetupsSlot slot)
+	{
+		JMenuItem updateToCurrentAttackOption = new JMenuItem("Update to Current Attack Option");
+		updateToCurrentAttackOption.addActionListener(e ->
+		{
+			plugin.setAttackOptionForSetup(slot);
+		});
+
+		JMenuItem removeAttackOption = new JMenuItem("Remove Attack Option");
+		removeAttackOption.addActionListener(e ->
+		{
+			plugin.setAttackOptionForSetup(slot, "");
+		});
+
+		JMenu stackIndicatorMainMenu = new JMenu("Attack Option");
+		stackIndicatorMainMenu.add(updateToCurrentAttackOption);
+		stackIndicatorMainMenu.add(removeAttackOption);
+		slot.getRightClickMenu().add(stackIndicatorMainMenu);
+	}
+
 	public static String getContainerString(final InventorySetupsSlot slot)
 	{
 		String updateContainerFrom = "";
@@ -345,7 +378,7 @@ public class InventorySetupsSlot extends JPanel
 
 		if (item.getId() == -1)
 		{
-			containerSlot.setImageLabel(null, null, item.isFuzzy(), item.getStackCompare(), item.isLocked());
+			containerSlot.setImageLabel(null, null, item.isFuzzy(), item.getStackCompare());
 			return;
 		}
 
@@ -358,7 +391,8 @@ public class InventorySetupsSlot extends JPanel
 		{
 			toolTip += " (" + quantity + ")";
 		}
-		containerSlot.setImageLabel(toolTip, itemImg, item.isFuzzy(), item.getStackCompare(), item.isLocked());
+
+		containerSlot.setImageLabel(toolTip, itemImg, item.isFuzzy(), item.getStackCompare());
 	}
 
 	// highlights the slot based on the configuration and the saved item vs item in the slot
@@ -370,7 +404,7 @@ public class InventorySetupsSlot extends JPanel
 		// first check if stack differences are enabled and compare quantities
 		if (shouldHighlightSlotBasedOnStack(savedItemFromSetup.getStackCompare(), savedItemFromSetup.getQuantity(), currentItemFromContainer.getQuantity()))
 		{
-			containerSlot.setBackground(setup.getHighlightColor());
+			doHighlight(setup, containerSlot);
 			return;
 		}
 
@@ -387,12 +421,22 @@ public class InventorySetupsSlot extends JPanel
 		// if the ids don't match, highlight the container slot
 		if (currentItemId != savedItemId)
 		{
-			containerSlot.setBackground(setup.getHighlightColor());
+			doHighlight(setup, containerSlot);
 			return;
 		}
 
 		// set the color back to the original, because they match
-		containerSlot.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		doResetHighlight(containerSlot);
+	}
+
+	public static void doHighlight(final InventorySetup setup, final InventorySetupsSlot containerSlot)
+	{
+		containerSlot.setBackground(setup.getHighlightColor());
+	}
+
+	public static void doResetHighlight(final InventorySetupsSlot containerSlot)
+	{
+		containerSlot.setBackground(containerSlot.defaultBackgroundColor);
 	}
 
 	public static boolean shouldHighlightSlotBasedOnStack(final InventorySetupsStackCompareID stackCompareType, final Integer savedItemQty, final Integer currItemQty)

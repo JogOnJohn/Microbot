@@ -5,9 +5,11 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import net.runelite.client.plugins.microbot.inventorysetups.InventorySetupsStackCompareID;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 
+@Slf4j
 public class InventorySetupItemSerializableTypeAdapter extends TypeAdapter<InventorySetupItemSerializable>
 {
 	@Override
@@ -39,13 +41,6 @@ public class InventorySetupItemSerializableTypeAdapter extends TypeAdapter<Inven
 				out.name("sc");
 				out.value(iss.getSc().toString());
 			}
-			if (iss.getL() != null)
-			{
-				out.name("l");
-				out.value(iss.getL());
-			}
-			out.name("s");
-			out.value(iss.getS());
 			out.endObject();
 		}
 
@@ -64,8 +59,6 @@ public class InventorySetupItemSerializableTypeAdapter extends TypeAdapter<Inven
 		Integer q = null;
 		Boolean f = null;
 		InventorySetupsStackCompareID sc = null;
-		Boolean locked = null;
-		int slot = -1;
 
 		in.beginObject();
 		while (in.hasNext())
@@ -89,19 +82,23 @@ public class InventorySetupItemSerializableTypeAdapter extends TypeAdapter<Inven
 					case "sc":
 						sc = InventorySetupsStackCompareID.valueOf(in.nextString());
 						break;
-					case "l":
-						locked = in.nextBoolean();
-						break;
-					case "s":
-						slot = in.nextInt();
-						break;
 					default:
+						// Handle any issues from legacy migrations without getting stuck in infinite loops
+						log.warn("Skipping unknown field '{}' in InventorySetupItemSerializable", fieldName);
+						in.skipValue();
 						break;
 				}
+			}
+			else
+			{
+				// Defensive: ensure we always make progress even if we somehow end up on a value token.
+				log.warn("Skipping unknown token '{}' in InventorySetupItemSerializable", token);
+				in.skipValue();
 			}
 		}
 
 		in.endObject();
-		return new InventorySetupItemSerializable(id, q, f, sc, locked, slot);
+		return new InventorySetupItemSerializable(id, q, f, sc);
 	}
 }
+

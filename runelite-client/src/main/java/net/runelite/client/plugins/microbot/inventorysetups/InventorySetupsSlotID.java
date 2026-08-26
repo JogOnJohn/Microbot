@@ -24,10 +24,7 @@
  */
 package net.runelite.client.plugins.microbot.inventorysetups;
 
-import net.runelite.api.InventoryID;
-
-import static net.runelite.api.gameval.InventoryID.INV;
-import static net.runelite.api.gameval.InventoryID.WORN;
+import net.runelite.api.gameval.InventoryID;
 
 public enum InventorySetupsSlotID
 {
@@ -67,9 +64,9 @@ public enum InventorySetupsSlotID
 
 		switch (inventoryId)
 		{
-			case INV:
+			case InventoryID.INV:
 				return INVENTORY;
-			case WORN:
+			case InventoryID.WORN:
 				return EQUIPMENT;
 		}
 

@@ -29,8 +29,6 @@ import lombok.RequiredArgsConstructor;
 import net.runelite.client.plugins.microbot.Microbot;
 import org.slf4j.event.Level;
 
-import java.util.Arrays;
-
 @Getter
 @RequiredArgsConstructor
 public enum StrongholdAnswer {
@@ -75,15 +73,30 @@ public enum StrongholdAnswer {
     private final String question;
     private final String answer;
 
-    public static String findAnswer(String question) {
-        StrongholdAnswer strongholdAnswer = Arrays.stream(StrongholdAnswer.values())
-                .filter(txt -> question.toLowerCase().contains(txt.getQuestion().toLowerCase()))
-                .findFirst()
-                .orElse(null);
-        
-        String answer = strongholdAnswer != null ? strongholdAnswer.getAnswer() : null;
-        Microbot.log("Question: " + question, Level.DEBUG);
-        Microbot.log("Answer: " + answer, Level.DEBUG);
-        return answer;
+    private static String cleanString(String text) {
+        if (text == null) return "";
+        return text.replaceAll("(?i)<br\\s*/?>", " ")
+                .replaceAll("[^a-zA-Z0-9 ]", " ")
+                .replaceAll("\\s+", " ")
+                .toLowerCase()
+                .trim();
+    }
+
+    public static String findAnswer(String rawQuestion) {
+        if (rawQuestion == null || rawQuestion.isEmpty()) return null;
+        String cleanQuestion = cleanString(rawQuestion);
+
+        for (StrongholdAnswer answer : values()) {
+            String cleanCandidate = cleanString(answer.getQuestion());
+            if (!cleanCandidate.isEmpty()
+                    && (cleanQuestion.contains(cleanCandidate) || cleanCandidate.contains(cleanQuestion))) {
+                Microbot.log("Stronghold question matched: " + answer.name(), Level.DEBUG);
+                Microbot.log("Answer: " + answer.getAnswer(), Level.DEBUG);
+                return answer.getAnswer();
+            }
+        }
+
+        Microbot.log("Stronghold question unmatched: " + rawQuestion, Level.DEBUG);
+        return null;
     }
 }

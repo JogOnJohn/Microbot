@@ -137,10 +137,9 @@ public class InventorySetupsUpdateNewsPanel extends JPanel
 		final JPanel patchTitlePanel = new JPanel(new BorderLayout());
 		patchTitlePanel.add(patchNotesLabel, BorderLayout.NORTH);
 
-		String updateText =	"Updated Inventory Setups for the latest RuneLite update.\n\n" +
-							"Fuzzy placeholders will now appear at the bottom of the layout when updating a setup or using a preset.\n\n" +
-							"The '_invsetup_' tags are now hidden from the user in the bank.\n\n" +
-							"Fixed manual bank filter config option.";
+		String updateText =	"Improved the GE item search when replacing an item with search.\n\n" +
+							"Opacity (alpha) is now respected when choosing a highlight color.\n\n" +
+							"The PluginMessage API is now supported, allowing other plugins to interact with Inventory Setups. See the guide for details if you are a developer.";
 
 		JTextArea textArea = new JTextArea(2, 20);
 		textArea.setText(updateText);

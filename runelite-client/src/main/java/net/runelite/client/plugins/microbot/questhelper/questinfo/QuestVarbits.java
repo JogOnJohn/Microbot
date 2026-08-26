@@ -129,8 +129,8 @@ public enum QuestVarbits
 	QUEST_PRYING_TIMES(VarbitID.QUEST_PRY),
 	QUEST_CURRENT_AFFAIRS(VarbitID.CURRENT_AFFAIRS),
 	QUEST_TROUBLED_TORTUGANS(VarbitID.TT),
-	QUEST_THE_RED_REEF(VarbitID.TRR),
 	QUEST_THE_BLOOD_MOON_RISES(VarbitID.MYQ6),
+	QUEST_FALLEN_FROM_GRACE(VarbitID.FFG),
 	/**
 	 * mini-quest varbits, these don't hold the completion value.
 	 */

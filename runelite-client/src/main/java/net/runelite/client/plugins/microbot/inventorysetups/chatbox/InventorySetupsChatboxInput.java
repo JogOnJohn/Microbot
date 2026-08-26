@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, dillydill123 <https://github.com/dillydill123>
+ * Copyright (c) 2018 Abex
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,48 +22,22 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.runelite.client.plugins.microbot.inventorysetups;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+package net.runelite.client.plugins.microbot.inventorysetups.chatbox;
 
-public enum InventorySetupsFilteringModeID
+// NOTE: Copy of https://github.com/raiyni/runelite/blob/00d5f3667075d43d2bab3d088efbffb93f8b14ea/runelite-client/src/main/java/net/runelite/client/game/chatbox/ChatboxInput.java
+// Part of RuneLite https://github.com/runelite/runelite/pull/18410. Even if this merges, we still need this due to the custom filtering logic.
+
+/**
+ * A modal input that lives in the chatbox panel.
+ */
+public abstract class InventorySetupsChatboxInput
 {
-	// All items
-	ALL(0),
-
-	// Only Inventory
-	INVENTORY(1),
-
-	// Only Equipment
-	EQUIPMENT(2),
-
-	// Only Additional Filtered Items
-	ADDITIONAL_FILTERED_ITEMS(3);
-
-	private final int type;
-
-	private static final List<InventorySetupsFilteringModeID> VALUES;
-
-	static
+	protected void open()
 	{
-		VALUES = new ArrayList<>();
-		Collections.addAll(VALUES, InventorySetupsFilteringModeID.values());
 	}
 
-	InventorySetupsFilteringModeID(int type)
+	protected void close()
 	{
-		this.type = type;
-	}
-
-	public int getType()
-	{
-		return type;
-	}
-
-	public static List<InventorySetupsFilteringModeID> getValues()
-	{
-		return VALUES;
 	}
 }

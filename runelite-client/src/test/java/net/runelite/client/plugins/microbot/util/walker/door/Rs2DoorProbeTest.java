@@ -1,5 +1,8 @@
 package net.runelite.client.plugins.microbot.util.walker.door;
 
+import java.util.Collections;
+import net.runelite.api.GameObject;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
 import org.junit.Test;
@@ -83,5 +86,24 @@ public class Rs2DoorProbeTest {
     @Test
     public void nullIsNotDoorLike() {
         assertFalse(Rs2DoorProbe.isDoorLikeCatalogTransport(null));
+    }
+
+    @Test
+    public void offSegmentCandidateIsRejectedBeforeTransportOwnershipLookup() {
+        GameObject object = mock(GameObject.class);
+        WorldPoint player = new WorldPoint(3200, 3200, 0);
+        WorldPoint objectLocation = new WorldPoint(3204, 3204, 0);
+        when(object.getWorldLocation()).thenReturn(objectLocation);
+
+        assertFalse(Rs2DoorProbe.isDoorCandidateOnSegment(
+                null,
+                Collections.emptySet(),
+                object,
+                objectLocation,
+                player,
+                new WorldPoint(3200, 3200, 0),
+                new WorldPoint(3206, 3200, 0),
+                Collections.singletonList("Open"),
+                10));
     }
 }

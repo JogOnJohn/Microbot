@@ -7,7 +7,6 @@ import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.ItemContainer;
 import net.runelite.api.gameval.ItemID;
-
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.banktags.TagManager;
 import net.runelite.client.plugins.banktags.tabs.Layout;
@@ -98,7 +97,6 @@ public class InventorySetupLayoutUtilities
 		layout.resize(newSizeGuess);
 		final HashMap<Integer, Integer> counter = new HashMap<>();
 
-
 		int nextPos = layoutZigZagContainer(setup.getEquipment(), layout, tag, addToTag, startOfEquipment, counter);
 		if (setup.getQuiver() != null && !setup.getQuiver().isEmpty())
 		{
@@ -153,8 +151,10 @@ public class InventorySetupLayoutUtilities
 		// But this is not needed, so I won't spend time over engineering this function.
 
 		int doubleRowStart = 0;
-		int nextPos = 0;
+		boolean topToBottom = config.zigZagType().equals(InventorySetupsZigZagTypeID.TOP_TO_BOTTOM);
 		final int rowSize = 8;
+
+		int nextPos = topToBottom ? 0 : 8;
 
 		for (final InventorySetupsItem item : container)
 		{
@@ -164,21 +164,43 @@ public class InventorySetupLayoutUtilities
 				continue;
 			}
 
-			if (nextPos == (rowSize * 2) - 1)
+			if (topToBottom)
 			{
-				// We hit the end of a double row, we need to start a new one.
-				doubleRowStart += 2;
-				nextPos = doubleRowStart * rowSize;
-			}
-			else if (nextPos < ((doubleRowStart * rowSize) + rowSize))
-			{
-				// We are in the top half of a double row. Go down directly one.
-				nextPos += rowSize;
+				if (nextPos == ((doubleRowStart * rowSize) + (2 * rowSize) - 1))
+				{
+					// We hit the end of a double row, we need to start a new one.
+					doubleRowStart += 2;
+					nextPos = doubleRowStart * rowSize;
+				}
+				else if (nextPos < ((doubleRowStart * rowSize) + rowSize))
+				{
+					// We are in the top half of a double row. Go down directly one.
+					nextPos += rowSize;
+				}
+				else
+				{
+					// We are in the bottom half of a double. Go back up and add one to move to the right.
+					nextPos = (nextPos - rowSize) + 1;
+				}
 			}
 			else
 			{
-				// We are in the bottom half of a double. Go back up and add one to move to the right.
-				nextPos = (nextPos - rowSize) + 1;
+				if (nextPos == ((doubleRowStart * rowSize) + rowSize - 1))
+				{
+					// We hit the end of a double row, we need to start a new one.
+					doubleRowStart += 2;
+					nextPos = (doubleRowStart * rowSize) + rowSize;
+				}
+				else if (nextPos > ((doubleRowStart * rowSize) + rowSize) - 1)
+				{
+					// We are in the bottom half of a double. Go up directly one.
+					nextPos -= rowSize;
+				}
+				else
+				{
+					// We are in the top half of a double row. Go back down and add one to move to the right.
+					nextPos = nextPos + rowSize + 1;
+				}
 			}
 		}
 
@@ -387,6 +409,7 @@ public class InventorySetupLayoutUtilities
 			if (!idsInLayout.contains(idInSetup))
 			{
 				layout.addItem(idInSetup);
+				idsInLayout.add(idInSetup);
 			}
 		}
 
@@ -395,6 +418,7 @@ public class InventorySetupLayoutUtilities
 		trimLayout(layout);
 
 		layoutManager.saveLayout(layout);
+		tagManager.setHidden(layout.getTag(), true);
 	}
 
 	private void addFuzzyItemsToEndOfLayout(final Layout layout, final InventorySetup setup)
@@ -432,14 +456,17 @@ public class InventorySetupLayoutUtilities
 	{
 		// Try our best at adding fuzzy items to the bottom of the layout
 		// Only add those that exist in the bank, otherwise we would add every possible variation which is not ideal.
-		// Any missed items will be added by the layout manager.
-		// This also adds the benefit that we can use our own custom mappings along with base item variation mappings.
-		// This will probably only work if the bank is open, but still worth doing for things like auto layouts.
-
-		// NOTE: This does have some drawbacks. Fuzzy items will occupy a new slot rather than fit an existing placeholder
-		// This means that a fuzzy barrows item will have two bank slots.
-		// Additionally, this will not find item placeholders like "Amulet of Glory" so they will be put at the top
-		// of the bank instead of at the bottom.
+		// Any missed items will be added by the layout manager from core bank tags.
+		//
+		// Core bank tags will also place variation mapped items in an existing placeholder if available for us. However,
+		// this does not support our custom variation mappings in those placeholders. Our custom variation mappings will
+		// show up in the layout if it is in the bank, but not fill an empty variation placeholder slot. It will occupy
+		// a new slot in the bank.
+		//
+		// This will only work if the bank is open, but still worth doing for things like auto layouts.
+		//
+		// NOTE: Placeholders take precedence over variants, so core bank tags will still show a placeholder if the actual
+		// placeholder item exists in the players bank.
 		ItemContainer bankContainer = client.getItemContainer(InventoryID.BANK);
 		if (bankContainer == null)
 		{
@@ -463,8 +490,46 @@ public class InventorySetupLayoutUtilities
 			}
 		}
 
+		Set<Integer> variantsSeen = new LinkedHashSet<>();
 		for (final Integer id : idsInSetupOnlyFuzzy)
 		{
+
+			// For all fuzzy items, we need to decide if we should add it to the layout now, or let core bank tags do it
+			// If core bank tags adds the item, it will be at the top, unless there is an item that matches the placeholder
+			// if it is marked as fuzzy.
+			int baseId = InventorySetupsVariationMapping.map(id);
+			boolean hasPlaceHolderVariant = false;
+			for (int variationId : InventorySetupsVariationMapping.getVariations(baseId))
+			{
+				// Protects against the case the fuzzy item is the base variant.
+				// Bank Tags does not appear to fill a base item with a variant, so it will place the fuzzy item at the
+				// top of the bank, while we want it at the bottom. So we avoid allowing the base id as a fuzzy option.
+				if (baseId == variationId)
+				{
+					continue;
+				}
+
+				// If a variation is in the layout but not in the bank, and this fuzzy item is not in the layout but in the bank,
+				// Then this is a placeholder in the layout that bank tags can place a variation mapped item. For this
+				// reason we will skip adding this fuzzy item to the bottom of the layout.
+				if (idsInLayout.contains(variationId) &&
+					!bankItems.contains(variationId) &&
+					!idsInLayout.contains(id) && bankItems.contains(id) &&
+					!variantsSeen.contains(variationId))
+				{
+					// Add this to variants seen. We don't want this item to be considered an option for other items,
+					// otherwise we would not put this fuzzy item at the bottom and bank tags will put it at the top.
+					variantsSeen.add(variationId);
+					hasPlaceHolderVariant = true;
+					break;
+				}
+			}
+
+			if (hasPlaceHolderVariant)
+			{
+				continue;
+			}
+
 			if (bankItems.contains(id) && !idsInLayout.contains(id))
 			{
 				layout.addItemAfter(id, layout.size());
@@ -479,7 +544,6 @@ public class InventorySetupLayoutUtilities
 				layout.addItemAfter(placeholderID, layout.size());
 			}
 		}
-
 	}
 
 	public void exportSetupToBankTagTab(final InventorySetup setup, final Component component)
@@ -527,12 +591,10 @@ public class InventorySetupLayoutUtilities
 		Toolkit.getDefaultToolkit().getSystemClipboard().setContents(stringSelection, null);
 
 		SwingUtilities.invokeLater(() ->
-		{
-			JOptionPane.showMessageDialog(component,
-					"Bank tag tab data was copied to clipboard.",
-					"Export Setup To Bank Tag Tab Succeeded",
-					JOptionPane.PLAIN_MESSAGE);
-		});
+				JOptionPane.showMessageDialog(component,
+						"Bank tag tab data was copied to clipboard.",
+						"Export Setup To Bank Tag Tab Succeeded",
+						JOptionPane.PLAIN_MESSAGE));
 	}
 
 	public Layout convertHubBankTagLayoutToCoreBankTagLayout(final String hubBankTagLayoutData, final String tag)

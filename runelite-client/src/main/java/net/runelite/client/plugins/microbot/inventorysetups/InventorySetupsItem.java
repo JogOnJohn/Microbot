@@ -24,18 +24,16 @@
  */
 package net.runelite.client.plugins.microbot.inventorysetups;
 
-import java.util.Objects;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
-import net.runelite.client.game.ItemStats;
-import net.runelite.client.plugins.microbot.Microbot;
 
 @AllArgsConstructor
 public class InventorySetupsItem
 {
 	@Getter
 	private final int id;
+	@Getter
 	@Setter
 	private String name;
 	@Getter
@@ -54,13 +52,20 @@ public class InventorySetupsItem
 	@Setter
 	private int slot = -1;
 
-	public void toggleIsFuzzy()
+	public InventorySetupsItem(final int id, final String name, final int quantity, final boolean fuzzy,
+		final InventorySetupsStackCompareID stackCompare)
 	{
-		fuzzy = !fuzzy;
+		this(id, name, quantity, fuzzy, stackCompare, false, -1);
 	}
+
 	public void toggleIsLocked()
 	{
 		locked = !locked;
+	}
+
+	public void toggleIsFuzzy()
+	{
+		fuzzy = !fuzzy;
 	}
 
 	public static InventorySetupsItem getDummyItem()
@@ -79,35 +84,33 @@ public class InventorySetupsItem
 				item.getSlot() == -1;
 	}
 
-	public String getName() {
+	public String getName()
+	{
 		String itemName = name;
-
-		if (isFuzzy()) {
-			String[] splitItemName = itemName.split("\\(\\d+\\)$");
-			itemName = (splitItemName.length == 0) ? itemName : splitItemName[0];
+		if (isFuzzy())
+		{
+			String[] splitItemName = itemName.split("\\\\(\\\\d+\\\\)$");
+			itemName = splitItemName.length == 0 ? itemName : splitItemName[0];
 		}
 
-		String lowerCaseName = itemName.toLowerCase();
-
-		if (isBarrowsItem(lowerCaseName)) {
-			itemName = itemName.replaceAll("\\s+[1-9]\\d*$", "");
+		if (isBarrowsItem(itemName.toLowerCase()))
+		{
+			itemName = itemName.replaceAll("\\\\s+[1-9]\\\\d*$", "");
 		}
-
 		return itemName;
 	}
 
-	public boolean matches(InventorySetupsItem item) {
-		return isFuzzy() ? this.getName().toLowerCase().contains(item.getName().toLowerCase()) : Objects.equals(this.getId(), item.getId());
+	public boolean matches(final InventorySetupsItem item)
+	{
+		return isFuzzy() ? getName().toLowerCase().contains(item.getName().toLowerCase()) : id == item.id;
 	}
 
-	public static boolean isBarrowsItem(String lowerCaseName) {
-		return !lowerCaseName.endsWith(" 0") && (
-				lowerCaseName.contains("dharok's") ||
-				lowerCaseName.contains("ahrim's") ||
-				lowerCaseName.contains("guthan's") ||
-				lowerCaseName.contains("torag's") ||
-				lowerCaseName.contains("verac's") ||
-				lowerCaseName.contains("karil's")
-		);
+	public static boolean isBarrowsItem(final String lowerCaseName)
+	{
+		return !lowerCaseName.endsWith(" 0") && (lowerCaseName.contains("dharok's") ||
+			lowerCaseName.contains("ahrim's") || lowerCaseName.contains("guthan's") ||
+			lowerCaseName.contains("torag's") || lowerCaseName.contains("verac's") ||
+			lowerCaseName.contains("karil's"));
 	}
+
 }
