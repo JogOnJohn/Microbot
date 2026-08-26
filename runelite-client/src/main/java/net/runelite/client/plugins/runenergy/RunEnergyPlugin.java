@@ -168,12 +168,17 @@ public class RunEnergyPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		Player local = client.getLocalPlayer();
 		localPlayerRunningToDestination =
+			local != null &&
 			prevLocalPlayerLocation != null &&
 			client.getLocalDestinationLocation() != null &&
-			prevLocalPlayerLocation.distanceTo(client.getLocalPlayer().getWorldLocation()) > 1;
+			prevLocalPlayerLocation.distanceTo(local.getWorldLocation()) > 1;
 
-		prevLocalPlayerLocation = client.getLocalPlayer().getWorldLocation();
+		if (local != null)
+		{
+			prevLocalPlayerLocation = local.getWorldLocation();
+		}
 	}
 
 	@Subscribe
