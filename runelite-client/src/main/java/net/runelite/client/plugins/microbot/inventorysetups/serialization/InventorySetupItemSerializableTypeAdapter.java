@@ -101,4 +101,3 @@ public class InventorySetupItemSerializableTypeAdapter extends TypeAdapter<Inven
 		return new InventorySetupItemSerializable(id, q, f, sc);
 	}
 }
-

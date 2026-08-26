@@ -303,4 +303,3 @@ public class IronmanOptimalQuestGuide
 		QuestHelperQuest.WILDERNESS_ELITE
 	);
 }
-
