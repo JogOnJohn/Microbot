@@ -31,6 +31,7 @@ import net.runelite.client.plugins.microbot.util.coords.Rs2WorldPoint;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.util.input.InputArbiter;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
@@ -1540,6 +1541,11 @@ public class Rs2Walker {
         }
         if (isClientThread()) {
             log.warn("Please do not call the walker from the main thread");
+            return WalkerState.EXIT;
+        }
+        // Caller-driven: one click per call, never enters processWalk's loop, so isWalkCancelled
+        // never runs for it.
+        if (InputArbiter.isHuman()) {
             return WalkerState.EXIT;
         }
 
@@ -3487,6 +3493,11 @@ public class Rs2Walker {
     }
 
     private static boolean isWalkCancelled(WorldPoint target) {
+        // The single choke point for stopping a walk: processWalk already consults it at every
+        // checkpoint and inside the movement-wait predicates.
+        if (InputArbiter.isHuman()) {
+            return true;
+        }
         WalkCompletionContext completion = walkCompletionContext.get();
         if (completion != null && Objects.equals(completion.target, target)
                 && evaluateWalkCompletion(completion)) {
@@ -6420,6 +6431,7 @@ public class Rs2Walker {
                         }
                         markDoorAttempt(probe, fromWp, toWp);
                         markGlobalDoorInteractionCooldown();
+                        prepareTransportObjectForInteraction(object);
                         WorldPoint posBefore = Rs2Player.getWorldLocation();
                         boolean interacted;
                         try {
@@ -6550,6 +6562,7 @@ public class Rs2Walker {
         }
         markDoorAttempt(probe, fromWp, toWp);
         markGlobalDoorInteractionCooldown();
+        prepareTransportObjectForInteraction(object);
         WorldPoint posBefore = Rs2Player.getWorldLocation();
         boolean interacted;
         try {
@@ -8537,6 +8550,9 @@ public class Rs2Walker {
     }
 
     private static boolean handleStrongholdOfSecurityAnswer(TileObject object, String action) {
+        if (object == null) return false;
+        WorldPoint positionBefore = Rs2Player.getWorldLocation();
+
         Rs2GameObject.interact(object, action);
         boolean isInDialogue = Rs2Dialogue.sleepUntilInDialogue();
 
@@ -8571,7 +8587,13 @@ public class Rs2Walker {
             Rs2Dialogue.clickOption(dialogueAnswer);
             Rs2Dialogue.sleepUntilHasContinue();
             sleepUntil(() -> !Rs2Dialogue.hasContinue(), Rs2Dialogue::clickContinue, 5000, Rs2Random.between(600, 800));
-            Rs2Player.waitForAnimation(1200);
+            sleepUntil(() -> {
+                WorldPoint currentPosition = Rs2Player.getWorldLocation();
+                return currentPosition != null
+                        && !currentPosition.equals(positionBefore)
+                        && !Rs2Player.isMoving()
+                        && !Rs2Player.isAnimating();
+            }, 4000);
             return true;
         }
 
@@ -12744,11 +12766,10 @@ public class Rs2Walker {
             WalkerState state = walkWithStateInternal(target, distance);
             if (state == WalkerState.ARRIVED) {
                 WebWalkLog.bankWalkDebug("arrived goal={}", target);
-            } else {
+            } else if (state == WalkerState.UNREACHABLE || state == WalkerState.EXIT) {
                 WebWalkLog.bankWalkFailed(target, state);
                 setTarget(null, "rs2walker:walkWithBankedTransports:direct-walk-failed");
                 return state;
-
             }
             return state;
         } else {

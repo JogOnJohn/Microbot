@@ -244,6 +244,7 @@ public class IronmanOptimalQuestGuide
 		QuestHelperQuest.THE_FINAL_DAWN,
 		QuestHelperQuest.TROUBLED_TORTUGANS,
 		QuestHelperQuest.THE_RED_REEF,
+		QuestHelperQuest.FALLEN_FROM_GRACE,
 		QuestHelperQuest.SHADOWS_OF_CUSTODIA,
 		QuestHelperQuest.THE_PATH_OF_GLOUPHRIE,
 		QuestHelperQuest.THE_FREMENNIK_EXILES,

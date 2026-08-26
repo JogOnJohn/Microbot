@@ -228,6 +228,7 @@ public class ReleaseDate
 		QuestHelperQuest.THE_IDES_OF_MILK,
 		QuestHelperQuest.THE_RED_REEF,
 		QuestHelperQuest.THE_BLOOD_MOON_RISES,
+		QuestHelperQuest.FALLEN_FROM_GRACE,
 		// Miniquests
 		QuestHelperQuest.ALFRED_GRIMHANDS_BARCRAWL,
 		QuestHelperQuest.THE_MAGE_ARENA,

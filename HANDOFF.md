@@ -1,13 +1,13 @@
 # Microbot Shortest-Path Playable Handoff
 
-Last refreshed: 2026-08-15
+Last refreshed: 2026-08-24
 
 ## Checkout
 
 - Repository: `https://github.com/JogOnJohn/Microbot`
 - Worktree: `C:\Users\Billy\IdeaProjects\Microbot-shortestpath-sync`
-- Playable branch: `spike/shortest-path-upstream`
-- Current handoff base: `7b9f1754ee2ebdd13c51f43f4151b83d0105a644`
+- Playable branch: `playable/shortest-path`
+- Pre-2.6.20 backup: `backup/playable-shortest-path-pre-2.6.20-20260824`
 - Upstream Microbot: `https://github.com/chsami/Microbot`
 - RuneLite remote is vendor-only; do not treat it as the Microbot upstream.
 
@@ -17,10 +17,10 @@ promoted during the latest sync.
 
 ## Current Versions
 
-- Microbot: `2.6.19`
-- RuneLite: `1.12.35`
-- Plugin Hub compatibility version: `1.12.35`
-- Release jar: `runelite-client/build/libs/microbot-2.6.19.jar`
+- Microbot: `2.6.20`
+- RuneLite: `1.12.36`
+- Plugin Hub compatibility version: `1.12.36`
+- Release jar: `runelite-client/build/libs/microbot-2.6.20.jar`
 
 The desktop launcher reads `microbot.version` from `gradle.properties` and launches the jar from
 this worktree:
@@ -36,14 +36,14 @@ The 2026-08-15 upstream sync was promoted through:
 
 1. `upstream/development` -> `development`
 2. `development` -> `local/development`
-3. `local/development` -> `spike/shortest-path-upstream`
+3. `local/development` -> `playable/shortest-path`
 
 Relevant heads after the sync and walker fix:
 
 - `main`: `3157a6b430`
 - `development`: `19915968c8`
 - `local/development`: `7cfa078182`
-- `spike/shortest-path-upstream`: `7b9f1754ee`
+- `playable/shortest-path`: use the current branch head
 
 All four branches were pushed to `origin`. A fresh fetch reported `0 ahead / 0 behind` for each.
 The upstream walker rewrite from PR 1832 was reverted by Microbot upstream, so its net walker code
@@ -116,8 +116,8 @@ upstream. Merge selectively and rerun W330 plus golden-route coverage.
 
 ```powershell
 git fetch --all --prune
-git switch spike/shortest-path-upstream
-git pull --ff-only origin spike/shortest-path-upstream
+git switch playable/shortest-path
+git pull --ff-only origin playable/shortest-path
 git status --short --branch
 ```
 
@@ -151,7 +151,7 @@ Before claiming completion, fetch `origin` again and verify:
 
 ```powershell
 git rev-list --left-right --count `
-  spike/shortest-path-upstream...origin/spike/shortest-path-upstream
+  playable/shortest-path...origin/playable/shortest-path
 ```
 
 Expected result: `0 0`.
