@@ -227,6 +227,33 @@ public class ShortestPathCoreTest {
 	}
 
 	@Test
+	public void testCanoeRoutesRetainAxeRequirements() {
+		HashMap<WorldPoint, Set<Transport>> transports = Transport.loadAllFromResources();
+		Integer[] axeIds = {1351, 1349, 1361, 1353, 1355, 1357, 1359};
+
+		assertTransportLoadsWithItems(transports, new WorldPoint(3132, 3510, 0),
+				new WorldPoint(3109, 3415, 0), "Barbarian Village", axeIds);
+		assertTransportLoadsWithItems(transports, new WorldPoint(2439, 3135, 0),
+				new WorldPoint(2483, 3188, 0), "Tree Gnome Village", axeIds);
+	}
+
+	@Test
+	public void testQuetzalOriginsRetainVarplayerUnlockRequirements() {
+		HashMap<WorldPoint, Set<Transport>> transports = Transport.loadAllFromResources();
+		WorldPoint origin = new WorldPoint(1779, 3111, 0);
+
+		Optional<Transport> fortisToAldarin = transports.getOrDefault(origin, Collections.emptySet()).stream()
+				.filter(t -> new WorldPoint(1389, 2901, 0).equals(t.getDestination()))
+				.findFirst();
+
+		assertTrue("Fortis Colosseum Quetzal origin should load", fortisToAldarin.isPresent());
+		assertTrue("Fortis Colosseum Quetzal origin should retain its unlock bit",
+				fortisToAldarin.get().getVarplayers().stream().anyMatch(v -> v.getVarplayerId() == 4182
+						&& v.getOperator() == TransportVarPlayer.Operator.BIT_SET
+						&& v.getValue() == 256));
+	}
+
+	@Test
 	public void testAlKharidTollGateTransportsLoaded() {
 		HashMap<WorldPoint, Set<Transport>> transports = Transport.loadAllFromResources();
 

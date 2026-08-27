@@ -283,6 +283,15 @@ public class Rs2Walker {
             new WorldPoint(3268, 3227, 0),
             new WorldPoint(3268, 3228, 0));
 
+    /** Exact object-less Barrows mound edges that are executed by digging with a spade. */
+    private static final Map<WorldPoint, WorldPoint> BARROWS_DIG_DESTINATIONS = Map.of(
+            new WorldPoint(3564, 3291, 0), new WorldPoint(3559, 9703, 3),
+            new WorldPoint(3575, 3299, 0), new WorldPoint(3558, 9718, 3),
+            new WorldPoint(3578, 3281, 0), new WorldPoint(3534, 9706, 3),
+            new WorldPoint(3567, 3274, 0), new WorldPoint(3546, 9686, 3),
+            new WorldPoint(3553, 3281, 0), new WorldPoint(3566, 9683, 3),
+            new WorldPoint(3556, 3297, 0), new WorldPoint(3578, 9704, 3));
+
     /**
      * Max Chebyshev "radius" for Quetzal / near-destination checks — guards use {@code distanceTo2D &lt; OFFSET}.
      * {@link WorldPoint#distanceTo(WorldPoint)} delegates to {@link WorldPoint#distanceTo2D(WorldPoint)} when both
@@ -9027,6 +9036,10 @@ public class Rs2Walker {
                         }
                     }
 
+                    if (isBarrowsDigTransport(transport)) {
+                        return handleBarrowsDigTransport(transport);
+                    }
+
                     if (transport.getObjectId() <= 0) break;
 
                     final int transportObjectId = transport.getObjectId();
@@ -11144,6 +11157,12 @@ public class Rs2Walker {
                     return Arrays.stream(composition.getActions()).filter(Objects::nonNull).noneMatch(currentAction::equals) && !Rs2Player.isAnimating();
                 }, 300, 10000);
             case "Paddle Canoe":
+                int canoeMapMain = canoeMapMainComponentId(transport.getObjectId());
+                int canoeMapDestinations = canoeMapDestinationsComponentId(transport.getObjectId());
+                if (canoeMapMain < 0 || canoeMapDestinations < 0) {
+                    log.error("Unsupported canoe station object id: {}", transport.getObjectId());
+                    return false;
+                }
                 if (!Rs2GameObject.interact(transport.getObjectId(), "Paddle Canoe")) {
                     log.error("Failed to interact with canoe station");
                     return false;
@@ -11155,18 +11174,17 @@ public class Rs2Walker {
                 sleepUntil(Rs2Player::isMoving, 2000);
                 sleepUntilTrue(() -> !Rs2Player.isMoving(), 100, 30000);
 
-                // OSRS update moved the canoe destination map from group 647 to
-                // CanoeMapLum (953) for the river Lum chain. CanoeMapDougne (952)
-                // is for a different chain not currently used by canoes.tsv.
+                // OSRS uses separate interfaces for the River Lum and River Dougne chains.
                 boolean isDestinationMapVisible = sleepUntilTrue(
-                        () -> Rs2Widget.isWidgetVisible(InterfaceID.CanoeMapLum.MAIN_MAP),
+                        () -> Rs2Widget.isWidgetVisible(canoeMapMain),
                         100, 10000);
                 if (!isDestinationMapVisible) {
-                    log.error("Canoe destination map (CanoeMapLum) not visible within timeout period");
+                    log.error("Canoe destination map not visible within timeout period for station {}",
+                            transport.getObjectId());
                     return false;
                 }
 
-                Widget destinationListWidget = Rs2Widget.getWidget(InterfaceID.CanoeMapLum.DESTINATIONS);
+                Widget destinationListWidget = Rs2Widget.getWidget(canoeMapDestinations);
                 if (destinationListWidget == null) return false;
                 Widget destination = Rs2Widget.findWidget("Travel to " + displayInfo, List.of(destinationListWidget), false);
                 if (destination == null) {
@@ -11179,6 +11197,44 @@ public class Rs2Walker {
                 return sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET * 2), 100, 5000);
         }
         return false;
+    }
+
+    static int canoeMapMainComponentId(int stationObjectId) {
+        if (stationObjectId >= 60845 && stationObjectId <= 60849) {
+            return InterfaceID.CanoeMapDougne.MAIN_MAP;
+        }
+        if ((stationObjectId >= 12163 && stationObjectId <= 12166) || stationObjectId == 39638) {
+            return InterfaceID.CanoeMapLum.MAIN_MAP;
+        }
+        return -1;
+    }
+
+    static int canoeMapDestinationsComponentId(int stationObjectId) {
+        if (stationObjectId >= 60845 && stationObjectId <= 60849) {
+            return InterfaceID.CanoeMapDougne.DESTINATIONS;
+        }
+        if ((stationObjectId >= 12163 && stationObjectId <= 12166) || stationObjectId == 39638) {
+            return InterfaceID.CanoeMapLum.DESTINATIONS;
+        }
+        return -1;
+    }
+
+    static boolean isBarrowsDigTransport(Transport transport) {
+        if (transport == null
+                || transport.getType() != TransportType.TRANSPORT
+                || transport.getObjectId() != 0
+                || !"Dig".equalsIgnoreCase(transport.getAction())
+                || !"Barrow".equalsIgnoreCase(transport.getName())) {
+            return false;
+        }
+
+        WorldPoint expectedDestination = BARROWS_DIG_DESTINATIONS.get(transport.getOrigin());
+        Set<Set<Integer>> requirements = transport.getItemIdRequirements();
+        return expectedDestination != null
+                && expectedDestination.equals(transport.getDestination())
+                && requirements != null
+                && requirements.size() == 1
+                && requirements.iterator().next().equals(Set.of(ItemID.SPADE));
     }
 
     private static boolean isQuetzalWhistleItemId(int itemId) {
@@ -12440,5 +12496,30 @@ public class Rs2Walker {
             Microbot.doInvoke(closeEntry, closeButtonBounds != null && Rs2UiHelper.isRectangleWithinCanvas(closeButtonBounds) ? closeButtonBounds : Rs2UiHelper.getDefaultRectangle());
         }
         return sleepUntil(() -> !Rs2Widget.isWidgetVisible(InterfaceID.Worldmap.CLOSE), 3000);
+    }
+
+    private static boolean handleBarrowsDigTransport(Transport transport) {
+        WorldPoint playerAtMound = Rs2Player.getWorldLocation();
+        if (playerAtMound == null || !playerAtMound.equals(transport.getOrigin())) {
+            // Digging is tile-sensitive; let the ordinary route approach finish first.
+            return false;
+        }
+        if (!attemptObserved(transport, () -> Rs2Inventory.interact(ItemID.SPADE, "Dig"))) {
+            return false;
+        }
+        boolean enteredCrypt = Rs2WalkerRuntimeAwaits.awaitCondition(
+                () -> isPlayerWithinChebyshevOf(
+                        transport.getDestination(), TRANSPORT_NEAR_LANDING_CHEBYSHEV),
+                TRANSPORT_LANDING_WAIT_POLL_MS,
+                TRANSPORT_LANDING_WAIT_TIMEOUT_MS);
+        if (enteredCrypt) {
+            return finishHandledTransport(transport);
+        }
+        WebWalkLog.spWarn(
+                "Barrows dig post-travel wait timed out ({}ms) dest={} at={}",
+                TRANSPORT_LANDING_WAIT_TIMEOUT_MS,
+                compactWorldPoint(transport.getDestination()),
+                compactWorldPoint(Rs2Player.getWorldLocation()));
+        return false;
     }
 }
