@@ -345,7 +345,7 @@ public class SlayerPlugin extends Plugin
 		}
 		else if (varbitId == VarbitID.SLAYER_TASKS_COMPLETED || varbitId == VarbitID.SLAYER_WILDERNESS_TASKS_COMPLETED || varpId == VarPlayerID.SLAYER_MORTIMER_TASKS_COMPLETED)
 		{
-			setProfileConfig(SlayerConfig.STREAK_KEY, varbitChanged.getValue());
+			setProfileConfig(SlayerConfig.STREAK_KEY, getTaskStreak());
 
 			// streak is on a tooltip on the counter, so requires a rebuild if it changes
 			if (counter != null)
@@ -418,7 +418,7 @@ public class SlayerPlugin extends Plugin
 
 				// initialize streak and points in the event the plugin was toggled on after login
 				setProfileConfig(SlayerConfig.POINTS_KEY, client.getVarbitValue(VarbitID.SLAYER_POINTS));
-				setProfileConfig(SlayerConfig.STREAK_KEY, client.getVarbitValue(VarbitID.SLAYER_TASKS_COMPLETED));
+				setProfileConfig(SlayerConfig.STREAK_KEY, getTaskStreak());
 			}
 			else if (!Objects.equals(taskName, this.taskName) || !Objects.equals(taskLocation, this.taskLocation))
 			{
@@ -674,23 +674,24 @@ public class SlayerPlugin extends Plugin
 				+ " " + initialAmount;
 		}
 
-		final int streak;
-		switch (client.getVarbitValue(VarbitID.SLAYER_MASTER))
-		{
-			case KRYSTILIA_SLAYER_MASTER:
-				streak = client.getVarbitValue(VarbitID.SLAYER_WILDERNESS_TASKS_COMPLETED);
-				break;
-			case MORTIMER_SLAYER_MASTER:
-				streak = client.getVarpValue(VarPlayerID.SLAYER_MORTIMER_TASKS_COMPLETED);
-				break;
-			default:
-				streak = client.getVarbitValue(VarbitID.SLAYER_TASKS_COMPLETED);
-				break;
-		}
+		final int streak = getTaskStreak();
 		counter = new TaskCounter(taskImg, this, amount);
 		counter.setTooltip(String.format(taskTooltip, capsString(taskName), client.getVarbitValue(VarbitID.SLAYER_POINTS),  streak));
 
 		infoBoxManager.addInfoBox(counter);
+	}
+
+	private int getTaskStreak()
+	{
+		switch (client.getVarbitValue(VarbitID.SLAYER_MASTER))
+		{
+			case KRYSTILIA_SLAYER_MASTER:
+				return client.getVarbitValue(VarbitID.SLAYER_WILDERNESS_TASKS_COMPLETED);
+			case MORTIMER_SLAYER_MASTER:
+				return client.getVarpValue(VarPlayerID.SLAYER_MORTIMER_TASKS_COMPLETED);
+			default:
+				return client.getVarbitValue(VarbitID.SLAYER_TASKS_COMPLETED);
+		}
 	}
 
 	private void removeCounter()
