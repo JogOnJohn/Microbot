@@ -726,9 +726,17 @@ public class ShortestPathCoreTest {
 		WorldPoint dst = new WorldPoint(3237, 9858, 0);
 		WorldPoint northTrellis = new WorldPoint(3228, 3471, 0);
 		WorldPoint southTrellis = new WorldPoint(3228, 3470, 0);
+		assertTrue("Trellis edge must be blocked while the shortcut is unavailable",
+				config.isBlockedTransportStep(
+						WorldPointUtil.packWorldPoint(northTrellis),
+						WorldPointUtil.packWorldPoint(southTrellis)));
 
 		Pathfinder pf = new Pathfinder(config, src, dst);
 		pf.run();
+		assertTrue("Pathfinding must retain the unavailable trellis edge block",
+				config.isBlockedTransportStep(
+						WorldPointUtil.packWorldPoint(northTrellis),
+						WorldPointUtil.packWorldPoint(southTrellis)));
 
 		assertTrue("Pathfinder should complete", pf.isDone());
 		List<WorldPoint> rawPath = pf.getPath();
@@ -737,8 +745,9 @@ public class ShortestPathCoreTest {
 				hasConsecutiveStep(rawPath, northTrellis, southTrellis));
 
 		List<WorldPoint> smoothedPath = pf.getWalkablePath();
-		assertFalse("Smoothed path must not cross the disabled Varrock Palace trellis shortcut",
-				hasLineSegmentStep(smoothedPath, northTrellis, southTrellis));
+		String crossing = findLineSegmentStep(smoothedPath, northTrellis, southTrellis);
+		assertNull("Smoothed path must not cross the disabled Varrock Palace trellis shortcut: " + crossing,
+				crossing);
 
 		WorldPoint endpoint = rawPath.get(rawPath.size() - 1);
 		assertTrue("Path should still reach Varrock Sewers, ended at " + endpoint,
