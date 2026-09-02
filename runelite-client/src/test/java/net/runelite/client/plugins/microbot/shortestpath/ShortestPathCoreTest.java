@@ -203,26 +203,17 @@ public class ShortestPathCoreTest {
 	}
 
 	@Test
-	public void testAlKharidTollGateTransportsLoaded() {
+	public void testAlKharidGateTransportsLoaded() {
 		HashMap<WorldPoint, Set<Transport>> transports = Transport.loadAllFromResources();
 
 		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_SOUTH, AL_KHARID_GATE_EAST_SOUTH,
-				"Pay-toll(10gp)", 10, false);
+				"Open", 0, false);
 		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_NORTH, AL_KHARID_GATE_EAST_NORTH,
-				"Pay-toll(10gp)", 10, false);
+				"Open", 0, false);
 		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_SOUTH, AL_KHARID_GATE_WEST_SOUTH,
-				"Pay-toll(10gp)", 10, false);
+				"Open", 0, false);
 		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_NORTH, AL_KHARID_GATE_WEST_NORTH,
-				"Pay-toll(10gp)", 10, false);
-
-		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_SOUTH, AL_KHARID_GATE_EAST_SOUTH,
-				"Open", 0, true);
-		assertTollGateTransport(transports, AL_KHARID_GATE_WEST_NORTH, AL_KHARID_GATE_EAST_NORTH,
-				"Open", 0, true);
-		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_SOUTH, AL_KHARID_GATE_WEST_SOUTH,
-				"Open", 0, true);
-		assertTollGateTransport(transports, AL_KHARID_GATE_EAST_NORTH, AL_KHARID_GATE_WEST_NORTH,
-				"Open", 0, true);
+				"Open", 0, false);
 	}
 
 	@Test
