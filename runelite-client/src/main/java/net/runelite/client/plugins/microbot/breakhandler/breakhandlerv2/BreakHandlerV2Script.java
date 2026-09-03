@@ -239,7 +239,7 @@ public class BreakHandlerV2Script extends Script {
      * Initiates break based on configuration
      */
     private void handleBreakRequested() {
-        if (shouldDeferRequestedBreak()) {
+        if (shouldDeferRequestedBreak(breakEndTime)) {
             long now = System.currentTimeMillis();
             if (now - lastLockDeferralLogAt >= LOCK_DEFERRAL_LOG_INTERVAL_MS) {
                 log.info("[BreakHandlerV2] Break deferred while a plugin lock is active");
@@ -280,8 +280,12 @@ public class BreakHandlerV2Script extends Script {
         }
     }
 
-    static boolean shouldDeferRequestedBreak() {
-        return BreakHandlerScript.isLockState();
+    /**
+     * Defers only a new break request. A non-null end time represents an active
+     * no-logout break whose completion must continue to be processed.
+     */
+    static boolean shouldDeferRequestedBreak(Instant activeBreakEndTime) {
+        return activeBreakEndTime == null && BreakHandlerScript.isLockState();
     }
 
     /**
