@@ -1310,7 +1310,7 @@ public class ClientUI
 			final Player player = client.getLocalPlayer();
 
 			String playerName = null;
-			if (player != null && player.getName() != null)
+			if (player != null && !Strings.isNullOrEmpty(player.getName()))
 			{
 				playerName = player.getName();
 			}
