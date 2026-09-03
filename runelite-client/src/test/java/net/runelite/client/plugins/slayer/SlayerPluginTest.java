@@ -186,6 +186,15 @@ public class SlayerPluginTest
 	}
 
 	@Test
+	public void testSuperiorNotificationRejectsContainingMessage()
+	{
+		ChatMessage chatMessageEvent = new ChatMessage(null, GAMEMESSAGE, "Superior", "Warning: A superior foe has appeared... nearby", null, 0);
+
+		slayerPlugin.onChatMessage(chatMessageEvent);
+		verify(notifier, never()).notify(any(Notification.class), anyString());
+	}
+
+	@Test
 	public void testTaskLookup() throws IOException
 	{
 		net.runelite.http.api.chat.Task task = new net.runelite.http.api.chat.Task();
