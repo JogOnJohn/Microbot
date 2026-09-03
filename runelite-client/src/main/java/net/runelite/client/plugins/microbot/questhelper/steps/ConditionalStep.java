@@ -107,21 +107,22 @@ public class ConditionalStep extends QuestStep implements OwnerStep
 		this.id = id;
 	}
 
-	public void addStep(Requirement requirement, QuestStep step)
+	public ConditionalStep addStep(Requirement requirement, QuestStep step)
 	{
-		addStep(requirement, step, false);
+		return addStep(requirement, step, false);
 	}
 
 	// Each addStep can have an ID. When you add an ID, it keeps a separate ID to Steps OrderedHashSet.
 	// When we come to deciding active step, if we come across a success step with an ID attached, then we don't activate
 	// It right away, rather we iterate until we find a better match without an ID, or a better ID and continue iterating
 
-	public void addStep(Requirement requirement, QuestStep step, boolean isLockable)
+	public ConditionalStep addStep(Requirement requirement, QuestStep step, boolean isLockable)
 	{
 		step.setLockable(isLockable);
 		this.steps.put(requirement, step);
 
 		checkForConditions(requirement);
+		return this;
 	}
 
 	private void checkForConditions(Requirement requirement)
