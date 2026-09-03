@@ -100,6 +100,8 @@ public class SlayerPlugin extends Plugin
 {
 	//Chat messages
 	private static final String CHAT_SUPERIOR_MESSAGE = "A superior foe has appeared...";
+	private static final Pattern CHAT_SUPERIOR_PATTERN = Pattern.compile(
+		"^(?:@mes_hl_red@|<col=[0-9a-fA-F]{6}>)?" + Pattern.quote(CHAT_SUPERIOR_MESSAGE) + "(?:</col>)?$");
 
 	// Chat Command
 	private static final String TASK_COMMAND_STRING = "!task";
@@ -474,8 +476,7 @@ public class SlayerPlugin extends Plugin
 			return;
 		}
 
-		var msg = event.getMessage();
-		if (msg.contains(CHAT_SUPERIOR_MESSAGE))
+		if (CHAT_SUPERIOR_PATTERN.matcher(event.getMessage()).matches())
 		{
 			notifier.notify(config.showSuperiorNotification(), CHAT_SUPERIOR_MESSAGE);
 		}
