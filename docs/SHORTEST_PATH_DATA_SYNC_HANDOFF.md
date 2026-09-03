@@ -185,3 +185,16 @@ The canonical repeatable maintainer guide lives in the public converter reposito
 <https://github.com/JogOnJohn/microbot-shortest-path-sync/blob/main/docs/UPDATE_WORKFLOW.md>.
 It covers pin discovery, provenance, review, deliberate adoption, validation, promotion to both
 spikes, author identity, push, and handoff requirements.
+
+## 2026-09-03 collision refresh
+
+The standalone converter pins tooling `f5bdbc83c0ffdc3da4e6b985d2f41e28eb3f4705` and data
+`6ca996a41a6a4b85d0fdb38dc6d56c66b747e29a`. Upstream changed only
+`collision-map.zip`; all transport resources remained semantically identical after 37 local
+overrides. The adopted collision archive has SHA-256
+`74c6c064d78c8d73677343e2ed3bea39c30da2e728c27bb23c5e3ef581c49c8e` and changes three
+mapsquare entries: `21_56`, `21_57`, and `53_48`.
+
+The refresh passed the standalone Python suite, staged payload validation, golden-route corpus,
+and transport resource loading before promotion from `spike/shortest-path-data-sync` to
+`playable/shortest-path`.
