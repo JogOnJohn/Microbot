@@ -26,6 +26,13 @@ RuneLite fork with a hidden always-on plugin hosting automation scripts. Composi
 - Offline client-thread lookup: `./microbot-cli ct <method>`.
 - Test mode: `-Dmicrobot.test.mode=true -Dmicrobot.test.script=<PluginName>` → results in `~/.runelite/test-results/`. Protocol: `docs/AGENTIC_TESTING_LOOP.md`.
 
+## Development plugin hot reload
+- The watcher is available only on `feature/dev-plugin-hotreload` or a branch containing commit `aea0e6abe0`; it is not on `playable/shortest-path`.
+- Build the client release JAR once with `:client:microbotReleaseJar`, launch it with `-Dmicrobot.hotreload.devjar=<absolute-versioned-plugin-jar>` before `-jar`, and keep that filename stable for the session.
+- SSH is suitable for one-shot builds but not a durable Gradle `--continuous` watcher. On Bizza, use an interactive scheduled task in the logged-in desktop session for continuous plugin builds.
+- Never load a watched development JAR alongside the normal sideloaded JAR for the same plugin. Disable/archive the normal copy only with the client fully closed, and restore it only after the development client exits.
+- See `docs/hotreload-development.md` for the validated Bizza AutoHunter command and verification loop.
+
 ## In-game settings
 Use the settings search bar — tab indices shift on updates. Verify changes via `./microbot-cli varbit <id>`.
 

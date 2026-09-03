@@ -604,7 +604,8 @@ public class MicrobotPluginManager {
                     || pkg.contains(".shortestpath")
                     || pkg.contains(".questhelper")
                     || pkg.contains("inventorysetups")
-                    || pkg.contains("breakhandler");
+                    || pkg.contains("breakhandler")
+                    || pkg.contains(".hotreload");
         }
 
         return false;
