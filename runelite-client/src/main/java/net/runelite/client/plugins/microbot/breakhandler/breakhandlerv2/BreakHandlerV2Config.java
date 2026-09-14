@@ -215,10 +215,21 @@ public interface BreakHandlerV2Config extends Config {
     }
 
     @ConfigItem(
+        keyName = "clearActiveBreak",
+        name = "Clear Active Break",
+        description = "Cancel the current break, clear its persisted state, and resume normal scheduling",
+        position = 2,
+        section = breakBehaviorOptions
+    )
+    default boolean clearActiveBreak() {
+        return false;
+    }
+
+    @ConfigItem(
         keyName = "pluginToStop",
         name = "Stop Plugin On Break",
         description = "Select a Microbot or Plugin Hub plugin to stop automatically when a break begins.",
-        position = 2,
+        position = 3,
         section = breakBehaviorOptions
     )
     default String pluginToStop() {
@@ -229,7 +240,7 @@ public interface BreakHandlerV2Config extends Config {
         keyName = "stopPluginLeadSeconds",
         name = "Stop Lead Time (sec)",
         description = "Stop the selected plugin this many seconds before a break starts.",
-        position = 3,
+        position = 4,
         section = breakBehaviorOptions
     )
     @Range(min = 0, max = 300)
@@ -241,7 +252,7 @@ public interface BreakHandlerV2Config extends Config {
         keyName = "startPluginDelaySeconds",
         name = "Restart Delay (sec)",
         description = "Wait this many seconds after a break ends before restarting the stopped plugin.",
-        position = 4,
+        position = 5,
         section = breakBehaviorOptions
     )
     @Range(min = 0, max = 300)
