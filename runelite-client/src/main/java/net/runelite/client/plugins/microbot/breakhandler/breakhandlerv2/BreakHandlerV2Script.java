@@ -591,6 +591,7 @@ public class BreakHandlerV2Script extends Script {
         scheduleNextBreak(completedLongBreak, completedMegaBreak);
         startConfiguredPluginIfNeeded();
         resetClearActiveBreakConfig();
+        log.info("[BreakHandlerV2] Active break cleared; normal waiting and scheduling resumed");
     }
 
     static void resetActiveBreakState() {
