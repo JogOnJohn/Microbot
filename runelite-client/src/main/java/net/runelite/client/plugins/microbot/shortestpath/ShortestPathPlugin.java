@@ -146,6 +146,9 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     private ETAOverlayPanel etaOverlayPanel;
 
     @Inject
+    private WalkingNoticeOverlay walkingNoticeOverlay;
+
+    @Inject
     private SpriteManager spriteManager;
 
     @Inject
@@ -216,6 +219,13 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     @Provides
     public ShortestPathConfig provideConfig(ConfigManager configManager) {
         return configManager.getConfig(ShortestPathConfig.class);
+    }
+
+    public ShortestPathPlugin() {
+    }
+
+    public ShortestPathPlugin(WalkingNoticeOverlay walkingNoticeOverlay) {
+        this.walkingNoticeOverlay = walkingNoticeOverlay;
     }
 
     @Override
