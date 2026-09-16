@@ -118,6 +118,17 @@ public @interface PluginDescriptor
 	 */
 	boolean hidden() default false;
 
+	/**
+	 * The internal name of a Plugin Hub plugin as used in the Plugin Hub repository.
+	 * This value must be all lowercase and snake-cased.
+	 */
+	String internalName() default "";
+
+	/**
+	 * The legacy .runelite subpath to migrate to this plugin's data directory.
+	 */
+	String legacyDataDirectory() default "";
+
 	boolean developerPlugin() default false;
 
 	boolean loadInSafeMode() default true;
