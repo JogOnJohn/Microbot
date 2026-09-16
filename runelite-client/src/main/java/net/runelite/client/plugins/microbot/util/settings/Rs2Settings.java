@@ -277,9 +277,9 @@ public class Rs2Settings
 		Rs2Tab.switchTo(InterfaceTab.SETTINGS);
 		Rs2Widget.clickWidget(116, 67);
 		sleepGaussian(800, 100);
-		var musicBtn = Rs2Widget.getWidget(ComponentID.SETTINGS_SIDE_MUSIC_SLIDER).getStaticChildren()[0];
-		var soundEffectBtn = Rs2Widget.getWidget(ComponentID.SETTINGS_SIDE_SOUND_EFFECT_SLIDER).getStaticChildren()[0];
-		var areaSoundBtn = Rs2Widget.getWidget(ComponentID.SETTINGS_SIDE_AREA_SOUND_SLIDER).getStaticChildren()[0];
+		var musicBtn = Rs2Widget.getWidget(net.runelite.api.gameval.InterfaceID.SettingsSide.MUSIC_HOLDER).getStaticChildren()[0];
+		var soundEffectBtn = Rs2Widget.getWidget(net.runelite.api.gameval.InterfaceID.SettingsSide.SOUND_HOLDER).getStaticChildren()[0];
+		var areaSoundBtn = Rs2Widget.getWidget(net.runelite.api.gameval.InterfaceID.SettingsSide.AREASOUNDS_HOLDER).getStaticChildren()[0];
 		if (musicBtn == null || soundEffectBtn == null || areaSoundBtn == null)
 		{
 			log.info("Music settings buttons not found");

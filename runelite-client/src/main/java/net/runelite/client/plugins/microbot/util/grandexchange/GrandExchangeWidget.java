@@ -34,7 +34,7 @@ public class GrandExchangeWidget
 	 */
 	static boolean isOfferTextVisible()
 	{
-		return Rs2Widget.isWidgetVisible(ComponentID.GRAND_EXCHANGE_OFFER_DESCRIPTION);
+		return Rs2Widget.isWidgetVisible(net.runelite.api.gameval.InterfaceID.GeOffers.SETUP_DESC);
 	}
 
 	/**
