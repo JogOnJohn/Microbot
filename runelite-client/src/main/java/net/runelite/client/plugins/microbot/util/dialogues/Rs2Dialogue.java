@@ -88,7 +88,7 @@ public class Rs2Dialogue {
      */
 
     private static boolean hasSpriteContinue() {
-        return Rs2Widget.isWidgetVisible(InterfaceID.DIALOG_SPRITE, 0) || Rs2Widget.isWidgetVisible(InterfaceID.DIALOG_SPRITE, 3) || Rs2Widget.isWidgetVisible(InterfaceID.DIALOG_DOUBLE_SPRITE, 4);
+        return Rs2Widget.isWidgetVisible(InterfaceID.DIALOG_SPRITE, 0) || Rs2Widget.isWidgetVisible(InterfaceID.DIALOG_SPRITE, 3) || Rs2Widget.isWidgetVisible(net.runelite.api.gameval.InterfaceID.OBJECTBOX_DOUBLE, 4);
     }
 
     /**

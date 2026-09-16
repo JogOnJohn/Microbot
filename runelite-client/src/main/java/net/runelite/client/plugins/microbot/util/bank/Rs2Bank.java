@@ -2866,7 +2866,7 @@ public class Rs2Bank {
     }
 
     private static Widget getBankSizeWidget() {
-        return Rs2Widget.getWidget(ComponentID.BANK_ITEM_COUNT_TOP);
+        return Rs2Widget.getWidget(net.runelite.api.gameval.InterfaceID.Bankmain.OCCUPIEDSLOTS);
     }
 
     /**
