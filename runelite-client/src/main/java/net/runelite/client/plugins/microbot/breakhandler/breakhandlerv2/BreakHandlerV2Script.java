@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.breakhandler.breakhandlerv2;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameState;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.config.ConfigProfile;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
@@ -72,6 +73,7 @@ public class BreakHandlerV2Script extends Script {
     private static final String PERSISTED_BREAK_LOGOUT_KEY = "persistedBreakLogout";
 
     // Break duration in milliseconds
+    private volatile boolean clearActiveBreakRequested;
     private long currentBreakDuration = 0;
     private boolean logoutBreakActive = false;
     private long lastLockDeferralLogAt = 0L;
@@ -98,6 +100,7 @@ public class BreakHandlerV2Script extends Script {
         this.config = config;
         scriptStartedAt = Instant.now();
         breaksActivatedCount = 0;
+        clearActiveBreakRequested = config.clearActiveBreak();
         BreakHandlerV2State.setState(BreakHandlerV2State.WAITING_FOR_BREAK);
 
         // Initialize next break time immediately to prevent null values in overlay
@@ -110,7 +113,9 @@ public class BreakHandlerV2Script extends Script {
         originalWindowTitle = ClientUI.getFrame().getTitle();
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
-                if (!super.run() && !config.autoLogin() && BreakHandlerV2State.getCurrentState() != BreakHandlerV2State.LOGIN_REQUESTED) return;
+                boolean scriptRunning = super.run();
+                handleClearActiveBreakRequest();
+                if (!scriptRunning && !config.autoLogin() && BreakHandlerV2State.getCurrentState() != BreakHandlerV2State.LOGIN_REQUESTED) return;
 
                 // Ensure previously stopped plugin is restarted once we're logged back in, even if the state machine
                 // hasn't reached BREAK_ENDING yet (e.g., manual login after extended sleep).
@@ -551,6 +556,58 @@ public class BreakHandlerV2Script extends Script {
         clearPersistedBreakState();
 
         transitionToState(BreakHandlerV2State.WAITING_FOR_BREAK);
+    }
+
+    /**
+     * Applies a config-triggered clear on the script executor thread.
+     */
+    private void handleClearActiveBreakRequest() {
+        if (!clearActiveBreakRequested) {
+            return;
+        }
+
+        clearActiveBreakRequested = false;
+        BreakHandlerV2State previousState = BreakHandlerV2State.getCurrentState();
+        log.info("[BreakHandlerV2] Clearing active break from state {}", previousState);
+        boolean completedLongBreak = currentBreakIsLong || longBreakDue;
+        boolean completedMegaBreak = currentBreakIsMega || megaBreakDue;
+
+        breakEndTime = null;
+        currentBreakDuration = 0;
+        loginAttemptTime = null;
+        loginRetryCount = 0;
+        safetyCheckAttempts = 0;
+        preBreakWorld = -1;
+        unexpectedLogoutDetected = false;
+        currentBreakIsLong = false;
+        currentBreakIsMega = false;
+        longBreakDue = false;
+        megaBreakDue = false;
+        pluginStopTriggered = false;
+        pluginRestartAllowedAt = Instant.MIN;
+
+        clearPersistedBreakState();
+        resetActiveBreakState();
+        scheduleNextBreak(completedLongBreak, completedMegaBreak);
+        startConfiguredPluginIfNeeded();
+        resetClearActiveBreakConfig();
+        log.info("[BreakHandlerV2] Active break cleared; normal waiting and scheduling resumed");
+    }
+
+    static void resetActiveBreakState() {
+        BreakHandlerV2State.setState(BreakHandlerV2State.WAITING_FOR_BREAK);
+        Microbot.pauseAllScripts.set(false);
+    }
+
+    void requestClearActiveBreak() {
+        clearActiveBreakRequested = true;
+    }
+
+    private void resetClearActiveBreakConfig() {
+        ConfigManager configManager = Microbot.getConfigManager();
+        if (configManager != null) {
+            configManager.setConfiguration(BreakHandlerV2Config.configGroup, "clearActiveBreak", false);
+        }
     }
 
     /**
@@ -1212,6 +1269,7 @@ public class BreakHandlerV2Script extends Script {
     public void shutdown() {
         super.shutdown();
         log.info("[BreakHandlerV2] Shutting down");
+        clearActiveBreakRequested = false;
 
         // Reset state
         BreakHandlerV2State.setState(BreakHandlerV2State.WAITING_FOR_BREAK);
@@ -1317,12 +1375,20 @@ public class BreakHandlerV2Script extends Script {
     }
 
     private void clearPersistedBreakState() {
+        logoutBreakActive = false;
         if (Microbot.getConfigManager() == null) {
             return;
         }
-        logoutBreakActive = false;
-        Microbot.getConfigManager().unsetConfiguration(BreakHandlerV2Config.configGroup, PERSISTED_BREAK_END_KEY);
-        Microbot.getConfigManager().unsetConfiguration(BreakHandlerV2Config.configGroup, PERSISTED_BREAK_LOGOUT_KEY);
+        clearPersistedBreakState(Microbot.getConfigManager());
+    }
+
+    static void clearPersistedBreakState(ConfigManager configManager) {
+        if (configManager == null) {
+            return;
+        }
+
+        configManager.unsetConfiguration(BreakHandlerV2Config.configGroup, PERSISTED_BREAK_END_KEY);
+        configManager.unsetConfiguration(BreakHandlerV2Config.configGroup, PERSISTED_BREAK_LOGOUT_KEY);
     }
 
     private void extendBreakUntilSchedule() {

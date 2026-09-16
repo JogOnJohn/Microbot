@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -107,5 +108,19 @@ public class BreakHandlerV2Plugin extends Plugin {
     public void onGameStateChanged(GameStateChanged event) {
         // Future implementation: detect unexpected logouts, bans, etc.
         log.debug("[BreakHandlerV2] Game state changed: {}", event.getGameState());
+    }
+
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event) {
+        if (!BreakHandlerV2Config.configGroup.equals(event.getGroup())
+                || !"clearActiveBreak".equals(event.getKey())
+                || !Boolean.parseBoolean(event.getNewValue())) {
+            return;
+        }
+
+        log.info("[BreakHandlerV2] Clear Active Break requested from config");
+        if (script != null) {
+            script.requestClearActiveBreak();
+        }
     }
 }
