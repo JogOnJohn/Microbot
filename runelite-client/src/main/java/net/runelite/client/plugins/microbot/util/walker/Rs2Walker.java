@@ -11744,9 +11744,9 @@ public class Rs2Walker {
             } else if (Rs2GameObject.hasAction(composition, "Ring-configure", true)) {
                 Rs2GameObject.interact(fairyRingObject, "Ring-configure");
             }
-            sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Widget.isHidden(ComponentID.FAIRY_RING_TELEPORT_BUTTON), 10000);
+            sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Widget.isHidden(net.runelite.api.gameval.InterfaceID.Fairyrings.CONFIRM), 10000);
 
-            if (Rs2Widget.isHidden(ComponentID.FAIRY_RING_TELEPORT_BUTTON)) {
+            if (Rs2Widget.isHidden(net.runelite.api.gameval.InterfaceID.Fairyrings.CONFIRM)) {
                 log.warn("Fairy ring interface did not open (interrupted by combat?). Retrying next iteration.");
                 return false;
             }
@@ -11762,7 +11762,7 @@ public class Rs2Walker {
             rotateSlotToDesiredRotation(SLOT_ONE, slotOne.getRotationY(), getDesiredRotation(transport.getDisplayInfo().charAt(0)), SLOT_ONE_ACW_ROTATION, SLOT_ONE_CW_ROTATION);
             rotateSlotToDesiredRotation(SLOT_TWO, slotTwo.getRotationY(), getDesiredRotation(transport.getDisplayInfo().charAt(1)), SLOT_TWO_ACW_ROTATION, SLOT_TWO_CW_ROTATION);
             rotateSlotToDesiredRotation(SLOT_THREE, slotThree.getRotationY(), getDesiredRotation(transport.getDisplayInfo().charAt(2)), SLOT_THREE_ACW_ROTATION, SLOT_THREE_CW_ROTATION);
-            Rs2Widget.clickWidget(ComponentID.FAIRY_RING_TELEPORT_BUTTON);
+            Rs2Widget.clickWidget(net.runelite.api.gameval.InterfaceID.Fairyrings.CONFIRM);
         }
 
         sleepUntil(() -> Rs2Player.getGraphicId() == fairyRingGraphicId, 5000);

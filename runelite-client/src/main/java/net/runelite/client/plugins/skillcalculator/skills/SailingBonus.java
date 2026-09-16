@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, LlemonDuck <napkinorton@gmail.com>
+ * Copyright (c) 2021, Jordan Atwood <nightfirecat@protonmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,32 +22,35 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package net.runelite.gradle.component;
+package net.runelite.client.plugins.skillcalculator.skills;
 
-import org.gradle.api.Plugin;
-import org.gradle.api.Project;
-import org.gradle.api.tasks.SourceSet;
-import org.gradle.api.tasks.SourceSetContainer;
-import org.gradle.api.tasks.TaskProvider;
+import java.util.EnumSet;
+import java.util.Set;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
-public class ComponentPlugin implements Plugin<Project>
+@AllArgsConstructor
+@Getter(onMethod_ = @Override)
+public enum SailingBonus implements SkillBonus
 {
+	HORIZONS_LURE("Horizon's Lure", 1.025f),
+	CREW_DECKHANDINESS_3("Crew Deckhandiness 3", 0.3f),
+	CREW_DECKHANDINESS_4("Crew Deckhandiness 4", 0.4f),
+	;
+
+	private final String name;
+	private final float value;
 
 	@Override
-	public void apply(Project project)
+	public Set<SailingBonus> getCanBeStackedWith()
 	{
-		TaskProvider<ComponentTask> packComponents = project.getTasks()
-			.register("packComponents", ComponentTask.class, (task) -> task.setGroup("build"));
-
-		project.getTasks()
-			.getByName("compileJava")
-			.dependsOn(packComponents);
-
-		project.getExtensions()
-			.getByType(SourceSetContainer.class)
-			.getByName(SourceSet.MAIN_SOURCE_SET_NAME)
-			.getJava()
-			.srcDir(packComponents.map(ComponentTask::getOutputDirectory));
+		switch (this)
+		{
+			case CREW_DECKHANDINESS_3:
+			case CREW_DECKHANDINESS_4:
+				return EnumSet.complementOf(EnumSet.of(CREW_DECKHANDINESS_3, CREW_DECKHANDINESS_4));
+			default:
+				return EnumSet.complementOf(EnumSet.of(this));
+		}
 	}
-
 }

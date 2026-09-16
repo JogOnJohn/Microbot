@@ -27,7 +27,8 @@ public class Rs2Cannon {
             3, 3, 
             brokenCannon.getWorldLocation().getPlane()
         );
-        if (!cannonLocation.toWorldPoint().equals(CannonPlugin.getCannonPosition().toWorldPoint())) return false;
+        WorldArea trackedCannon = getTrackedCannonPosition();
+        if (trackedCannon == null || !cannonLocation.toWorldPoint().equals(trackedCannon.toWorldPoint())) return false;
 
         Microbot.status = "Repairing Cannon";
 
@@ -61,7 +62,8 @@ public class Rs2Cannon {
             3, 3, 
             cannon.getWorldLocation().getPlane()
         );
-        if (!cannonLocation.toWorldPoint().equals(CannonPlugin.getCannonPosition().toWorldPoint())) return false;
+        WorldArea trackedCannon = getTrackedCannonPosition();
+        if (trackedCannon == null || !cannonLocation.toWorldPoint().equals(trackedCannon.toWorldPoint())) return false;
 		Microbot.pauseAllScripts.compareAndSet(false, true);
         Rs2GameObject.interact(cannon, "Fire");
         Rs2Player.waitForWalking();
@@ -70,6 +72,15 @@ public class Rs2Cannon {
         sleepUntil(() -> Microbot.getClientThread().runOnClientThreadOptional(() -> Microbot.getClient().getVarpValue(VarPlayer.CANNON_AMMO)).orElse(0) > Rs2Random.between(10, 15));
 		Microbot.pauseAllScripts.compareAndSet(true, false);
         return true;
+    }
+
+    private static WorldArea getTrackedCannonPosition() {
+        return Microbot.getPluginManager().getPlugins().stream()
+            .filter(CannonPlugin.class::isInstance)
+            .map(CannonPlugin.class::cast)
+            .map(CannonPlugin::getCannonPosition)
+            .findFirst()
+            .orElse(null);
     }
 
 }
