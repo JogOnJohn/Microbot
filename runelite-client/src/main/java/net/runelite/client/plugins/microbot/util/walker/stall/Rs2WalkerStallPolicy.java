@@ -27,7 +27,7 @@ public final class Rs2WalkerStallPolicy {
         if (Rs2Dialogue.isInDialogue()) {
             return true;
         }
-        return !Rs2Widget.isHidden(ComponentID.FAIRY_RING_TELEPORT_BUTTON);
+        return !Rs2Widget.isHidden(net.runelite.api.gameval.InterfaceID.Fairyrings.CONFIRM);
     }
 
     /**
