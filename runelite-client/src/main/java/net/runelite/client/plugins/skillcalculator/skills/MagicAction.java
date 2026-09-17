@@ -139,7 +139,7 @@ public enum MagicAction implements SkillAction
 	KHARYRLL_TELEPORT("Kharyrll Teleport", 66, 76, SpriteID.SPELL_KHARYRLL_TELEPORT, true, Rs2Spellbook.ANCIENT),
 	VILE_VIGOUR("Vile Vigour", 66, 76, SpriteID.SPELL_VILE_VIGOUR, true, Rs2Spellbook.ARCEUUS),
 	VULNERABILITY("Vulnerability", 66, 76, SpriteID.SPELL_VULNERABILITY, true, Rs2Spellbook.MODERN),
-	NPC_CONTACT("Npc Contact", 67, 63, SpriteID.SPELL_NPC_CONTACT, true, Rs2Spellbook.LUNAR),
+	NPC_CONTACT("Astral Contact", 67, 63, SpriteID.SPELL_NPC_CONTACT, true, Rs2Spellbook.LUNAR),
 	BLOOD_BURST("Blood Burst", 68, 39, SpriteID.SPELL_BLOOD_BURST, true, Rs2Spellbook.ANCIENT),
 	CURE_OTHER("Cure Other", 68, 65, SpriteID.SPELL_CURE_OTHER, true, Rs2Spellbook.LUNAR),
 	HUMIDIFY("Humidify", 68, 65, SpriteID.SPELL_HUMIDIFY, true, Rs2Spellbook.LUNAR),
