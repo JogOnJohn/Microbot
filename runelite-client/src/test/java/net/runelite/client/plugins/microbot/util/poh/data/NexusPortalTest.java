@@ -23,9 +23,26 @@ public class NexusPortalTest
 	}
 
 	@Test
-	public void allCurrentNexusSlotsAreRead()
-	{
-		Assert.assertEquals(45, NexusPortal.VARBITS.length);
-		Assert.assertEquals(VarbitID.POH_NEXUS_TELE_45, NexusPortal.VARBITS[44]);
-	}
-}
+    public void allCurrentNexusSlotsAreRead()
+    {
+        Assert.assertEquals(45, NexusPortal.VARBITS.length);
+        Assert.assertEquals(VarbitID.POH_NEXUS_TELE_45, NexusPortal.VARBITS[44]);
+    }
+
+    @Test
+    public void unknownAndEmptySlotsDoNotIndexOutsideTheCatalog()
+    {
+        Assert.assertNull(NexusPortal.fromVarbitValue(-1));
+        Assert.assertNull(NexusPortal.fromVarbitValue(0));
+        Assert.assertNull(NexusPortal.fromVarbitValue(32));
+        Assert.assertNull(NexusPortal.fromVarbitValue(Integer.MAX_VALUE));
+    }
+
+    @Test
+    public void knownSlotsKeepTheirMappings()
+    {
+        Assert.assertEquals(NexusPortal.VARROCK, NexusPortal.fromVarbitValue(1));
+        Assert.assertEquals(NexusPortal.LUMBRIDGE, NexusPortal.fromVarbitValue(2));
+        Assert.assertEquals(NexusPortal.CIVITAS_ILLA_FORTIS, NexusPortal.fromVarbitValue(31));
+    }
+ }
