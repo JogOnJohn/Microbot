@@ -193,6 +193,7 @@ public class PathfinderConfig {
             useMinecarts,
             usePoh,
             useWorld330MaxHouse,
+            usePortalNexus,
             useQuetzals,
             useTeleportationLevers,
             useTeleportationMinigames,
@@ -396,6 +397,7 @@ public class PathfinderConfig {
         useMinecarts = ShortestPathPlugin.override("useMinecarts", config.useMinecarts());
         usePoh = ShortestPathPlugin.override("usePoh", config.usePoh());
         useWorld330MaxHouse = ShortestPathPlugin.override("useWorld330MaxHouse", config.useWorld330MaxHouse());
+        usePortalNexus = ShortestPathPlugin.override("usePortalNexus", config.usePortalNexus());
         useSpiritTreeEtceteria = ShortestPathPlugin.override("spiritTreeEtceteria", config.spiritTreeEtceteria());
         useSpiritTreeBrimhaven = ShortestPathPlugin.override("spiritTreeBrimhaven", config.spiritTreeBrimhaven());
         useSpiritTreePortSarim = ShortestPathPlugin.override("spiritTreePortSarim", config.spiritTreePortSarim());
@@ -1130,7 +1132,7 @@ public class PathfinderConfig {
         }
 
         // Add transports from PoH to somewhere in the world
-        for (var entry : PohPanel.getAvailableTransports(allTransports).entrySet()) {
+        for (var entry : PohPanel.getAvailableTransports(allTransports, usePortalNexus).entrySet()) {
             mergedTransports
                     .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
                     .addAll(entry.getValue());
@@ -2215,6 +2217,8 @@ public class PathfinderConfig {
         if (usePoh) bits |= 1L << s;
         s++;
         if (useWorld330MaxHouse) bits |= 1L << s;
+        s++;
+        if (usePortalNexus) bits |= 1L << s;
         s++;
         if (useQuetzals) bits |= 1L << s;
         s++;

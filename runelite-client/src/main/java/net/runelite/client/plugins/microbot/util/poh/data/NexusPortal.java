@@ -136,10 +136,18 @@ public enum NexusPortal implements PohTeleport {
             }
             NexusPortal tp = fromVarbitValue(value);
             if (tp != null) {
-                teleports.add(tp);
+                if (!teleports.contains(tp)) teleports.add(tp);
+            } else {
+                Microbot.log("POH Nexus: unsupported destination value " + value + "; skipping this slot.");
             }
         }
         return teleports;
+    }
+
+    static NexusPortal fromVarbitValue(int value) {
+        if (value == 1) return VARROCK;
+        NexusPortal[] destinations = values();
+        return value > 1 && value < destinations.length ? destinations[value] : null;
     }
 
     public static final int[] VARBITS = new int[]{
