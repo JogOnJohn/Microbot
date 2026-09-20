@@ -89,7 +89,16 @@ public enum NexusPortal implements PohTeleport {
     }
 
     static NexusPortal fromVarbitValue(int value) {
+        if (value <= 0) {
+            return null;
+        }
+        if (value == 1) {
+            return VARROCK;
+        }
         for (NexusPortal portal : values()) {
+            if (portal == VARROCK || portal == VARROCK_GE) {
+                continue;
+            }
             if (portal.varbitValue() == value) {
                 return portal;
             }
@@ -142,12 +151,6 @@ public enum NexusPortal implements PohTeleport {
             }
         }
         return teleports;
-    }
-
-    static NexusPortal fromVarbitValue(int value) {
-        if (value == 1) return VARROCK;
-        NexusPortal[] destinations = values();
-        return value > 1 && value < destinations.length ? destinations[value] : null;
     }
 
     public static final int[] VARBITS = new int[]{
