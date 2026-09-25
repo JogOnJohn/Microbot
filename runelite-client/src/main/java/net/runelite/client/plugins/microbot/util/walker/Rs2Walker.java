@@ -1963,7 +1963,9 @@ public class Rs2Walker {
             primeExpectedTransportDestinations(path, indexOfStartPoint);
 
             routeState.lastPosition = playerLocForIndex;
-            logWalkIdleIfStalled(processWalkTail, target, routeState.lastPosition);
+            WorldPoint nextRouteTile = path.get(Math.min(indexOfStartPoint + 1, path.size() - 1));
+            logWalkIdleIfStalled(processWalkTail, target, routeState.lastPosition,
+                    nextRouteTile, shouldIssueActiveRouteIdleNudge, immediateRouteTransportPending);
             boolean clearedInterimTarget = clearInterimTargetIfReachedOrExpired(routeState.lastPosition, path, System.currentTimeMillis());
             WorldPoint plImmediate = routeState.lastPosition;
 
@@ -3005,6 +3007,11 @@ public class Rs2Walker {
                                     + " sel=" + routeState.lastRouteClickTier + " fb=" + fallbackTag);
                     WorldPoint clickedTarget = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
                             MINIMAP_REACH_EUCLIDEAN - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex);
+                    if (clickedTarget == null) {
+                        clickedTarget = retryClickAfterSceneLoad(rawPath, clickTarget, playerLoc,
+                                MINIMAP_REACH_EUCLIDEAN - 1, rawPath == null || rawPath.isEmpty(),
+                                rawAnchorIndex, target);
+                    }
                     boolean clicked = clickedTarget != null;
                     if (walkCancelledDiag(target, "processWalk:after-minimap-click", processWalkTail)) {
                         return WalkerState.EXIT;
@@ -3497,6 +3504,55 @@ public class Rs2Walker {
 
         LocalPoint localTarget = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), target);
         return localTarget == null || Rs2Tile.isWalkable(localTarget);
+    }
+
+    private enum SceneTileStatus { LOADED, OUTSIDE_SCENE, TILE_MISSING, UNKNOWN }
+
+    private static SceneTileStatus sceneTileStatus(WorldPoint target) {
+        if (target == null) return SceneTileStatus.UNKNOWN;
+        try {
+            WorldView view = Microbot.getClient().getTopLevelWorldView();
+            if (view == null || view.getScene() == null || view.isInstance()
+                    || target.getPlane() != view.getPlane()) return SceneTileStatus.UNKNOWN;
+            LocalPoint local = LocalPoint.fromWorld(view, target);
+            if (local == null) return SceneTileStatus.OUTSIDE_SCENE;
+            Tile[][][] tiles = view.getScene().getTiles();
+            int plane = target.getPlane(), x = local.getSceneX(), y = local.getSceneY();
+            if (tiles == null || plane < 0 || plane >= tiles.length || tiles[plane] == null
+                    || x < 0 || x >= tiles[plane].length || tiles[plane][x] == null
+                    || y < 0 || y >= tiles[plane][x].length) return SceneTileStatus.UNKNOWN;
+            return tiles[plane][x][y] == null ? SceneTileStatus.TILE_MISSING : SceneTileStatus.LOADED;
+        } catch (RuntimeException ex) {
+            return SceneTileStatus.UNKNOWN;
+        }
+    }
+
+    private static WorldPoint retryClickAfterSceneLoad(List<WorldPoint> rawPath,
+                                                        WorldPoint clickTarget, WorldPoint playerLoc,
+                                                        int maxEuclidean, boolean allowDirectionalFallback,
+                                                        int rawAnchorIndex, WorldPoint goal) {
+        SceneTileStatus initial = sceneTileStatus(clickTarget);
+        if (initial != SceneTileStatus.OUTSIDE_SCENE && initial != SceneTileStatus.TILE_MISSING) return null;
+        WebWalkLog.spInfo("scene_click_wait | tile={} status={} at={} goal={}",
+                compactWorldPoint(clickTarget), initial, compactWorldPoint(playerLoc), compactWorldPoint(goal));
+        long deadline = System.currentTimeMillis() + 1_500L;
+        while (System.currentTimeMillis() < deadline && !isWalkCancelled(goal)) {
+            sleep(200);
+            if (sceneTileStatus(clickTarget) != SceneTileStatus.LOADED) continue;
+            // If the player continued moving while the scene streamed in, reselect from the
+            // new position on the next walker pass instead of clicking from stale geometry.
+            if (!playerLoc.equals(Rs2Player.getWorldLocation())) return null;
+            WorldPoint retried = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
+                    maxEuclidean, allowDirectionalFallback, rawAnchorIndex);
+            WebWalkLog.spInfo("scene_click_retry | tile={} clicked={} at={} goal={}",
+                    compactWorldPoint(clickTarget), retried != null,
+                    compactWorldPoint(Rs2Player.getWorldLocation()), compactWorldPoint(goal));
+            return retried;
+        }
+        WebWalkLog.spInfo("scene_click_deferred | tile={} status={} at={} goal={}",
+                compactWorldPoint(clickTarget), sceneTileStatus(clickTarget),
+                compactWorldPoint(Rs2Player.getWorldLocation()), compactWorldPoint(goal));
+        return null;
     }
 
     private static boolean isWalkCancelled(WorldPoint target) {
@@ -4163,6 +4219,10 @@ public class Rs2Walker {
             clickTarget = RouteRecovery.clampToEuclideanRadius(playerLoc, clickTarget, maxEuclidean - 1);
             clickedTarget = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
                     maxEuclidean - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex);
+            if (clickedTarget == null) {
+                clickedTarget = retryClickAfterSceneLoad(rawPath, clickTarget, playerLoc,
+                        maxEuclidean - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex, target);
+            }
             clicked = clickedTarget != null;
         }
         // EVERY movement click logs at info. The interim-continuation label used to log at debug only,
@@ -11256,7 +11316,9 @@ public class Rs2Walker {
      * the guilty gate: stall threshold vs elapsed, the stall-accounting skip flag, interim target,
      * and the raw-scan door focus.
      */
-    private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc) {
+    private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc,
+                                            WorldPoint nextRouteTile, boolean idleNudgeDue,
+                                            boolean immediateTransportPending) {
         long now = System.currentTimeMillis();
         if (routeState.lastMovedTimeMs <= 0
                 || now - routeState.lastMovedTimeMs < 4_000
@@ -11264,7 +11326,7 @@ public class Rs2Walker {
             return;
         }
         lastWalkIdleLogAtMs = now;
-        WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={}",
+        WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={} moving={} animating={} interacting={} combat={} idleNudgeDue={} transportPending={} doorHoldoffMs={} next={} scene={}",
                 iteration,
                 now - routeState.lastMovedTimeMs,
                 stallThresholdMs(),
@@ -11273,7 +11335,11 @@ public class Rs2Walker {
                 routeState.interimTargetWp == null ? "none" : compactWorldPoint(routeState.interimTargetWp),
                 routeState.rawScanFocusedDoorIdx,
                 compactWorldPoint(playerLoc),
-                compactWorldPoint(target));
+                compactWorldPoint(target),
+                Rs2Player.isMoving(), Rs2Player.isAnimating(), Rs2Player.isInteracting(), Rs2Player.isInCombat(),
+                idleNudgeDue, immediateTransportPending,
+                Math.max(0L, DOOR_SUPPRESS_NUDGE_HOLDOFF_MS - (now - routeState.doorRecoverySuppressedAtMs)),
+                compactWorldPoint(nextRouteTile), sceneTileStatus(nextRouteTile));
     }
 
     private static long stallThresholdMs() {
