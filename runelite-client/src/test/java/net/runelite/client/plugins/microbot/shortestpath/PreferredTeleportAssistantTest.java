@@ -56,6 +56,20 @@ public class PreferredTeleportAssistantTest
 	}
 
 	@Test
+	public void gnomeGliderIsExposedAsThePreferredRouteChoice()
+	{
+		WorldPoint origin = new WorldPoint(3284, 3213, 0);
+		WorldPoint destination = new WorldPoint(2550, 2970, 0);
+		Transport glider = new Transport(origin, destination, "Kar-Hewo",
+			TransportType.GNOME_GLIDER, true, 10);
+
+		Transport result = PreferredTeleportAssistant.findPreferredTransport(
+			List.of(origin, destination), origin, Map.of(origin, Set.of(glider)), Set.of());
+
+		Assert.assertSame(glider, result);
+	}
+
+	@Test
 	public void farAwayInstanceTemplateDoesNotSkipTheInitialPohTeleport()
 	{
 		WorldPoint routingAnchor = new WorldPoint(2954, 3224, 0);
@@ -154,6 +168,7 @@ public class PreferredTeleportAssistantTest
 		};
 
 		Assert.assertFalse(config.autoSelectPreferredTeleport());
+		Assert.assertFalse(config.autoEnableRun());
 		Assert.assertTrue(config.highlightPreferredTeleport());
 	}
 

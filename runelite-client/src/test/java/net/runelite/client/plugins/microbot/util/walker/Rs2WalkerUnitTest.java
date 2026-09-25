@@ -172,6 +172,29 @@ public class Rs2WalkerUnitTest {
     }
 
     @Test
+    public void recentTransportContext_survivesImmediateQuestHelperWalkRestart() {
+        WorldPoint origin = new WorldPoint(2476, 3463, 1);
+        WorldPoint destination = new WorldPoint(2476, 3463, 0);
+
+        assertTrue(Rs2Walker.shouldPreserveRecentTransportContext(
+                10_000L, 3_000L, origin, destination));
+        assertFalse(Rs2Walker.shouldPreserveRecentTransportContext(
+                12_001L, 3_000L, origin, destination));
+    }
+
+    @Test
+    public void recentReverseTransportDestination_usesLandingTolerance() {
+        WorldPoint recentOrigin = new WorldPoint(2476, 3463, 1);
+
+        assertTrue(Rs2Walker.isRecentReverseTransportDestination(
+                new WorldPoint(2476, 3462, 1), recentOrigin));
+        assertFalse(Rs2Walker.isRecentReverseTransportDestination(
+                new WorldPoint(2476, 3462, 0), recentOrigin));
+        assertFalse(Rs2Walker.isRecentReverseTransportDestination(
+                new WorldPoint(2478, 3463, 1), recentOrigin));
+    }
+
+    @Test
     public void plannedTransportApproach_clicksUntilDispatchRange() {
         WorldPoint player = new WorldPoint(2760, 3229, 0);
         WorldPoint charterOrigin = new WorldPoint(2760, 3238, 0);
@@ -1991,5 +2014,12 @@ public class Rs2WalkerUnitTest {
     @Test(expected = NullPointerException.class)
     public void walkUntil_rejectsNullCondition() {
         Rs2Walker.walkUntil(new WorldPoint(3200, 3200, 0), 2, null);
+    }
+
+    @Test
+    public void runToggleGate_blocksAutomaticEnableButAllowsExplicitDisable() {
+        assertFalse(Rs2Walker.shouldApplyRunToggle(true, false));
+        assertTrue(Rs2Walker.shouldApplyRunToggle(true, true));
+        assertTrue(Rs2Walker.shouldApplyRunToggle(false, false));
     }
 }

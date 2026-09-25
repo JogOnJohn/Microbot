@@ -347,12 +347,19 @@ public class Rs2Walker {
     }
 
     private static void markWalkSessionStart(WorldPoint target) {
-        routeState.walkSessionStartedAtMs = System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        routeState.walkSessionStartedAtMs = now;
         routeState.firstMovementClickMarked = false;
         startupPhasesLogged.clear();
-        routeState.lastTransportHandledAtLocation = null;
-        routeState.lastTransportOriginLocation = null;
-        routeState.lastTransportDestinationLocation = null;
+        // QuestHelper starts a fresh walk as soon as an object step changes plane. Keep the
+        // completed edge long enough for the next walk to reject its inverse; clearing it here
+        // allowed a fresh raw scan to take the same ladder straight back.
+        if (!shouldPreserveRecentTransportContext(now,
+                routeState.lastTransportHandledAtMs,
+                routeState.lastTransportOriginLocation,
+                routeState.lastTransportDestinationLocation)) {
+            clearRecentTransportContext();
+        }
         // The interim target belongs to the PREVIOUS route's click; letting it survive into a fresh walk
         // makes the new walk yield to (and report progress against) a stale objective — repeatedly seen as
         // interim=<old goal> camping at Clock Tower when the script restarts walks every ~40s.
@@ -3626,7 +3633,7 @@ public class Rs2Walker {
 
     private static void manageRunEnergy(int pathRemaining) {
         try {
-            if (!Rs2Player.isRunEnabled() && Rs2Player.getRunEnergy() > 10) {
+            if (isAutoRunEnabled() && !Rs2Player.isRunEnabled() && Rs2Player.getRunEnergy() > 10) {
                 Rs2Player.toggleRunEnergy(true);
             }
             if (pathRemaining < STAMINA_MIN_PATH_TILES) return;
@@ -3642,6 +3649,20 @@ public class Rs2Walker {
         } catch (Exception ex) {
             // Never let stamina management break the walk — log and move on.
             log.debug("[Walker] manageRunEnergy failed: {}", ex.getMessage());
+        }
+    }
+
+    public static boolean isAutoRunEnabled() {
+        return config != null && config.autoEnableRun();
+    }
+
+    static boolean shouldApplyRunToggle(boolean enableRun, boolean autoRunEnabled) {
+        return !enableRun || autoRunEnabled;
+    }
+
+    private static void applyRunToggleIfAllowed(boolean enableRun) {
+        if (shouldApplyRunToggle(enableRun, isAutoRunEnabled())) {
+            Rs2Player.toggleRunEnergy(enableRun);
         }
     }
 
@@ -4250,7 +4271,7 @@ public class Rs2Walker {
             return false;
         }
 
-        Rs2Player.toggleRunEnergy(toggleRun);
+        applyRunToggleIfAllowed(toggleRun);
         NewMenuEntry entry = new NewMenuEntry()
                 .param0(canvasX)
                 .param1(canvasY)
@@ -4280,7 +4301,7 @@ public class Rs2Walker {
             log.debug("[Walker] walkFastCanvas rejected: null worldPoint");
             return false;
         }
-        Rs2Player.toggleRunEnergy(toggleRun);
+        applyRunToggleIfAllowed(toggleRun);
         Point canv;
         LocalPoint localPoint = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), worldPoint);
 
@@ -5998,7 +6019,7 @@ public class Rs2Walker {
                 // logic; current-tile transport probing can bounce on these and create loops.
                 .filter(t -> !isAdjacentSamePlaneTransport(t))
                 .filter(t -> priorOrigin == null
-                        || !t.getDestination().equals(priorOrigin))
+                        || !isRecentReverseTransportDestination(t.getDestination(), priorOrigin))
                 .filter(t -> target == null
                         || playerLoc.getPlane() != target.getPlane()
                         || t.getDestination().getPlane() == target.getPlane())
@@ -8814,12 +8835,24 @@ public class Rs2Walker {
     }
 
     private static boolean isRecentTransportEdgeWindow() {
-        long handledAt = routeState.lastTransportHandledAtMs;
-        if (handledAt <= 0L) {
+        return shouldPreserveRecentTransportContext(System.currentTimeMillis(),
+                routeState.lastTransportHandledAtMs,
+                routeState.lastTransportOriginLocation,
+                routeState.lastTransportDestinationLocation);
+    }
+
+    static boolean shouldPreserveRecentTransportContext(long nowMs, long handledAtMs,
+                                                         WorldPoint origin, WorldPoint destination) {
+        if (handledAtMs <= 0L || origin == null || destination == null) {
             return false;
         }
-        long ageMs = System.currentTimeMillis() - handledAt;
+        long ageMs = nowMs - handledAtMs;
         return ageMs >= 0L && ageMs <= RECENT_TRANSPORT_EDGE_SUPPRESS_MS;
+    }
+
+    static boolean isRecentReverseTransportDestination(WorldPoint candidateDestination,
+                                                        WorldPoint recentOrigin) {
+        return isNearSamePlane(candidateDestination, recentOrigin, TRANSPORT_DEST_MATCH_CHEBYSHEV);
     }
 
     private static boolean isNearSamePlane(WorldPoint a, WorldPoint b, int distance) {
@@ -9314,12 +9347,20 @@ public class Rs2Walker {
 
                     if (transport.getType() == TransportType.GNOME_GLIDER) {
                         if (attemptObserved(transport, () -> handleGlider(transport))) {
-                            sleepUntil(() -> !Rs2Player.isAnimating());
-                            sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(),
+                            boolean gliderLanded = Rs2WalkerRuntimeAwaits.awaitCondition(
+                                    () -> isPlayerWithinChebyshevOf(transport.getDestination(),
                                             TRANSPORT_NEAR_LANDING_CHEBYSHEV),
                                     TRANSPORT_LANDING_WAIT_POLL_MS, TRANSPORT_LANDING_WAIT_TIMEOUT_MS);
-                            sleepTickJitter(3);
-                            return finishHandledTransport(transport);
+                            if (!gliderLanded) {
+                                WebWalkLog.spWarn(
+                                        "glider post-travel wait timed out ({}ms) dest={} at={}",
+                                        TRANSPORT_LANDING_WAIT_TIMEOUT_MS,
+                                        compactWorldPoint(transport.getDestination()),
+                                        compactWorldPoint(Rs2Player.getWorldLocation()));
+                            }
+                            if (gliderLanded) {
+                                return finishHandledTransport(transport);
+                            }
                         }
                     }
 
