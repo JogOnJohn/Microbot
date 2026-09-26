@@ -337,6 +337,7 @@ final class PreferredTeleportAssistant
 				continue;
 			}
 			if (transport.getType() == TransportType.POH
+				|| transport.getType() == TransportType.GNOME_GLIDER
 				|| TransportType.isTeleport(transport.getType(), transport.getOrigin()))
 			{
 				return transport;

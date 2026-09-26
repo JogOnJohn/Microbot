@@ -145,6 +145,8 @@ public class Rs2Walker {
 	 * checkpoint immediately and cause click thrash.
 	 */
 	private static final int ROUTE_CLICK_REACH_MIN_TILES = 7;
+	/** Keep long-route click jitter near the available minimap edge. */
+	private static final int ROUTE_CLICK_REACH_JITTER_TILES = 4;
 	private static final int INTERIM_PRECLICK_TILES = 6;
 	private static final int INTERIM_RUN_PRECLICK_TILES = 8;
 	private static final int INTERIM_MOVING_POLL_MS = 450;
@@ -206,7 +208,13 @@ public class Rs2Walker {
      * false-negative recovery while rejecting distant route folds.
      */
     private static final int LOCAL_RECOVERY_RAW_ROUTE_LOOKAHEAD_STEPS = 48;
-    private static final int NORMAL_MINIMAP_REACH_EUCLIDEAN = 11;
+    /**
+     * The walker pins minimap zoom to 2.0, where the usable radius is roughly 32 tiles.
+     * Keep ordinary route clicks comfortably inside that edge; local recovery, doors and
+     * transports retain their smaller purpose-specific limits.
+     */
+    private static final int NORMAL_MINIMAP_REACH_EUCLIDEAN = 24;
+    static final double WALKER_MINIMAP_ZOOM = 2.0;
     // UNREACHABLE_RECOVERY_FORWARD_SCAN_TILES moved into recovery/RouteRecovery (P1)
     /**
      * Stationary window before an active route issues a recovery nudge.
@@ -336,12 +344,20 @@ public class Rs2Walker {
     }
 
     private static void markWalkSessionStart(WorldPoint target) {
-        routeState.walkSessionStartedAtMs = System.currentTimeMillis();
+        ensureWalkerMinimapZoom();
+        long now = System.currentTimeMillis();
+        routeState.walkSessionStartedAtMs = now;
         routeState.firstMovementClickMarked = false;
         startupPhasesLogged.clear();
-        routeState.lastTransportHandledAtLocation = null;
-        routeState.lastTransportOriginLocation = null;
-        routeState.lastTransportDestinationLocation = null;
+        // QuestHelper starts a fresh walk as soon as an object step changes plane. Keep the
+        // completed edge long enough for the next walk to reject its inverse; clearing it here
+        // allowed a fresh raw scan to take the same ladder straight back.
+        if (!shouldPreserveRecentTransportContext(now,
+                routeState.lastTransportHandledAtMs,
+                routeState.lastTransportOriginLocation,
+                routeState.lastTransportDestinationLocation)) {
+            clearRecentTransportContext();
+        }
         // The interim target belongs to the PREVIOUS route's click; letting it survive into a fresh walk
         // makes the new walk yield to (and report progress against) a stale objective — repeatedly seen as
         // interim=<old goal> camping at Clock Tower when the script restarts walks every ~40s.
@@ -1945,7 +1961,9 @@ public class Rs2Walker {
             primeExpectedTransportDestinations(path, indexOfStartPoint);
 
             routeState.lastPosition = playerLocForIndex;
-            logWalkIdleIfStalled(processWalkTail, target, routeState.lastPosition);
+            WorldPoint nextRouteTile = path.get(Math.min(indexOfStartPoint + 1, path.size() - 1));
+            logWalkIdleIfStalled(processWalkTail, target, routeState.lastPosition,
+                    nextRouteTile, shouldIssueActiveRouteIdleNudge, immediateRouteTransportPending);
             boolean clearedInterimTarget = clearInterimTargetIfReachedOrExpired(routeState.lastPosition, path, System.currentTimeMillis());
             WorldPoint plImmediate = routeState.lastPosition;
 
@@ -2794,9 +2812,9 @@ public class Rs2Walker {
                     tmarkPostTransport("post_transport_click_eligibility", target,
                             "i=" + i + " dist2d=" + dist2d + " threshold=" + nextWalkingDistance
                                     + (approachPlannedTransportOrigin ? " reason=transport_approach" : ""));
-                    // Minimap clickable area is a circle, so reach is a Euclidean radius —
-                    // cardinal tiles reach ~13, diagonals ~9. Empirically 14 was too
-                    // optimistic (clicks at 13.5–13.9 Euclidean missed the clip).
+                    // Minimap clickable area is a circle, so route reach is a Euclidean radius.
+                    // At the walker-pinned 2.0 zoom, 24 tiles leaves margin inside the roughly
+                    // 32-tile clip while still reducing short, stop-start route legs.
                     final int MINIMAP_REACH_EUCLIDEAN = NORMAL_MINIMAP_REACH_EUCLIDEAN;
                     WorldPoint playerLoc = playerLocNow;
 
@@ -2987,6 +3005,11 @@ public class Rs2Walker {
                                     + " sel=" + routeState.lastRouteClickTier + " fb=" + fallbackTag);
                     WorldPoint clickedTarget = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
                             MINIMAP_REACH_EUCLIDEAN - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex);
+                    if (clickedTarget == null) {
+                        clickedTarget = retryClickAfterSceneLoad(rawPath, clickTarget, playerLoc,
+                                MINIMAP_REACH_EUCLIDEAN - 1, rawPath == null || rawPath.isEmpty(),
+                                rawAnchorIndex, target);
+                    }
                     boolean clicked = clickedTarget != null;
                     if (walkCancelledDiag(target, "processWalk:after-minimap-click", processWalkTail)) {
                         return WalkerState.EXIT;
@@ -3481,6 +3504,55 @@ public class Rs2Walker {
         return localTarget == null || Rs2Tile.isWalkable(localTarget);
     }
 
+    private enum SceneTileStatus { LOADED, OUTSIDE_SCENE, TILE_MISSING, UNKNOWN }
+
+    private static SceneTileStatus sceneTileStatus(WorldPoint target) {
+        if (target == null) return SceneTileStatus.UNKNOWN;
+        try {
+            WorldView view = Microbot.getClient().getTopLevelWorldView();
+            if (view == null || view.getScene() == null || view.isInstance()
+                    || target.getPlane() != view.getPlane()) return SceneTileStatus.UNKNOWN;
+            LocalPoint local = LocalPoint.fromWorld(view, target);
+            if (local == null) return SceneTileStatus.OUTSIDE_SCENE;
+            Tile[][][] tiles = view.getScene().getTiles();
+            int plane = target.getPlane(), x = local.getSceneX(), y = local.getSceneY();
+            if (tiles == null || plane < 0 || plane >= tiles.length || tiles[plane] == null
+                    || x < 0 || x >= tiles[plane].length || tiles[plane][x] == null
+                    || y < 0 || y >= tiles[plane][x].length) return SceneTileStatus.UNKNOWN;
+            return tiles[plane][x][y] == null ? SceneTileStatus.TILE_MISSING : SceneTileStatus.LOADED;
+        } catch (RuntimeException ex) {
+            return SceneTileStatus.UNKNOWN;
+        }
+    }
+
+    private static WorldPoint retryClickAfterSceneLoad(List<WorldPoint> rawPath,
+                                                        WorldPoint clickTarget, WorldPoint playerLoc,
+                                                        int maxEuclidean, boolean allowDirectionalFallback,
+                                                        int rawAnchorIndex, WorldPoint goal) {
+        SceneTileStatus initial = sceneTileStatus(clickTarget);
+        if (initial != SceneTileStatus.OUTSIDE_SCENE && initial != SceneTileStatus.TILE_MISSING) return null;
+        WebWalkLog.spInfo("scene_click_wait | tile={} status={} at={} goal={}",
+                compactWorldPoint(clickTarget), initial, compactWorldPoint(playerLoc), compactWorldPoint(goal));
+        long deadline = System.currentTimeMillis() + 1_500L;
+        while (System.currentTimeMillis() < deadline && !isWalkCancelled(goal)) {
+            sleep(200);
+            if (sceneTileStatus(clickTarget) != SceneTileStatus.LOADED) continue;
+            // If the player continued moving while the scene streamed in, reselect from the
+            // new position on the next walker pass instead of clicking from stale geometry.
+            if (!playerLoc.equals(Rs2Player.getWorldLocation())) return null;
+            WorldPoint retried = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
+                    maxEuclidean, allowDirectionalFallback, rawAnchorIndex);
+            WebWalkLog.spInfo("scene_click_retry | tile={} clicked={} at={} goal={}",
+                    compactWorldPoint(clickTarget), retried != null,
+                    compactWorldPoint(Rs2Player.getWorldLocation()), compactWorldPoint(goal));
+            return retried;
+        }
+        WebWalkLog.spInfo("scene_click_deferred | tile={} status={} at={} goal={}",
+                compactWorldPoint(clickTarget), sceneTileStatus(clickTarget),
+                compactWorldPoint(Rs2Player.getWorldLocation()), compactWorldPoint(goal));
+        return null;
+    }
+
     private static boolean isWalkCancelled(WorldPoint target) {
         // The single choke point for stopping a walk: processWalk already consults it at every
         // checkpoint and inside the movement-wait predicates.
@@ -3615,7 +3687,7 @@ public class Rs2Walker {
 
     private static void manageRunEnergy(int pathRemaining) {
         try {
-            if (!Rs2Player.isRunEnabled() && Rs2Player.getRunEnergy() > 10) {
+            if (isAutoRunEnabled() && !Rs2Player.isRunEnabled() && Rs2Player.getRunEnergy() > 10) {
                 Rs2Player.toggleRunEnergy(true);
             }
             if (pathRemaining < STAMINA_MIN_PATH_TILES) return;
@@ -3634,9 +3706,26 @@ public class Rs2Walker {
         }
     }
 
+    public static boolean isAutoRunEnabled() {
+        return config != null && config.autoEnableRun();
+    }
+
+    static boolean shouldApplyRunToggle(boolean enableRun, boolean autoRunEnabled) {
+        return !enableRun || autoRunEnabled;
+    }
+
+    private static void applyRunToggleIfAllowed(boolean enableRun) {
+        if (shouldApplyRunToggle(enableRun, isAutoRunEnabled())) {
+            Rs2Player.toggleRunEnergy(enableRun);
+        }
+    }
+
+    /**
+     * @param zoomDistance retained for source compatibility; walker clicks always use the
+     *                     maximally zoomed-out minimap.
+     */
     public static boolean walkMiniMap(WorldPoint worldPoint, double zoomDistance) {
-        if (Microbot.getClient().getMinimapZoom() != zoomDistance)
-            Microbot.getClient().setMinimapZoom(zoomDistance);
+        ensureWalkerMinimapZoom();
 
         Point point = Rs2MiniMap.worldToMinimap(worldPoint);
 
@@ -3649,18 +3738,31 @@ public class Rs2Walker {
 
 
     public static boolean walkMiniMap(WorldPoint worldPoint) {
-        return walkMiniMap(worldPoint, 5);
+        return walkMiniMap(worldPoint, WALKER_MINIMAP_ZOOM);
     }
 
-    private static boolean isMiniMapClickable(WorldPoint worldPoint, double zoomDistance) {
+    private static boolean isMiniMapClickable(WorldPoint worldPoint) {
         if (worldPoint == null) {
             return false;
         }
-        if (Microbot.getClient().getMinimapZoom() != zoomDistance) {
-            Microbot.getClient().setMinimapZoom(zoomDistance);
-        }
+        ensureWalkerMinimapZoom();
         Point point = Rs2MiniMap.worldToMinimap(worldPoint);
         return point != null && (disableWalkerUpdate || Rs2MiniMap.isPointInsideMinimap(point));
+    }
+
+    static double walkerMinimapZoom(double currentZoom) {
+        return Math.min(currentZoom, WALKER_MINIMAP_ZOOM);
+    }
+
+    private static void ensureWalkerMinimapZoom() {
+        if (Microbot.getClient() == null) {
+            return;
+        }
+        double currentZoom = Microbot.getClient().getMinimapZoom();
+        double targetZoom = walkerMinimapZoom(currentZoom);
+        if (Double.compare(currentZoom, targetZoom) != 0) {
+            Microbot.getClient().setMinimapZoom(targetZoom);
+        }
     }
 
     private static boolean walkRawPathMiniMapToward(List<WorldPoint> rawPath,
@@ -3891,8 +3993,8 @@ public class Rs2Walker {
     }
 
     /**
-     * Per-click route reach, jittered below {@code maxEuclidean} so consecutive clicks do not all
-     * cover the same tile span.
+     * Per-click route reach, jittered just below {@code maxEuclidean} so consecutive clicks do not
+     * all cover the same tile span without throwing away the longer reach of the zoomed-out minimap.
      * <p>
      * The floor matters: it must stay clear of {@link #INTERIM_CLOSE_TILES} or the interim
      * checkpoint clears almost immediately and the walker re-clicks constantly, producing visible
@@ -3900,7 +4002,8 @@ public class Rs2Walker {
      * clip — going above it just produces outside-clip fallbacks.
      */
     static int routeClickReach(int maxEuclidean) {
-        int floor = Math.min(ROUTE_CLICK_REACH_MIN_TILES, maxEuclidean);
+        int floor = Math.min(Math.max(ROUTE_CLICK_REACH_MIN_TILES,
+                maxEuclidean - ROUTE_CLICK_REACH_JITTER_TILES), maxEuclidean);
         if (maxEuclidean <= floor) {
             return maxEuclidean;
         }
@@ -3993,7 +4096,7 @@ public class Rs2Walker {
         return findFurthestRawPathPointMatchingGated(rawPath, playerLoc, maxEuclidean, rawAnchorIndex,
                 candidate -> !candidate.equals(playerLoc)
                         && isKnownWalkableOrUnloaded(candidate)
-                        && isMiniMapClickable(candidate, 5));
+                        && isMiniMapClickable(candidate));
     }
 
     // rawPathStepDistance (pure) moved to geometry/WalkerPathGeometry (P1) alongside its only caller,
@@ -4131,6 +4234,10 @@ public class Rs2Walker {
             clickTarget = RouteRecovery.clampToEuclideanRadius(playerLoc, clickTarget, maxEuclidean - 1);
             clickedTarget = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
                     maxEuclidean - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex);
+            if (clickedTarget == null) {
+                clickedTarget = retryClickAfterSceneLoad(rawPath, clickTarget, playerLoc,
+                        maxEuclidean - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex, target);
+            }
             clicked = clickedTarget != null;
         }
         // EVERY movement click logs at info. The interim-continuation label used to log at debug only,
@@ -4239,7 +4346,7 @@ public class Rs2Walker {
             return false;
         }
 
-        Rs2Player.toggleRunEnergy(toggleRun);
+        applyRunToggleIfAllowed(toggleRun);
         NewMenuEntry entry = new NewMenuEntry()
                 .param0(canvasX)
                 .param1(canvasY)
@@ -4269,7 +4376,7 @@ public class Rs2Walker {
             log.debug("[Walker] walkFastCanvas rejected: null worldPoint");
             return false;
         }
-        Rs2Player.toggleRunEnergy(toggleRun);
+        applyRunToggleIfAllowed(toggleRun);
         Point canv;
         LocalPoint localPoint = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), worldPoint);
 
@@ -5987,7 +6094,7 @@ public class Rs2Walker {
                 // logic; current-tile transport probing can bounce on these and create loops.
                 .filter(t -> !isAdjacentSamePlaneTransport(t))
                 .filter(t -> priorOrigin == null
-                        || !t.getDestination().equals(priorOrigin))
+                        || !isRecentReverseTransportDestination(t.getDestination(), priorOrigin))
                 .filter(t -> target == null
                         || playerLoc.getPlane() != target.getPlane()
                         || t.getDestination().getPlane() == target.getPlane())
@@ -6133,7 +6240,7 @@ public class Rs2Walker {
     // findForwardRecoveryIndex extracted to recovery/RouteRecovery (P1 walker decomposition)
 
     private static boolean isMiniMapRecoveryClickable(WorldPoint worldPoint) {
-        return isMiniMapClickable(worldPoint, 5);
+        return isMiniMapClickable(worldPoint);
     }
 
     // interpolateClickableTarget extracted to recovery/RouteRecovery (P1)
@@ -8803,12 +8910,24 @@ public class Rs2Walker {
     }
 
     private static boolean isRecentTransportEdgeWindow() {
-        long handledAt = routeState.lastTransportHandledAtMs;
-        if (handledAt <= 0L) {
+        return shouldPreserveRecentTransportContext(System.currentTimeMillis(),
+                routeState.lastTransportHandledAtMs,
+                routeState.lastTransportOriginLocation,
+                routeState.lastTransportDestinationLocation);
+    }
+
+    static boolean shouldPreserveRecentTransportContext(long nowMs, long handledAtMs,
+                                                         WorldPoint origin, WorldPoint destination) {
+        if (handledAtMs <= 0L || origin == null || destination == null) {
             return false;
         }
-        long ageMs = System.currentTimeMillis() - handledAt;
+        long ageMs = nowMs - handledAtMs;
         return ageMs >= 0L && ageMs <= RECENT_TRANSPORT_EDGE_SUPPRESS_MS;
+    }
+
+    static boolean isRecentReverseTransportDestination(WorldPoint candidateDestination,
+                                                        WorldPoint recentOrigin) {
+        return isNearSamePlane(candidateDestination, recentOrigin, TRANSPORT_DEST_MATCH_CHEBYSHEV);
     }
 
     private static boolean isNearSamePlane(WorldPoint a, WorldPoint b, int distance) {
@@ -9302,12 +9421,20 @@ public class Rs2Walker {
 
                     if (transport.getType() == TransportType.GNOME_GLIDER) {
                         if (attemptObserved(transport, () -> handleGlider(transport))) {
-                            sleepUntil(() -> !Rs2Player.isAnimating());
-                            sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(),
+                            boolean gliderLanded = Rs2WalkerRuntimeAwaits.awaitCondition(
+                                    () -> isPlayerWithinChebyshevOf(transport.getDestination(),
                                             TRANSPORT_NEAR_LANDING_CHEBYSHEV),
                                     TRANSPORT_LANDING_WAIT_POLL_MS, TRANSPORT_LANDING_WAIT_TIMEOUT_MS);
-                            sleepTickJitter(3);
-                            return finishHandledTransport(transport);
+                            if (!gliderLanded) {
+                                WebWalkLog.spWarn(
+                                        "glider post-travel wait timed out ({}ms) dest={} at={}",
+                                        TRANSPORT_LANDING_WAIT_TIMEOUT_MS,
+                                        compactWorldPoint(transport.getDestination()),
+                                        compactWorldPoint(Rs2Player.getWorldLocation()));
+                            }
+                            if (gliderLanded) {
+                                return finishHandledTransport(transport);
+                            }
                         }
                     }
 
@@ -11167,7 +11294,9 @@ public class Rs2Walker {
      * the guilty gate: stall threshold vs elapsed, the stall-accounting skip flag, interim target,
      * and the raw-scan door focus.
      */
-    private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc) {
+    private static void logWalkIdleIfStalled(int iteration, WorldPoint target, WorldPoint playerLoc,
+                                            WorldPoint nextRouteTile, boolean idleNudgeDue,
+                                            boolean immediateTransportPending) {
         long now = System.currentTimeMillis();
         if (routeState.lastMovedTimeMs <= 0
                 || now - routeState.lastMovedTimeMs < 4_000
@@ -11175,7 +11304,7 @@ public class Rs2Walker {
             return;
         }
         lastWalkIdleLogAtMs = now;
-        WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={}",
+        WebWalkLog.spInfo("walk_idle iter={} sinceMovedMs={} stallThresholdMs={} stuck={} skipStallAccounting={} interim={} focusIdx={} at={} goal={} moving={} animating={} interacting={} combat={} idleNudgeDue={} transportPending={} doorHoldoffMs={} next={} scene={}",
                 iteration,
                 now - routeState.lastMovedTimeMs,
                 stallThresholdMs(),
@@ -11184,7 +11313,11 @@ public class Rs2Walker {
                 routeState.interimTargetWp == null ? "none" : compactWorldPoint(routeState.interimTargetWp),
                 routeState.rawScanFocusedDoorIdx,
                 compactWorldPoint(playerLoc),
-                compactWorldPoint(target));
+                compactWorldPoint(target),
+                Rs2Player.isMoving(), Rs2Player.isAnimating(), Rs2Player.isInteracting(), Rs2Player.isInCombat(),
+                idleNudgeDue, immediateTransportPending,
+                Math.max(0L, DOOR_SUPPRESS_NUDGE_HOLDOFF_MS - (now - routeState.doorRecoverySuppressedAtMs)),
+                compactWorldPoint(nextRouteTile), sceneTileStatus(nextRouteTile));
     }
 
     private static long stallThresholdMs() {

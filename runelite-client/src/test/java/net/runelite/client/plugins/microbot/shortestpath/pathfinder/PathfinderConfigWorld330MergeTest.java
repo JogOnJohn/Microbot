@@ -18,6 +18,27 @@ import static org.junit.Assert.assertTrue;
 public class PathfinderConfigWorld330MergeTest {
 
     @Test
+    public void targetlessRefreshPreservesPendingConcreteTarget() {
+        WorldPoint pending = new WorldPoint(2476, 3463, 0);
+
+        assertEquals(pending, PathfinderConfig.selectRefreshTarget(null, null, pending));
+        assertEquals(new WorldPoint(2389, 3513, 0), PathfinderConfig.selectRefreshTarget(
+                null, new WorldPoint(2389, 3513, 0), pending));
+    }
+
+    @Test
+    public void localStrongholdTripSkipsHostedHouseRoute() {
+        WorldPoint player = new WorldPoint(2389, 3514, 0);
+        WorldPoint target = new WorldPoint(2476, 3463, 0);
+
+        assertTrue(PathfinderConfig.shouldSkipWorld330ForLocalTrip(player, target, 150));
+        assertFalse(PathfinderConfig.shouldSkipWorld330ForLocalTrip(
+                player, new WorldPoint(2476, 3463, 1), 150));
+        assertFalse(PathfinderConfig.shouldSkipWorld330ForLocalTrip(
+                player, new WorldPoint(2600, 3514, 0), 150));
+    }
+
+    @Test
     public void outsideHostedHouseKeepsSpellItemAndWorld330Teleports() {
         Transport spell = teleport(new WorldPoint(2965, 3379, 0), TransportType.TELEPORTATION_SPELL);
         Transport item = teleport(new WorldPoint(3087, 3496, 0), TransportType.TELEPORTATION_ITEM);

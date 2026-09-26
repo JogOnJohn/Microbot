@@ -193,6 +193,29 @@ public class Rs2WalkerUnitTest {
     }
 
     @Test
+    public void recentTransportContext_survivesImmediateQuestHelperWalkRestart() {
+        WorldPoint origin = new WorldPoint(2476, 3463, 1);
+        WorldPoint destination = new WorldPoint(2476, 3463, 0);
+
+        assertTrue(Rs2Walker.shouldPreserveRecentTransportContext(
+                10_000L, 3_000L, origin, destination));
+        assertFalse(Rs2Walker.shouldPreserveRecentTransportContext(
+                12_001L, 3_000L, origin, destination));
+    }
+
+    @Test
+    public void recentReverseTransportDestination_usesLandingTolerance() {
+        WorldPoint recentOrigin = new WorldPoint(2476, 3463, 1);
+
+        assertTrue(Rs2Walker.isRecentReverseTransportDestination(
+                new WorldPoint(2476, 3462, 1), recentOrigin));
+        assertFalse(Rs2Walker.isRecentReverseTransportDestination(
+                new WorldPoint(2476, 3462, 0), recentOrigin));
+        assertFalse(Rs2Walker.isRecentReverseTransportDestination(
+                new WorldPoint(2478, 3463, 1), recentOrigin));
+    }
+
+    @Test
     public void plannedTransportApproach_clicksUntilDispatchRange() {
         WorldPoint player = new WorldPoint(2760, 3229, 0);
         WorldPoint charterOrigin = new WorldPoint(2760, 3238, 0);
@@ -640,6 +663,26 @@ public class Rs2WalkerUnitTest {
             seen.add(reach);
         }
         assertTrue("reach must actually vary between clicks, saw only " + seen, seen.size() > 1);
+    }
+
+    @Test
+    public void routeClickReach_keepsLongClicksNearZoomedOutRange() {
+        int max = 24;
+        java.util.Set<Integer> seen = new HashSet<>();
+        for (int i = 0; i < 400; i++) {
+            int reach = Rs2Walker.routeClickReach(max);
+            assertTrue("zoomed-out route reach must remain near the minimap edge, got " + reach,
+                    reach >= 20 && reach <= max);
+            seen.add(reach);
+        }
+        assertTrue("long route reach must still vary between clicks, saw only " + seen, seen.size() > 1);
+    }
+
+    @Test
+    public void walkerMinimapZoom_zoomsOutWithoutUndoingFartherZoom() {
+        assertEquals(2.0, Rs2Walker.walkerMinimapZoom(5.0), 0.0);
+        assertEquals(2.0, Rs2Walker.walkerMinimapZoom(2.0), 0.0);
+        assertEquals(1.5, Rs2Walker.walkerMinimapZoom(1.5), 0.0);
     }
 
     /** A caller reach at or below the floor must be returned unchanged rather than inverted. */
@@ -2012,5 +2055,12 @@ public class Rs2WalkerUnitTest {
     @Test(expected = NullPointerException.class)
     public void walkUntil_rejectsNullCondition() {
         Rs2Walker.walkUntil(new WorldPoint(3200, 3200, 0), 2, null);
+    }
+
+    @Test
+    public void runToggleGate_blocksAutomaticEnableButAllowsExplicitDisable() {
+        assertFalse(Rs2Walker.shouldApplyRunToggle(true, false));
+        assertTrue(Rs2Walker.shouldApplyRunToggle(true, true));
+        assertTrue(Rs2Walker.shouldApplyRunToggle(false, false));
     }
 }

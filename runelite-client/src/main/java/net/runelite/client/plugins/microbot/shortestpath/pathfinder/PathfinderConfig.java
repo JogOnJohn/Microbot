@@ -376,7 +376,7 @@ public class PathfinderConfig {
         // transports), publish the latest target and mark dirty; whichever thread holds the lock
         // re-runs until no new request is pending. tryLock is never blocking, so the client thread
         // never waits on a script-thread refresh (which would recreate the client-thread stall).
-        pendingRefreshTarget = target;
+        pendingRefreshTarget = selectRefreshTarget(target, Rs2Walker.getCurrentTarget(), pendingRefreshTarget);
         refreshDirty.set(true);
         // Bound the coalesced re-runs. One re-run is enough to catch a request that arrived while a
         // run was in flight (e.g. the W330 reanchor). Without a cap, a flood of refresh() calls from
@@ -394,6 +394,19 @@ public class PathfinderConfig {
                 refreshLock.unlock();
             }
         }
+    }
+
+    static WorldPoint selectRefreshTarget(WorldPoint requestedTarget, WorldPoint liveWalkerTarget,
+                                          WorldPoint pendingTarget) {
+        if (requestedTarget != null) {
+            return requestedTarget;
+        }
+        if (liveWalkerTarget != null) {
+            return liveWalkerTarget;
+        }
+        // A concurrent no-arg refresh must not erase the concrete target already queued by the
+        // pathfinder. Losing it bypasses target-aware gates, including the W330 local-trip guard.
+        return pendingTarget;
     }
 
     private void doRefresh(WorldPoint target) {
@@ -1206,13 +1219,19 @@ public class PathfinderConfig {
             target = Rs2Walker.getCurrentTarget();
         }
         WorldPoint player = Rs2Player.getWorldLocation();
-        if (target != null && player != null && player.getPlane() == target.getPlane()
-                && player.distanceTo2D(target) < WORLD330_MIN_TARGET_DISTANCE) {
+        if (shouldSkipWorld330ForLocalTrip(player, target, WORLD330_MIN_TARGET_DISTANCE)) {
             log.info("[W330POH] skipped hosted house route: targetDist={} min={} player={} target={}",
                     player.distanceTo2D(target), WORLD330_MIN_TARGET_DISTANCE, player, target);
             return false;
         }
         return World330HostedHouse.ADVERTISED_HOUSE.canReachAdvertisementBoard(useBankItems);
+    }
+
+    static boolean shouldSkipWorld330ForLocalTrip(WorldPoint player, WorldPoint target, int minimumDistance) {
+        return player != null
+                && target != null
+                && player.getPlane() == target.getPlane()
+                && player.distanceTo2D(target) < minimumDistance;
     }
 
     private boolean isInWorld330HostedHouse() {

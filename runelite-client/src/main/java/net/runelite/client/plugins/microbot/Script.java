@@ -107,7 +107,8 @@ public abstract class Script extends Global implements IScript {
 
         if (Microbot.isLoggedIn()) {
             boolean hasRunEnergy = Microbot.getClientThread().runOnClientThreadOptional(() -> Microbot.getClient().getEnergy()).orElse(0) > Microbot.runEnergyThreshold;
-            if (Microbot.enableAutoRunOn && hasRunEnergy)
+            boolean walkerAutoRunAllowed = Rs2Walker.getCurrentTarget() == null || Rs2Walker.isAutoRunEnabled();
+            if (Microbot.enableAutoRunOn && walkerAutoRunAllowed && hasRunEnergy)
                 Rs2Player.toggleRunEnergy(true);
             if (!hasRunEnergy && Microbot.useStaminaPotsIfNeeded && Rs2Player.isMoving()) {
                 Rs2Inventory.useRestoreEnergyItem();

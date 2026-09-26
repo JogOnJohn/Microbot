@@ -537,6 +537,18 @@ public interface ShortestPathConfig extends Config {
         return 5;
     }
 
+    @ConfigItem(
+            keyName = "autoEnableRun",
+            name = "Automatically enable run",
+            description = "Allow the walker to turn run back on while following a route. When disabled, manual run state is respected.",
+            position = 34,
+            section = sectionSettings
+    )
+    default boolean autoEnableRun()
+    {
+        return false;
+    }
+
     @ConfigSection(
             name = "Display",
             description = "Options for displaying the path on the world map, minimap and scene tiles",
