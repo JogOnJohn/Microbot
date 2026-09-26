@@ -644,6 +644,26 @@ public class Rs2WalkerUnitTest {
         assertTrue("reach must actually vary between clicks, saw only " + seen, seen.size() > 1);
     }
 
+    @Test
+    public void routeClickReach_keepsLongClicksNearZoomedOutRange() {
+        int max = 24;
+        java.util.Set<Integer> seen = new HashSet<>();
+        for (int i = 0; i < 400; i++) {
+            int reach = Rs2Walker.routeClickReach(max);
+            assertTrue("zoomed-out route reach must remain near the minimap edge, got " + reach,
+                    reach >= 20 && reach <= max);
+            seen.add(reach);
+        }
+        assertTrue("long route reach must still vary between clicks, saw only " + seen, seen.size() > 1);
+    }
+
+    @Test
+    public void walkerMinimapZoom_zoomsOutWithoutUndoingFartherZoom() {
+        assertEquals(2.0, Rs2Walker.walkerMinimapZoom(5.0), 0.0);
+        assertEquals(2.0, Rs2Walker.walkerMinimapZoom(2.0), 0.0);
+        assertEquals(1.5, Rs2Walker.walkerMinimapZoom(1.5), 0.0);
+    }
+
     /** A caller reach at or below the floor must be returned unchanged rather than inverted. */
     @Test
     public void routeClickReach_degenerateBoundsAreSafe() {
