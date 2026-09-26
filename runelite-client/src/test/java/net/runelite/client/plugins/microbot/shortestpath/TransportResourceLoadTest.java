@@ -1,6 +1,8 @@
 package net.runelite.client.plugins.microbot.shortestpath;
 
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.Quest;
+import net.runelite.api.QuestState;
 import org.junit.Test;
 
 import java.util.Collection;
@@ -8,6 +10,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class TransportResourceLoadTest
 {
@@ -28,6 +32,23 @@ public class TransportResourceLoadTest
 			containsDisplayInfo(transportsByOrigin, "Edgeville"));
 		assertTrue("expected upstream home teleport rows to load",
 			containsDisplayInfo(transportsByOrigin, "Lumbridge Home Teleport"));
+	}
+
+	@Test
+	public void villaLucensEntrywayIsExecutableAndRetainsUpstreamQuestGate()
+	{
+		WorldPoint origin = new WorldPoint(1425, 2933, 0);
+		WorldPoint destination = new WorldPoint(1427, 2933, 0);
+		Transport entryway = Transport.loadAllFromResources().get(origin).stream()
+			.filter(transport -> destination.equals(transport.getDestination())
+				&& transport.getObjectId() == 54707)
+			.findFirst().orElse(null);
+		assertNotNull("Villa Lucens must have an executable Entryway edge", entryway);
+		assertEquals("Pass-through", entryway.getAction());
+		assertEquals("Entryway", entryway.getName());
+		assertEquals(2, entryway.getDuration());
+		assertEquals(1, entryway.getQuests().size());
+		assertEquals(QuestState.FINISHED, entryway.getQuests().get(Quest.DEATH_ON_THE_ISLE));
 	}
 
 	private static boolean containsDisplayInfo(Map<WorldPoint, Set<Transport>> transportsByOrigin, String displayInfo)
