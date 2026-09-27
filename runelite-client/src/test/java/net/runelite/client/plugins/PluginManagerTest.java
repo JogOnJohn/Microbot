@@ -154,6 +154,36 @@ public class PluginManagerTest
 		assertEquals(expected, plugins.size());
 	}
 
+	@Test
+	public void loadStagedHubJarsWithPublicModules() throws Exception
+	{
+		String directory = System.getenv("MBOT_PREP_PLUGIN_DIR");
+		org.junit.Assume.assumeNotNull(directory);
+		PluginManager manager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
+		manager.loadCorePlugins();
+		File[] jars = new File(directory).listFiles((dir, name) -> name.endsWith(".jar"));
+		assertTrue("Staged plugin artifacts required", jars != null && jars.length > 0);
+		for (File jar : jars)
+		{
+			try (net.runelite.client.plugins.microbot.externalplugins.PluginJarClassLoader loader =
+				new net.runelite.client.plugins.microbot.externalplugins.PluginJarClassLoader(jar, getClass().getClassLoader());
+				java.util.jar.JarFile archive = new java.util.jar.JarFile(jar))
+			{
+				java.util.ArrayList<Class<?>> entries = new java.util.ArrayList<>();
+				java.util.Enumeration<java.util.jar.JarEntry> files = archive.entries();
+				while (files.hasMoreElements())
+				{
+					String name = files.nextElement().getName();
+					if (!name.startsWith("net/runelite/client/plugins/microbot/") || !name.endsWith(".class") || name.contains("$")) continue;
+					Class<?> type = loader.loadClass(name.substring(0, name.length() - 6).replace('/', '.'));
+					if (type.getAnnotation(PluginDescriptor.class) != null) entries.add(type);
+				}
+				assertTrue(jar + " contains no plugins", !entries.isEmpty());
+				assertEquals(jar.toString(), entries.size(), manager.loadPlugins(entries, null).size());
+			}
+		}
+	}
+
 	//Added to ignore because it made PluginDescriptor name tags fail due to attempting to create a file with illegal characters
 	//ex - C:\Users\Brent\AppData\Local\Temp\junit1285191539980835487\junit7101190188546249539\<html>[<font color=#1E90FF>J<\font>] Auto Chinchompa.dot
 	//Will not be looking for a fix cause fuck tests - OG

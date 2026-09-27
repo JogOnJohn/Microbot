@@ -397,8 +397,8 @@ net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#process
 net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#processOffer(GrandExchangeRequest): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#restoreOffer(Map, GrandExchangeSlots): boolean  ->  net.runelite.api.Client#getItemDefinition(int): ItemComposition
 net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#restoreOffer(Map, GrandExchangeSlots): boolean  ->  net.runelite.api.ItemComposition#getName(): String
-net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#setChatboxValue(int): void  ->  net.runelite.api.widgets.Widget#setText(String): Widget
-net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#setPrice(int): void  ->  net.runelite.api.widgets.Widget#getBounds(): Rectangle
+net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#setChatboxValue(long): void  ->  net.runelite.api.widgets.Widget#setText(String): Widget
+net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#setPrice(long): void  ->  net.runelite.api.widgets.Widget#getBounds(): Rectangle
 net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#setQuantity(int): boolean  ->  net.runelite.api.widgets.Widget#getBounds(): Rectangle
 net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#viewOffer(Widget): void  ->  net.runelite.api.widgets.Widget#getBounds(): Rectangle
 net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange#viewOffer(Widget): void  ->  net.runelite.api.widgets.Widget#getId(): int
@@ -609,11 +609,11 @@ net.runelite.client.plugins.microbot.util.player.Rs2PlayerModel#getSkullIcon(): 
 net.runelite.client.plugins.microbot.util.player.Rs2PlayerModel#isClanMember(): boolean  ->  net.runelite.api.Player#isClanMember(): boolean
 net.runelite.client.plugins.microbot.util.player.Rs2PlayerModel#isFriend(): boolean  ->  net.runelite.api.Player#isFriend(): boolean
 net.runelite.client.plugins.microbot.util.player.Rs2PlayerModel#isFriendsChatMember(): boolean  ->  net.runelite.api.Player#isFriendsChatMember(): boolean
-net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): int  ->  net.runelite.api.Item#getId(): int
-net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): int  ->  net.runelite.api.Item#getQuantity(): int
-net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): int  ->  net.runelite.api.ItemComposition#getPrice(): int
-net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): int  ->  net.runelite.api.ItemComposition#isTradeable(): boolean
-net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): int  ->  net.runelite.api.ItemContainer#getItems(): Item[]
+net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): long  ->  net.runelite.api.Item#getId(): int
+net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): long  ->  net.runelite.api.Item#getQuantity(): int
+net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): long  ->  net.runelite.api.ItemComposition#getPrice(): int
+net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): long  ->  net.runelite.api.ItemComposition#isTradeable(): boolean
+net.runelite.client.plugins.microbot.util.player.Rs2Pvp#calculateRisk(Client, ItemManager): long  ->  net.runelite.api.ItemContainer#getItems(): Item[]
 net.runelite.client.plugins.microbot.util.player.Rs2Pvp#isAttackable(): boolean  ->  net.runelite.api.Client#getWorldType(): EnumSet
 net.runelite.client.plugins.microbot.util.player.Rs2Pvp#isAttackable(Rs2PlayerModel): boolean  ->  net.runelite.api.Client#getLocalPlayer(): Player
 net.runelite.client.plugins.microbot.util.player.Rs2Pvp#isAttackable(Rs2PlayerModel): boolean  ->  net.runelite.api.Client#getWorldType(): EnumSet
