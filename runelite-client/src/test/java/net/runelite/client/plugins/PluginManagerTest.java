@@ -159,10 +159,11 @@ public class PluginManagerTest
 	{
 		String directory = System.getenv("MBOT_PREP_PLUGIN_DIR");
 		org.junit.Assume.assumeNotNull(directory);
-		when(client.isClientThread()).thenReturn(true);
 		java.util.ArrayList<String> failures = new java.util.ArrayList<>();
 		PluginManager manager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
 		manager.loadCorePlugins();
+		assertEquals("Core plugins must load before Hub dependencies", pluginClasses.size(), manager.getPlugins().size());
+		when(client.isClientThread()).thenReturn(true);
 		File[] jars = new File(directory).listFiles((dir, name) -> name.endsWith(".jar") && !name.startsWith("Microbot-Hub"));
 		assertTrue("Staged plugin artifacts required", jars != null && jars.length > 0);
 		for (File jar : jars)
