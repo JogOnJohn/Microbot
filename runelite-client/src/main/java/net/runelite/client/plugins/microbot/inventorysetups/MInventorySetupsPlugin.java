@@ -1091,7 +1091,7 @@ public class MInventorySetupsPlugin extends Plugin
 
 		if (cache.getInventorySetupNames().containsKey(name)) {
 			String finalName = name;
-			InventorySetup inventorySetup = MInventorySetupsPlugin.getInventorySetups().stream().filter(Objects::nonNull).filter(x -> x.getName().equalsIgnoreCase(finalName)).findFirst().orElse(null);
+			InventorySetup inventorySetup = MInventorySetupsPlugin.getInventorySetups().stream().filter(java.util.Objects::nonNull).filter(x -> x.getName().equalsIgnoreCase(finalName)).findFirst().orElse(null);
 			updateCurrentSetup(inventorySetup);
 			return;
 		}
