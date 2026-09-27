@@ -142,6 +142,13 @@ import static net.runelite.client.plugins.microbot.inventorysetups.ui.InventoryS
 @Slf4j
 public class MInventorySetupsPlugin extends Plugin
 {
+	@Override
+	public com.google.inject.Module getPublicModule()
+	{
+		return binder -> binder.bind(MInventorySetupsPlugin.class)
+			.toProvider(com.google.inject.util.Providers.of(this));
+	}
+
 
 	public static final String CONFIG_GROUP = "inventorysetups";
 
@@ -238,7 +245,6 @@ public class MInventorySetupsPlugin extends Plugin
 	@Inject
 	private BankTagsService bankTagsService;
 
-	@Inject
 	private BankTagsPlugin bankTagsPlugin;
 
 	@Inject
@@ -336,7 +342,7 @@ public class MInventorySetupsPlugin extends Plugin
 		try
 		{
 			final Properties props = new Properties();
-			InputStream is = MInventorySetupsPlugin.class.getResourceAsStream("/invsetups_version.txt");
+			InputStream is = MInventorySetupsPlugin.class.getResourceAsStream("/version_and_patch_notes/version.txt");
 			props.load(is);
 			this.currentVersion = props.getProperty("version");
 		}
@@ -369,6 +375,7 @@ public class MInventorySetupsPlugin extends Plugin
 		this.ammoHandler = new InventorySetupsAmmoHandler(this, client, itemManager, panel, config);
 		this.pluginMessageHandler = new InventorySetupsPluginMessageHandler(this, clientThread, eventBus, panel);
 		this.layoutUtilities = new InventorySetupLayoutUtilities(itemManager, tagManager, layoutManager, config, client);
+		this.bankTagsPlugin = findBankTagsPlugin();
 		this.canUseLayouts = canUseLayouts();
 
 		InventorySetupsChatboxItemSearchFilter chatboxSearchFilter = new InventorySetupsChatboxItemSearchFilter(client.getItemCount());
@@ -425,15 +432,46 @@ public class MInventorySetupsPlugin extends Plugin
 		return currentVersion;
 	}
 
+	public String getPatchNotesString()
+	{
+		String updateText;
+		try
+		{
+			InputStream is = MInventorySetupsPlugin.class.getResourceAsStream("/version_and_patch_notes/patch_notes.txt");
+			updateText = new String(is.readAllBytes());
+		}
+		catch (Exception e)
+		{
+			log.warn("Could not get plugin patch notes.", e);
+			updateText = "Unable to get patch notes at this time. Please report this issue to " + SUGGESTION_LINK;
+		}
+		return updateText;
+	}
+
+	private BankTagsPlugin findBankTagsPlugin()
+	{
+		return pluginManager.getPlugins().stream()
+			.filter(BankTagsPlugin.class::isInstance)
+			.map(BankTagsPlugin.class::cast)
+			.findFirst()
+			.orElse(null);
+	}
+
 	private boolean canUseLayouts()
 	{
 		// If Bank Tags is off, layouts will not work.
-		return pluginManager.isPluginEnabled(bankTagsPlugin);
+		return bankTagsPlugin != null && pluginManager.isPluginEnabled(bankTagsPlugin);
 	}
 
 	public void enableLayouts()
 	{
 		// Turn on Bank Tags and configure hub plugin bank tag layouts setting to be off.
+		if (bankTagsPlugin == null)
+		{
+			log.error("Could not find Bank Tags plugin.");
+			return;
+		}
+
 		if (!pluginManager.isPluginEnabled(bankTagsPlugin))
 		{
 			log.info("Turning on Bank Tags plugin");
@@ -782,15 +820,16 @@ public class MInventorySetupsPlugin extends Plugin
 
 		if (panel.getCurrentSelectedSetup() != null)
 		{
-			if (panel.getCurrentSelectedSetup().isFilterBank())
+			if (panel.getCurrentSelectedSetup().isFilterBank() && this.canUseLayouts)
 			{
-				if (this.canUseLayouts && config.useLayouts())
+				if (config.useLayouts())
 				{
 					// Add Auto layouts
 					createAutoLayoutSubMenuOnWornItems();
 				}
 
 				// add menu entry to re-filter/layout setup
+				// canUseLayouts also influences classic filtering
 				client.getMenu()
 						.createMenuEntry(-1)
 						.setOption("Filter Bank")
@@ -2716,6 +2755,16 @@ public class MInventorySetupsPlugin extends Plugin
 	public void broadcastSetupsChanged()
 	{
 		pluginMessageHandler.broadcastSetupsChanged();
+	}
+
+	public void broadcastActiveSetupChanged()
+	{
+		pluginMessageHandler.broadcastActiveSetupChanged();
+	}
+
+	public boolean hasActiveSetup()
+	{
+		return panel.getCurrentSelectedSetup() != null;
 	}
 
 	@Subscribe
