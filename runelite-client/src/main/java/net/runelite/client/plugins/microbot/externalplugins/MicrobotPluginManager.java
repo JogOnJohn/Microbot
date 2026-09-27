@@ -505,73 +505,7 @@ public class MicrobotPluginManager {
     }
 
     private Plugin instantiate(Collection<Plugin> scannedPlugins, Class<Plugin> clazz) throws PluginInstantiationException {
-        PluginDependency[] pluginDependencies = clazz.getAnnotationsByType(PluginDependency.class);
-        List<Plugin> deps = new ArrayList<>();
-        for (PluginDependency pluginDependency : pluginDependencies) {
-            Optional<Plugin> dependency = scannedPlugins.stream().filter(p -> p.getClass() == pluginDependency.value()).findFirst();
-            if (!dependency.isPresent()) {
-                throw new PluginInstantiationException("Unmet dependency for " + clazz.getSimpleName() + ": " + pluginDependency.value().getSimpleName());
-            }
-            deps.add(dependency.get());
-        }
-
-        Plugin plugin;
-        try {
-            plugin = clazz.getDeclaredConstructor().newInstance();
-        } catch (ThreadDeath e) {
-            throw e;
-        } catch (Throwable ex) {
-            throw new PluginInstantiationException(ex);
-        }
-
-        try {
-            Injector parent = Microbot.getInjector();
-
-            if (deps.size() > 1) {
-                List<com.google.inject.Module> modules = new ArrayList<>(deps.size());
-                for (Plugin p : deps) {
-                    com.google.inject.Module module = (Binder binder) ->
-                    {
-                        binder.bind((Class<Plugin>) p.getClass()).toInstance(p);
-                        binder.install(p);
-                    };
-                    modules.add(module);
-                }
-
-                parent = parent.createChildInjector(modules);
-            } else if (!deps.isEmpty()) {
-                parent = deps.get(0).getInjector();
-            }
-
-            Module pluginModule = (Binder binder) ->
-            {
-                binder.bind(clazz).toInstance(plugin);
-                binder.install(plugin);
-            };
-            Injector pluginInjector = parent.createChildInjector(pluginModule);
-            System.out.println(pluginInjector.getClass().getSimpleName());
-            plugin.setInjector(pluginInjector);
-        } catch (com.google.common.util.concurrent.ExecutionError e) {
-            // Guice/Guava wraps NoClassDefFoundError here
-            Throwable cause = e.getCause();
-            if (cause instanceof NoClassDefFoundError) {
-                log.error("Missing class while loading plugin {}: {}", clazz.getSimpleName(), cause.toString());
-            } else {
-                log.error("Error while loading plugin {}: {}", clazz.getSimpleName(), e.toString(), e);
-            }
-
-            File jar = getPluginJarFile(plugin.getClass().getSimpleName());
-            if (jar != null) {
-                jar.delete();
-            }
-        } catch (Exception ex) {
-            log.error("Incompatible plugin found: " + clazz.getSimpleName());
-            File jar = getPluginJarFile(plugin.getClass().getSimpleName());
-            jar.delete();
-        }
-
-        log.debug("Loaded plugin {}", clazz.getSimpleName());
-        return plugin;
+        return pluginManager.instantiatePlugin(scannedPlugins, clazz);
     }
 
     /**
@@ -835,7 +769,7 @@ public class MicrobotPluginManager {
             List<Plugin> toRemove = loadedExternalPlugins.stream()
                     .filter(p -> {
                         MicrobotPluginManifest m = getPluginManifest(p);
-                        if (m == null) return true; // unknown → remove
+                        if (m == null) return true; // unknown â†’ remove
                         String name = m.getInternalName();
                         return !installedPluginNames.contains(name) || needsReload.contains(name);
                     })

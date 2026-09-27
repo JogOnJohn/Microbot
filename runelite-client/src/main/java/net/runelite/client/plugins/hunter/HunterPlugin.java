@@ -63,6 +63,12 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class HunterPlugin extends Plugin
 {
+	@Override
+	public com.google.inject.Module getPublicModule()
+	{
+		return binder -> binder.bind(HunterPlugin.class).toInstance(this);
+	}
+
 	@Inject
 	private Client client;
 
