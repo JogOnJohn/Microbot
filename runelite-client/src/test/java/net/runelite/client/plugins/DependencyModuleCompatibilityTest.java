@@ -17,6 +17,27 @@ public class DependencyModuleCompatibilityTest
         @Inject HunterPlugin hunter;
     }
 
+    @PluginDependency(net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin.class)
+    public static class InventorySetupConsumer extends Plugin
+    {
+        @Inject net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin setups;
+    }
+
+    @Test
+    public void inventorySetupDependencyUsesTheExistingInstance() throws Exception
+    {
+        Injector original = RuneLite.getInjector();
+        try
+        {
+            RuneLite.setInjector(Guice.createInjector());
+            var setups = new net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin();
+            PluginManager manager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
+            InventorySetupConsumer consumer = (InventorySetupConsumer) manager.instantiatePlugin(List.of(setups), (Class) InventorySetupConsumer.class);
+            assertSame(setups, consumer.setups);
+        }
+        finally { RuneLite.setInjector(original); }
+    }
+
     public static class PrivateDependency extends Plugin {}
 
     @PluginDependency(PrivateDependency.class)

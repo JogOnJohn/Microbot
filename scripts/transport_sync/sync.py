@@ -268,8 +268,11 @@ def normalize_runtime_item_requirements(tables: dict[str, Table]) -> None:
         additions: list[dict[str, str]] = []
         for row in table.rows:
             value = row.get(item_header, "").strip()
-            if value in ITEM_VARIATION_IDS:
-                row[item_header] = ITEM_VARIATION_IDS[value]
+            required_groups = [token.strip() for token in value.split("&")]
+            if required_groups and all(token in ITEM_VARIATION_IDS for token in required_groups):
+                # Each group is an OR set of tool variants; semicolons preserve the AND
+                # between axe and machete requirements in the Microbot parser.
+                row[item_header] = ";".join(ITEM_VARIATION_IDS[token] for token in required_groups)
                 continue
             if value == "SHANTAY_PASS=1|COINS=5":
                 row[item_header] = "1854"
@@ -281,6 +284,19 @@ def normalize_runtime_item_requirements(tables: dict[str, Table]) -> None:
                 currency_row[currency_header] = "5 Coins"
                 additions.append(currency_row)
         table.rows.extend(additions)
+
+
+def payload_sha256(root: Path, filenames: Iterable[str]) -> str:
+    """Hash ordered filenames and length-delimited file contents reproducibly."""
+    digest = hashlib.sha256()
+    for filename in sorted(filenames):
+        name = filename.encode("utf-8")
+        content = (root / filename).read_bytes()
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def apply_overrides(
@@ -646,6 +662,7 @@ def run(args: argparse.Namespace) -> int:
         "tooling_commit": manifest["tooling_commit"],
         "data_commit": manifest["data_commit"],
         "collision_map_sha256": collision_hash,
+        "payload_sha256": payload_sha256(output_root, sorted(set(tables) | set(manifest["local_only_resources"]))),
         "overrides": overrides,
         "known_unsupported": unsupported,
         "upstream_parser_inert_interactions": upstream_parser_inert,

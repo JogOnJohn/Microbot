@@ -3519,21 +3519,24 @@ public class Rs2Walker {
 
     private static SceneTileStatus sceneTileStatus(WorldPoint target) {
         if (target == null) return SceneTileStatus.UNKNOWN;
-        try {
-            WorldView view = Microbot.getClient().getTopLevelWorldView();
-            if (view == null || view.getScene() == null || view.isInstance()
-                    || target.getPlane() != view.getPlane()) return SceneTileStatus.UNKNOWN;
-            LocalPoint local = LocalPoint.fromWorld(view, target);
-            if (local == null) return SceneTileStatus.OUTSIDE_SCENE;
-            Tile[][][] tiles = view.getScene().getTiles();
-            int plane = target.getPlane(), x = local.getSceneX(), y = local.getSceneY();
-            if (tiles == null || plane < 0 || plane >= tiles.length || tiles[plane] == null
-                    || x < 0 || x >= tiles[plane].length || tiles[plane][x] == null
-                    || y < 0 || y >= tiles[plane][x].length) return SceneTileStatus.UNKNOWN;
-            return tiles[plane][x][y] == null ? SceneTileStatus.TILE_MISSING : SceneTileStatus.LOADED;
-        } catch (RuntimeException ex) {
-            return SceneTileStatus.UNKNOWN;
-        }
+        if (Microbot.getClientThread() == null) return SceneTileStatus.UNKNOWN;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            try {
+                WorldView view = Microbot.getClient().getTopLevelWorldView();
+                if (view == null || view.getScene() == null || view.isInstance()
+                        || target.getPlane() != view.getPlane()) return SceneTileStatus.UNKNOWN;
+                LocalPoint local = LocalPoint.fromWorld(view, target);
+                if (local == null) return SceneTileStatus.OUTSIDE_SCENE;
+                Tile[][][] tiles = view.getScene().getTiles();
+                int plane = target.getPlane(), x = local.getSceneX(), y = local.getSceneY();
+                if (tiles == null || plane < 0 || plane >= tiles.length || tiles[plane] == null
+                        || x < 0 || x >= tiles[plane].length || tiles[plane][x] == null
+                        || y < 0 || y >= tiles[plane][x].length) return SceneTileStatus.UNKNOWN;
+                return tiles[plane][x][y] == null ? SceneTileStatus.TILE_MISSING : SceneTileStatus.LOADED;
+            } catch (RuntimeException ex) {
+                return SceneTileStatus.UNKNOWN;
+            }
+        }).orElse(SceneTileStatus.UNKNOWN);
     }
 
     private static WorldPoint retryClickAfterSceneLoad(List<WorldPoint> rawPath,
