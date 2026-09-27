@@ -295,3 +295,12 @@ Sticky interim targets should also clear when route-index progress goes stale. I
 When a route-following minimap click is outside the minimap clip, fallback clicks must stay on the raw path. A generic "reachable tile closer to target" fallback can select a tile far away from the route in open areas, especially near the final destination.
 
 For adjacent same-plane shortcuts, do not treat any movement away from the origin as success. Some shortcuts, such as stepping stones, can fail and place the player on a fallback tile; once the player is settled away from the expected destination, stop the landing wait and replan from the actual tile.
+
+
+## 14. Classify scene tiles through the client thread
+
+Read the top-level WorldView, plane, LocalPoint conversion, and scene tile array inside one client-thread dispatch. Keep the existing UNKNOWN fallback when the client or scene is unavailable. Streaming recovery runs on the walker thread; direct WorldView reads there can race scene replacement.
+
+**Where this applies:** `Rs2Walker.sceneTileStatus` and its scene-load retry helpers.
+
+**Defensive check:** `Rs2WalkerSceneThreadTest` verifies that WorldView lookup occurs inside `runOnClientThreadOptional`; golden-route tests protect movement behavior.
