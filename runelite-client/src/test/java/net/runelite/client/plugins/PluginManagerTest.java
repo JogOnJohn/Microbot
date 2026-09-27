@@ -58,6 +58,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertSame;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -182,7 +183,20 @@ public class PluginManagerTest
 					if (type.getAnnotation(PluginDescriptor.class) != null) entries.add(type);
 				}
 				assertTrue(jar + " contains no plugins", !entries.isEmpty());
-				assertEquals(jar.toString(), entries.size(), manager.loadPlugins(entries, null).size());
+				List<Plugin> loaded = manager.loadPlugins(entries, null);
+				assertEquals(jar.toString(), entries.size(), loaded.size());
+				for (Plugin plugin : loaded)
+				{
+					if (!plugin.getClass().getSimpleName().equals("AIOFighterPlugin")) continue;
+					Class<?> bankerType = loader.loadClass("net.runelite.client.plugins.microbot.aiofighter.bank.BankerScript");
+					Object banker = plugin.getInjector().getInstance(bankerType);
+					java.lang.reflect.Field setupField = bankerType.getDeclaredField("inventorySetupsPlugin");
+					setupField.setAccessible(true);
+					Object coreSetups = manager.getPlugins().stream()
+						.filter(value -> value instanceof net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin)
+						.findFirst().orElseThrow();
+					assertSame("AIO Fighter must receive the loaded Inventory Setups instance", coreSetups, setupField.get(banker));
+				}
 				System.out.println("STAGED_HUB_LOADING PASS " + jar.getName());
 			}
 			catch (Throwable failure)
