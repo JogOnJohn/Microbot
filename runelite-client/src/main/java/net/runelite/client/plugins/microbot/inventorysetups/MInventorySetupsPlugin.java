@@ -1079,6 +1079,60 @@ public class MInventorySetupsPlugin extends Plugin
 		});
 	}
 
+	public void addInventorySetup(String name) {
+		// Use the provided name instead of prompting via a dialog box
+		if (null == name || name.isEmpty()) {
+			return;
+		}
+
+		if (MAX_SETUP_NAME_LENGTH < name.length()) {
+			name = name.substring(0, MAX_SETUP_NAME_LENGTH);
+		}
+
+		if (cache.getInventorySetupNames().containsKey(name)) {
+			String finalName = name;
+			InventorySetup inventorySetup = MInventorySetupsPlugin.getInventorySetups().stream().filter(Objects::nonNull).filter(x -> x.getName().equalsIgnoreCase(finalName)).findFirst().orElse(null);
+			updateCurrentSetup(inventorySetup);
+			return;
+		}
+
+		final String newName = name;
+
+		clientThread.invokeLater(() ->
+		{
+			List<InventorySetupsItem> inv = getNormalizedContainer(InventoryID.INV);
+			List<InventorySetupsItem> eqp = getNormalizedContainer(InventoryID.WORN);
+
+			List<InventorySetupsItem> runePouchData = ammoHandler.getRunePouchDataIfInContainer(inv);
+			List<InventorySetupsItem> boltPouchData = ammoHandler.getBoltPouchDataIfInContainer(inv);
+			List<InventorySetupsItem> quiverData = ammoHandler.getQuiverDataIfInSetup(inv, eqp);
+
+			int spellbook = getCurrentSpellbook();
+
+			final InventorySetup invSetup = new InventorySetup(inv, eqp, runePouchData, boltPouchData, quiverData,
+					new HashMap<>(),
+					newName,
+					"",
+					config.highlightColor(),
+					config.highlightDifference(),
+					config.enableDisplayColor() ? config.displayColor() : null,
+					config.bankFilter(),
+					config.highlightUnorderedDifference(),
+					spellbook, false, -1, config.attackOption() ? attackStyleCache.getCurrentAttackOption() : "");
+
+			cache.addSetup(invSetup);
+			inventorySetups.add(invSetup);
+			dataManager.updateConfig(true, false);
+
+			Layout setupLayout = layoutUtilities.createSetupLayout(invSetup);
+			layoutManager.saveLayout(setupLayout);
+			tagManager.setHidden(setupLayout.getTag(), true);
+
+			SwingUtilities.invokeLater(() -> panel.redrawOverviewPanel(false));
+
+		});
+	}
+
 	public void addSection()
 	{
 		final String msg = "Enter the name of this section (max " + MAX_SETUP_NAME_LENGTH + " chars).";
