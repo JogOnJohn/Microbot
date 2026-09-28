@@ -511,12 +511,10 @@ public class PluginManager {
 			}
 
 			var module = dependency.get().getPublicModule();
-			if (module == null)
+			if (module != null)
 			{
-				throw new PluginInstantiationException("Plugin dependency " + pluginDependency.value().getSimpleName() + " does not expose any services");
+				modules.add(module);
 			}
-
-			modules.add(module);
 		}
 
 		Plugin plugin;

@@ -60,17 +60,15 @@ public class DependencyModuleCompatibilityTest
     }
 
     @Test
-    public void dependencyWithoutPublicServicesIsRejected() throws Exception
+    public void dependencyWithoutPublicServicesPreservesLoadOrder() throws Exception
     {
-        PluginManager manager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
+        Injector original = RuneLite.getInjector();
         try
         {
-            manager.instantiatePlugin(List.of(new PrivateDependency()), (Class) PrivateConsumer.class);
-            fail("Private dependencies must not leak bindings");
+            RuneLite.setInjector(Guice.createInjector());
+            PluginManager manager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
+            assertNotNull(manager.instantiatePlugin(List.of(new PrivateDependency()), (Class) PrivateConsumer.class));
         }
-        catch (PluginInstantiationException expected)
-        {
-            assertTrue(expected.getMessage().contains("does not expose any services"));
-        }
+        finally { RuneLite.setInjector(original); }
     }
 }

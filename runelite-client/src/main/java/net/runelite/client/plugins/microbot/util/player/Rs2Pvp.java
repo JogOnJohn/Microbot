@@ -190,7 +190,7 @@ public class Rs2Pvp {
 
             final ItemComposition itemComposition = itemManager.getItemComposition(i.getId());
             if (!itemComposition.isTradeable() && value == 0) {
-                value = itemComposition.getPrice() * i.getQuantity();
+                value = (long) itemComposition.getPrice() * i.getQuantity();
                 priceMap.put(value, i);
             } else {
                 value = itemManager.getItemPrice(i.getId()) * i.getQuantity();
