@@ -3701,7 +3701,7 @@ public class Rs2Walker {
 
     private static void manageRunEnergy(int pathRemaining) {
         try {
-            if (isAutoRunEnabled() && !Rs2Player.isRunEnabled() && Rs2Player.getRunEnergy() > 10) {
+            if (isAutoRunEnabled()) {
                 Rs2Player.toggleRunEnergy(true);
             }
             if (pathRemaining < STAMINA_MIN_PATH_TILES) return;

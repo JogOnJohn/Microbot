@@ -14,6 +14,8 @@ Each guide lists known pitfalls when working with one specific game entity type.
 
 Ground-item pickup: [propagate dispatch failures](items.md#11-propagate-ground-item-dispatch-failures) and [preserve explicit Take](items.md#12-preserve-an-explicit-ground-item-take-when-a-widget-is-selected).
 
+Run-orb energy, geometry, and pending-click semantics: [movement gotcha 21](movement.md#21-apply-the-shared-energy-policy-before-clicking-the-run-orb).
+
 ## Format
 
 Each entity guide is a numbered list of gotchas. Each entry follows this structure:
