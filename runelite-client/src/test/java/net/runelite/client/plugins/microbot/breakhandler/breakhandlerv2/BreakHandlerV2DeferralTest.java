@@ -18,6 +18,15 @@ public class BreakHandlerV2DeferralTest {
     }
 
     @Test
+    public void clearingBreakClearsCooperativeRequest() {
+        try (BreakPreparation.Handle handle = BreakPreparation.register("test")) {
+            assertTrue(BreakHandlerV2Script.shouldDeferRequestedBreak(null));
+            BreakHandlerV2Script.resetActiveBreakState();
+            assertFalse(handle.isRequested());
+        }
+    }
+
+    @Test
     public void requestsPreparationEvenWhenLegacyLockIsHeld() {
         try (BreakPreparation.Handle handle = BreakPreparation.register("test")) {
             BreakHandlerScript.setLockState(true);

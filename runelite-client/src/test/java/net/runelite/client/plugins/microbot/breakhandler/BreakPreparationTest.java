@@ -49,6 +49,19 @@ public class BreakPreparationTest
     }
 
     @Test
+    public void stalledPreparationCancelsAtDeadline() throws Exception
+    {
+        try (BreakPreparation.Handle handle = BreakPreparation.register("a"))
+        {
+            BreakPreparation.shouldDeferBreak();
+            java.lang.reflect.Field field = BreakPreparation.class.getDeclaredField("requestedAt");
+            field.setAccessible(true);
+            field.setLong(null, System.currentTimeMillis() - 120_001);
+            assertTrue(BreakPreparation.isAborted());
+        }
+    }
+
+    @Test
     public void failedPreparationCancelsInsteadOfClaimingSafety()
     {
         BreakPreparation.Handle handle = BreakPreparation.register("a");
