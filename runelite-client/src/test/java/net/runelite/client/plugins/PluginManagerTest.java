@@ -59,6 +59,7 @@ import okhttp3.Request;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertSame;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -89,6 +90,15 @@ public class PluginManagerTest
 
 	private Set<Class<?>> pluginClasses;
 	private Set<Class<?>> configClasses;
+
+	@After
+	public void restoreClientThreadFlag()
+	{
+		// RuneLiteModule injects this mock into Microbot's static ClientThread.
+		// Hub loading needs synchronous client-thread calls, but later route tests
+		// must not inherit that flag (even when loading or an assertion fails).
+		when(client.isClientThread()).thenReturn(false);
+	}
 
 	@Before
 	public void before() throws IOException
