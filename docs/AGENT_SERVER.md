@@ -148,6 +148,7 @@ Response includes `reason` field when `clicked` is `false`.
 {
   "loggedIn": true,
   "gameState": "LOGGED_IN",
+  "camera": {"zoom": 299, "pitch": 256, "yaw": 1536, "resized": true},
   "player": {
     "name": "PlayerName",
     "combatLevel": 80,
@@ -162,6 +163,12 @@ Response includes `reason` field when `clicked` is `false`.
   "scriptsPaused": false
 }
 ```
+
+The logged-in `/state` response includes read-only `camera` values sampled on
+the client thread. `zoom` is the active viewport's game zoom variable, not a
+percentage; `pitch` and `yaw` use RuneLite angle units. `resized` identifies the
+viewport mode. Camera data is omitted when logged out or unavailable. The CLI
+passes through these fields without a new command.
 
 #### GET /skills
 
