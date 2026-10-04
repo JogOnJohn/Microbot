@@ -560,12 +560,8 @@ public class QuestHelperPlugin extends Plugin
 		{
 			var cleanedMessage = Text.removeTags(client.macroExpand(chatMessage.getMessage()));
 			var matcher = NEW_QUEST_REGEX.matcher(cleanedMessage);
-<<<<<<< HEAD
 			if (matcher.matches())
 			{
-=======
-			if (matcher.matches()) {
->>>>>>> 392d99da73 (Sync Quest Helper fixes from upstream v4.17.1)
 				var questName = matcher.group("questName");
 				questMenuHandler.startUpQuest(questName);
 			}

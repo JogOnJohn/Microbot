@@ -118,7 +118,6 @@ public class BigChompyBirdHunting extends BasicQuestHelper
 			.addStep(deadChompyNearby, pluckCarcass);
 		steps.put(50, bringChompyToRantz);
 
-<<<<<<< HEAD
 		ConditionalStep seasonChompy = new ConditionalStep(this, talkToRantzWithChompy)
 			.addStep(and(knowWhatFycieWants, knowWhatBugsWants, inCave), leaveCave)
 			.addStep(and(hasFycieItem, hasBugsItem, hasRantzItem), cookChompy)
@@ -131,20 +130,6 @@ public class BigChompyBirdHunting extends BasicQuestHelper
 			.addStep(and(knowWhatBugsWants, inCave), talkToFycie)
 			.addStep(and(inCave), talkToBugs)
 			.addStep(knowWhatRantzWants, enterCaveAgain);
-=======
-		ConditionalStep seasonChompy = new ConditionalStep(this, talkToRantzWithChompy);
-		seasonChompy.addStep(and(knowWhatFycieWants, knowWhatBugsWants, inCave), leaveCave);
-		seasonChompy.addStep(and(hasFycieItem, hasBugsItem, hasRantzItem), cookChompy);
-		seasonChompy.addStep(and(fycieWantsTomato, hasBugsItem, hasRantzItem), getTomato);
-		seasonChompy.addStep(and(fycieWantsDoogle, hasBugsItem, hasRantzItem), getDoogle);
-		seasonChompy.addStep(and(knowWhatFycieWants, bugsWantsCabbage, hasRantzItem), getCabbage);
-		seasonChompy.addStep(and(knowWhatFycieWants, bugsWantsEqua, hasRantzItem), getEqua);
-		seasonChompy.addStep(and(knowWhatFycieWants, knowWhatBugsWants, rantzWantsOnion), getOnion);
-		seasonChompy.addStep(and(knowWhatFycieWants, knowWhatBugsWants, rantzWantsPotato), getPotato);
-		seasonChompy.addStep(and(knowWhatBugsWants, inCave), talkToFycie);
-		seasonChompy.addStep(and(inCave), talkToBugs);
-		seasonChompy.addStep(knowWhatRantzWants, enterCaveAgain);
->>>>>>> 392d99da73 (Sync Quest Helper fixes from upstream v4.17.1)
 
 		steps.put(55, seasonChompy);
 
@@ -159,11 +144,7 @@ public class BigChompyBirdHunting extends BasicQuestHelper
 		axe = new ItemRequirement("Any axe", ItemCollections.AXES).isNotConsumed();
 		feathers = new ItemRequirement("Feathers", ItemID.FEATHER, 100);
 		knife = new ItemRequirement("Knife", ItemID.KNIFE).isNotConsumed();
-<<<<<<< HEAD
 		chisel = new ItemRequirement("Chisel", ItemCollections.CHISEL).isNotConsumed();
-=======
-		chisel = new ItemRequirement("Chisel", ItemID.CHISEL).isNotConsumed();
->>>>>>> 392d99da73 (Sync Quest Helper fixes from upstream v4.17.1)
 		chisel.setHighlightInInventory(true);
 		wolfBones4 = new ItemRequirement("Wolf bones", ItemID.WOLF_BONES, 4);
 		wolfBones4.setTooltip("You can kill wolves (level 64) around Feldip for bones");
