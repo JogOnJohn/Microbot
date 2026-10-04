@@ -39,9 +39,13 @@ import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import net.runelite.api.Client;
@@ -90,19 +94,34 @@ public class PluginManagerTest
 
 	private Set<Class<?>> pluginClasses;
 	private Set<Class<?>> configClasses;
+	private Injector previousInjector;
+	private final Map<Field, Object> previousMicrobotDependencies = new LinkedHashMap<>();
 
 	@After
-	public void restoreClientThreadFlag()
+	public void restoreStaticDependencies() throws IllegalAccessException
 	{
-		// RuneLiteModule injects this mock into Microbot's static ClientThread.
-		// Hub loading needs synchronous client-thread calls, but later route tests
-		// must not inherit that flag (even when loading or an assertion fails).
-		when(client.isClientThread()).thenReturn(false);
+		// RuneLiteModule replaces Microbot's static services, including the client
+		// thread used for synchronous Hub loading. None may leak into route tests.
+		for (Map.Entry<Field, Object> entry : previousMicrobotDependencies.entrySet())
+		{
+			entry.getKey().set(null, entry.getValue());
+		}
+		RuneLite.setInjector(previousInjector);
 	}
 
 	@Before
-	public void before() throws IOException
+	public void before() throws IOException, IllegalAccessException
 	{
+		previousInjector = RuneLite.getInjector();
+		for (Field field : Microbot.class.getDeclaredFields())
+		{
+			if (Modifier.isStatic(field.getModifiers()) && field.isAnnotationPresent(javax.inject.Inject.class))
+			{
+				field.setAccessible(true);
+				previousMicrobotDependencies.put(field, field.get(null));
+			}
+		}
+
 		OkHttpClient okHttpClient = mock(OkHttpClient.class);
 		when(okHttpClient.newCall(any(Request.class)))
 			.thenThrow(new RuntimeException("in plugin manager test"));
