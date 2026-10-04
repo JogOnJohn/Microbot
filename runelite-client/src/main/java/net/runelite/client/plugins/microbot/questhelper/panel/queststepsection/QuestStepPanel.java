@@ -445,12 +445,17 @@ public class QuestStepPanel extends AbstractQuestSection implements MouseListene
 			steps.get(step).setVisible(newVisibility);
 		}
 
-		if (stepVisibilityChanged)
+		boolean shouldBeVisible = panelDetails.getHideCondition() == null
+			|| !panelDetails.getHideCondition().check(client);
+
+		boolean panelVisibilityChanged = isVisible() != shouldBeVisible;
+
+		if (stepVisibilityChanged || panelVisibilityChanged)
 		{
 			updateHighlightCheck(client, currentlyActiveQuestSidebarStep(), questHelper);
 		}
 
-		return stepVisibilityChanged;
+		return stepVisibilityChanged || panelVisibilityChanged;
 	}
 
 	protected QuestStep currentlyActiveQuestSidebarStep()
