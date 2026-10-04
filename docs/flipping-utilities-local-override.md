@@ -57,6 +57,23 @@ To return to the managed plugin, close the client, archive the override outside
 subsequent plugin-list edits), and relaunch. The custom JAR hash warning is
 expected; its installed SHA-256 was verified against the built artifact.
 
+## Client launch artifact
+
+The concurrent QuestHelper release build replaced the old running client's JAR
+under `build/libs`, after which lazy class loads failed with
+`NoClassDefFoundError: ch/qos/logback/classic/spi/ThrowableProxy`. The client was
+closed and the interactive `Codex Launch Microbot 1.13` task now launches a fixed
+copy outside the build output directory:
+
+`C:\Users\VMAdmin2\operator-work\runtime\client\microbot-2.6.28-025FEA79562B.jar`
+
+SHA-256: `025FEA79562B10CED139BA948FD434151812D16E1AB6C746E5810D462B3D747F`.
+This is the separate QuestHelper task's validated release artifact. Its previous
+task definition is archived beside the override's original configuration.
+For future updates, build to a staging path, copy the artifact to a new path
+named with its hash, verify the copy, then change the interactive launch task
+after closing the old client. Never overwrite the JAR used by a running client.
+
 ## Inventory Setups follow-up
 
 The upstream v1.26 update, existing-instance public module, and missing-layout
