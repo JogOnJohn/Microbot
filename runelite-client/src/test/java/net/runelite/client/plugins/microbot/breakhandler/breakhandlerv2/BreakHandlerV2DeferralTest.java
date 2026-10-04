@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.breakhandler.breakhandlerv2;
 
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
+import net.runelite.client.plugins.microbot.breakhandler.BreakPreparation;
 import org.junit.After;
 import org.junit.Test;
 
@@ -13,6 +14,20 @@ public class BreakHandlerV2DeferralTest {
     @After
     public void clearPluginLock() {
         BreakHandlerScript.setLockState(false);
+        BreakPreparation.finishBreak();
+    }
+
+    @Test
+    public void requestsPreparationEvenWhenLegacyLockIsHeld() {
+        try (BreakPreparation.Handle handle = BreakPreparation.register("test")) {
+            BreakHandlerScript.setLockState(true);
+            assertTrue(BreakHandlerV2Script.shouldDeferRequestedBreak(null));
+            assertTrue(handle.isRequested());
+            handle.ready();
+            assertTrue(BreakHandlerV2Script.shouldDeferRequestedBreak(null));
+            BreakHandlerScript.setLockState(false);
+            assertFalse(BreakHandlerV2Script.shouldDeferRequestedBreak(null));
+        }
     }
 
     @Test
