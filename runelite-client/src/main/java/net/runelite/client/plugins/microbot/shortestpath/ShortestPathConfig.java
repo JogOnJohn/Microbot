@@ -936,6 +936,18 @@ public interface ShortestPathConfig extends Config {
         return true;
     }
 
+    @ConfigSection(name = "Declared unlocks", description = "Unlocks not exposed by the game client", position = 99)
+    String sectionUnlocks = "sectionUnlocks";
+
+    @ConfigItem(keyName = "unlockCanoeAxe", name = "Stored canoe axe", description = "An axe is stored at canoe stations", position = 0, section = sectionUnlocks)
+    default boolean unlockCanoeAxe() { return false; }
+
+    @ConfigItem(keyName = "unlockDragontoothPassage", name = "Dragontooth free passage", description = "Free passage to Dragontooth Island has been unlocked", position = 1, section = sectionUnlocks)
+    default boolean unlockDragontoothPassage() { return false; }
+
+    @ConfigItem(keyName = "unlockXericsHonour", name = "Xeric's Honour", description = "The ancient tablet has unlocked Xeric's Honour", position = 2, section = sectionUnlocks)
+    default boolean unlockXericsHonour() { return false; }
+
     @ConfigSection(
             name = "Developer",
             description = "Optional — most users can ignore.",

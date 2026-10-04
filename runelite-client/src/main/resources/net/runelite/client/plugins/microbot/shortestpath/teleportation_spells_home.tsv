@@ -1,17 +1,49 @@
 # Destination	Items	Skills	Quests	Duration	Display info	Wilderness level	Varbits	VarPlayers
-1700 3882 0				18	Arceuus Home Teleport	20	4070=3	4560&4;892@30
+1700 3882 0				19	Arceuus Home Teleport	20	4070=3	4560&4;892@30
+1700 3882 0				19	Arceuus Home Teleport	20	4070=3	4560&512;892@30
+1700 3882 0				20	Arceuus Home Teleport	20	4070=3	4560&64;892@30
+1700 3882 0				21	Arceuus Home Teleport	20	4070=3	4560&128;892@30
+1700 3882 0				21	Arceuus Home Teleport	20	4070=3	4560&256;892@30
 1700 3882 0				21	Arceuus Home Teleport	20	4070=3	4560&2;892@30
-1700 3882 0				23	Arceuus Home Teleport	20	4070=3	4560&249;892@30
-1700 3882 0				23	Arceuus Home Teleport	20	4070=3	4560=0;892@30
-2113 3915 0			Lunar Diplomacy	18	Lunar Home Teleport	20	4070=2	4560&4;892@30
+1700 3882 0				23	Arceuus Home Teleport	20	4070=3	4560&1024;892@30
+1700 3882 0				24	Arceuus Home Teleport	20	4070=3	4560&16;892@30
+1700 3882 0				24	Arceuus Home Teleport	20	4070=3	4560&1;892@30
+1700 3882 0				24	Arceuus Home Teleport	20	4070=3	4560&8;892@30
+1700 3882 0				24	Arceuus Home Teleport	20	4070=3	4560=0;892@30
+1700 3882 0				25	Arceuus Home Teleport	20	4070=3	4560&32;892@30
+2113 3915 0			Lunar Diplomacy	19	Lunar Home Teleport	20	4070=2	4560&4;892@30
+2113 3915 0			Lunar Diplomacy	19	Lunar Home Teleport	20	4070=2	4560&512;892@30
+2113 3915 0			Lunar Diplomacy	20	Lunar Home Teleport	20	4070=2	4560&64;892@30
+2113 3915 0			Lunar Diplomacy	21	Lunar Home Teleport	20	4070=2	4560&128;892@30
+2113 3915 0			Lunar Diplomacy	21	Lunar Home Teleport	20	4070=2	4560&256;892@30
 2113 3915 0			Lunar Diplomacy	21	Lunar Home Teleport	20	4070=2	4560&2;892@30
-2113 3915 0			Lunar Diplomacy	23	Lunar Home Teleport	20	4070=2	4560&249;892@30
-2113 3915 0			Lunar Diplomacy	23	Lunar Home Teleport	20	4070=2	4560=0;892@30
-3087 3504 0			Desert Treasure I	18	Edgeville Home Teleport	20	4070=1	4560&4;892@30
+2113 3915 0			Lunar Diplomacy	23	Lunar Home Teleport	20	4070=2	4560&1024;892@30
+2113 3915 0			Lunar Diplomacy	24	Lunar Home Teleport	20	4070=2	4560&16;892@30
+2113 3915 0			Lunar Diplomacy	24	Lunar Home Teleport	20	4070=2	4560&1;892@30
+2113 3915 0			Lunar Diplomacy	24	Lunar Home Teleport	20	4070=2	4560&8;892@30
+2113 3915 0			Lunar Diplomacy	24	Lunar Home Teleport	20	4070=2	4560=0;892@30
+2113 3915 0			Lunar Diplomacy	25	Lunar Home Teleport	20	4070=2	4560&32;892@30
+3087 3504 0			Desert Treasure I	19	Edgeville Home Teleport	20	4070=1	4560&4;892@30
+3087 3504 0			Desert Treasure I	19	Edgeville Home Teleport	20	4070=1	4560&512;892@30
+3087 3504 0			Desert Treasure I	20	Edgeville Home Teleport	20	4070=1	4560&64;892@30
+3087 3504 0			Desert Treasure I	21	Edgeville Home Teleport	20	4070=1	4560&128;892@30
+3087 3504 0			Desert Treasure I	21	Edgeville Home Teleport	20	4070=1	4560&256;892@30
 3087 3504 0			Desert Treasure I	21	Edgeville Home Teleport	20	4070=1	4560&2;892@30
-3087 3504 0			Desert Treasure I	23	Edgeville Home Teleport	20	4070=1	4560&249;892@30
-3087 3504 0			Desert Treasure I	23	Edgeville Home Teleport	20	4070=1	4560=0;892@30
-3221 3218 0				18	Lumbridge Home Teleport	20	4070=0	4560&4;892@30
+3087 3504 0			Desert Treasure I	23	Edgeville Home Teleport	20	4070=1	4560&1024;892@30
+3087 3504 0			Desert Treasure I	24	Edgeville Home Teleport	20	4070=1	4560&16;892@30
+3087 3504 0			Desert Treasure I	24	Edgeville Home Teleport	20	4070=1	4560&1;892@30
+3087 3504 0			Desert Treasure I	24	Edgeville Home Teleport	20	4070=1	4560&8;892@30
+3087 3504 0			Desert Treasure I	24	Edgeville Home Teleport	20	4070=1	4560=0;892@30
+3087 3504 0			Desert Treasure I	25	Edgeville Home Teleport	20	4070=1	4560&32;892@30
+3221 3218 0				19	Lumbridge Home Teleport	20	4070=0	4560&4;892@30
+3221 3218 0				19	Lumbridge Home Teleport	20	4070=0	4560&512;892@30
+3221 3218 0				20	Lumbridge Home Teleport	20	4070=0	4560&64;892@30
+3221 3218 0				21	Lumbridge Home Teleport	20	4070=0	4560&128;892@30
+3221 3218 0				21	Lumbridge Home Teleport	20	4070=0	4560&256;892@30
 3221 3218 0				21	Lumbridge Home Teleport	20	4070=0	4560&2;892@30
-3221 3218 0				23	Lumbridge Home Teleport	20	4070=0	4560&249;892@30
-3221 3218 0				23	Lumbridge Home Teleport	20	4070=0	4560=0;892@30
+3221 3218 0				23	Lumbridge Home Teleport	20	4070=0	4560&1024;892@30
+3221 3218 0				24	Lumbridge Home Teleport	20	4070=0	4560&16;892@30
+3221 3218 0				24	Lumbridge Home Teleport	20	4070=0	4560&1;892@30
+3221 3218 0				24	Lumbridge Home Teleport	20	4070=0	4560&8;892@30
+3221 3218 0				24	Lumbridge Home Teleport	20	4070=0	4560=0;892@30
+3221 3218 0				25	Lumbridge Home Teleport	20	4070=0	4560&32;892@30

@@ -7,6 +7,9 @@ import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.shortestpath.transport.parser.ItemRequirementParser;
+import net.runelite.client.plugins.microbot.shortestpath.transport.requirement.ItemRequirement;
+import net.runelite.client.plugins.microbot.shortestpath.transport.requirement.TransportItems;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -62,6 +65,15 @@ public class Transport {
     @Getter
     @Setter
     private Set<Set<Integer>> itemIdRequirements = new HashSet<>();
+
+    @Getter
+    private TransportItems parsedItemRequirements;
+    @Getter
+    private boolean requiresMaximumTotalLevel;
+    @Getter
+    private boolean requiresMaximumQuestPoints;
+    @Getter
+    private int requiredCombatLevel;
 
     /**
      * The type of transport
@@ -138,6 +150,12 @@ public class Transport {
 
         this.itemIdRequirements.addAll(origin.itemIdRequirements);
         this.itemIdRequirements.addAll(destination.itemIdRequirements);
+        if (origin.parsedItemRequirements != null || destination.parsedItemRequirements != null) {
+            this.parsedItemRequirements = TransportItems.merge(origin.itemsForEvaluation(), destination.itemsForEvaluation());
+        }
+        this.requiresMaximumTotalLevel = origin.requiresMaximumTotalLevel || destination.requiresMaximumTotalLevel;
+        this.requiresMaximumQuestPoints = origin.requiresMaximumQuestPoints || destination.requiresMaximumQuestPoints;
+        this.requiredCombatLevel = Math.max(origin.requiredCombatLevel, destination.requiredCombatLevel);
 
         this.type = origin.type;
 
@@ -276,8 +294,22 @@ public class Transport {
                     continue;
                 }
 
-                int level = Integer.parseInt(levelAndSkill[0]);
+                boolean maximum = "Max".equals(levelAndSkill[0]);
+                int level = maximum ? 99 : Integer.parseInt(levelAndSkill[0]);
                 String skillName = levelAndSkill[1];
+
+                if (maximum && "Total".equals(skillName)) {
+                    requiresMaximumTotalLevel = true;
+                    continue;
+                }
+                if (maximum && "Quest".equals(skillName)) {
+                    requiresMaximumQuestPoints = true;
+                    continue;
+                }
+                if ("Combat".equals(skillName)) {
+                    requiredCombatLevel = level;
+                    continue;
+                }
 
                 Skill[] skills = Skill.values();
                 for (int i = 0; i < skills.length; i++) {
@@ -439,6 +471,22 @@ public class Transport {
     }
 
     private void parseItemRequirements(String value) {
+        if (value.contains("=")) {
+            parsedItemRequirements = new ItemRequirementParser().parse(value);
+            if (parsedItemRequirements == null) {
+                throw new IllegalArgumentException("Invalid transport item requirements: " + value);
+            }
+            for (ItemRequirement requirement : parsedItemRequirements.getRequirements()) {
+                Set<Integer> alternatives = new HashSet<>();
+                for (ItemRequirement.Branch branch : requirement.getBranches()) {
+                    if (branch.getItemIds() != null && branch.getQuantity() > 0) {
+                        for (int id : branch.getItemIds()) alternatives.add(id);
+                    }
+                }
+                if (!alternatives.isEmpty()) itemIdRequirements.add(alternatives);
+            }
+            return;
+        }
         for (String alternativeGroup : value.split(";")) {
             Set<Integer> alternatives = new HashSet<>();
             for (String token : alternativeGroup.split("\\|\\||\\s+")) {
@@ -459,6 +507,23 @@ public class Transport {
                 itemIdRequirements.add(alternatives);
             }
         }
+    }
+
+    private TransportItems itemsForEvaluation() {
+        if (parsedItemRequirements != null) return parsedItemRequirements;
+        List<ItemRequirement> requirements = new ArrayList<>();
+        for (Set<Integer> alternatives : itemIdRequirements) {
+            requirements.add(new ItemRequirement(alternatives.stream().mapToInt(Integer::intValue).toArray(), null, null, 1));
+        }
+        return new TransportItems(requirements);
+    }
+
+    public int requiredItemQuantity(int itemId) {
+        if (parsedItemRequirements == null) return 1;
+        return parsedItemRequirements.getRequirements().stream()
+                .flatMap(requirement -> requirement.getBranches().stream())
+                .filter(branch -> branch.getItemIds() != null && Arrays.stream(branch.getItemIds()).anyMatch(id -> id == itemId))
+                .mapToInt(ItemRequirement.Branch::getQuantity).max().orElse(1);
     }
 
     private static String firstPresent(Map<String, String> fieldMap, String... keys) {

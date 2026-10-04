@@ -285,11 +285,16 @@ def normalize_runtime_item_requirements(tables: dict[str, Table]) -> None:
         additions: list[dict[str, str]] = []
         for row in table.rows:
             value = row.get(item_header, "").strip()
-            required_groups = [token.strip() for token in value.split("&")]
-            if required_groups and all(token in ITEM_VARIATION_IDS for token in required_groups):
-                # Each group is an OR set of tool variants; semicolons preserve the AND
-                # between axe and machete requirements in the Microbot parser.
-                row[item_header] = ";".join(ITEM_VARIATION_IDS[token] for token in required_groups)
+            fare = re.fullmatch(r"COINS=(\d+)", value)
+            if fare:
+                if currency_header is None:
+                    table.headers.append("Currency")
+                    currency_header = "Currency"
+                row[currency_header] = f"{fare.group(1)} Coins"
+                row[item_header] = ""
+                continue
+            if value in ITEM_VARIATION_IDS:
+                row[item_header] = ITEM_VARIATION_IDS[value]
                 continue
             if value == "SHANTAY_PASS=1|COINS=5":
                 row[item_header] = "1854"

@@ -69,14 +69,14 @@ public class TransportSyncGeneratedResourcesTest
 	}
 
 	@Test
-	public void generatedCatalogParsesWithoutCapabilityCollapse() throws IOException
+    public void generatedCatalogParsesWithoutCapabilityCollapse() throws Exception
 	{
 		String generatedProperty = System.getProperty("microbot.transport.generated.dir");
 		// Staged output only exists after running the converter; generic test sweeps
 		// (runUnitTests etc.) must skip this, not fail. validateTransportSync sets the property.
 		Assume.assumeTrue("skipped: run via :client:validateTransportSync", generatedProperty != null);
 		Path generatedRoot = Paths.get(generatedProperty);
-		assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
+        assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
 
 		Properties provenance = loadProvenance(generatedRoot);
 		assertEquals("staged payload hash does not match provenance",
@@ -107,7 +107,7 @@ public class TransportSyncGeneratedResourcesTest
 			int generatedBlocked = countBlockedEndpoints(generated, category.getValue(), candidateCollisionMap);
 			int baselineBlocked = countBlockedEndpoints(baseline, category.getValue(), candidateCollisionMap);
 			assertTrue(filename + " added transports with collision-blocked endpoints: generated=" +
-				generatedBlocked + " baseline=" + baselineBlocked, generatedBlocked <= baselineBlocked);
+                generatedBlocked + " baseline=" + baselineBlocked, generatedBlocked <= baselineBlocked);
 			totalRows += generatedRows;
 		}
 		validateLocalOnlyResources(generatedRoot);
@@ -176,6 +176,13 @@ public class TransportSyncGeneratedResourcesTest
 
 	private static void validateLocalOnlyResources(Path root) throws IOException
 	{
+		for (String filename : Arrays.asList("npcs.tsv", "restrictions.tsv", "blocked_edges.tsv", "dangerous_tiles.tsv")) {
+			try (InputStream stream = Transport.class.getResourceAsStream(filename)) {
+				assertNotNull(filename, stream);
+				org.junit.Assert.assertArrayEquals("local-only resource was modified: " + filename,
+					stream.readAllBytes(), Files.readAllBytes(root.resolve(filename)));
+			}
+		}
 		validateRows("npcs.tsv", Files.readAllLines(root.resolve("npcs.tsv"), StandardCharsets.UTF_8),
 			TransportType.NPC);
 		for (Map<String, String> row : parseFieldMaps(root.resolve("restrictions.tsv")))
@@ -270,7 +277,13 @@ public class TransportSyncGeneratedResourcesTest
 		{
 			return 0;
 		}
-		return collisionMap.isBlocked(point.getX(), point.getY(), point.getPlane()) ? 1 : 0;
+        int x = point.getX(), y = point.getY(), z = point.getPlane();
+        if (!collisionMap.isBlocked(x, y, z)) return 0;
+        // CollisionMap.getNeighbors enters an object-origin tile from a walkable cardinal
+        // neighbour and permits leaving a blocked landing tile by the same mechanism.
+        if (!collisionMap.isBlocked(x + 1, y, z) || !collisionMap.isBlocked(x - 1, y, z)
+                || !collisionMap.isBlocked(x, y + 1, z) || !collisionMap.isBlocked(x, y - 1, z)) return 0;
+        return 1;
 	}
 
 	private static List<Transport> parseRows(List<String> lines, TransportType type)
@@ -326,7 +339,17 @@ public class TransportSyncGeneratedResourcesTest
 			{
 				fieldMap.put(headers[i], i < fields.length ? fields[i] : "");
 			}
-			Transport transport = new Transport(fieldMap, expectedType);
+            Transport transport = new Transport(fieldMap, expectedType);
+            String items = fieldMap.getOrDefault("Items", fieldMap.getOrDefault("Item IDs", "")).trim();
+            if (!items.isEmpty()) {
+                assertTrue(filename + ":" + lineNumber + " item requirements were dropped: " + items,
+                        transport.getParsedItemRequirements() != null || !transport.getItemIdRequirements().isEmpty());
+            }
+            String quests = fieldMap.getOrDefault("Quests", "").trim();
+            if (!quests.isEmpty()) {
+                assertEquals(filename + ":" + lineNumber + " quest requirements were dropped: " + quests,
+                        quests.split(";").length, transport.getQuests().size());
+            }
 			assertNotNull(filename + ":" + lineNumber + " produced no type", transport.getType());
 			assertTrue(filename + ":" + lineNumber + " changed handler classification",
 				transport.getType() == expectedType ||

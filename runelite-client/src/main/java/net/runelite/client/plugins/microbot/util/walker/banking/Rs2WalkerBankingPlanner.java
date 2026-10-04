@@ -11,6 +11,7 @@ import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.walker.Rs2PathApi;
 import net.runelite.client.plugins.microbot.shortestpath.PurchasableItemCatalog;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
+import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
@@ -130,10 +131,18 @@ public final class Rs2WalkerBankingPlanner {
                 return true;
             }
 
+            if (transport.getParsedItemRequirements() != null) {
+                if (ShortestPathPlugin.getPathfinderConfig() != null) {
+                    return ShortestPathPlugin.getPathfinderConfig().hasCarriedTransportItems(transport);
+                }
+                Map<Integer, Integer> counts = new HashMap<>();
+                Rs2Inventory.items().forEach(item -> counts.merge(item.getId(), item.getQuantity(), Integer::sum));
+                Rs2Equipment.all().forEach(item -> counts.merge(item.getId(), item.getQuantity(), Integer::sum));
+                return transport.getParsedItemRequirements().isSatisfiedBy(counts, java.util.Collections.emptySet(), Integer.MAX_VALUE);
+            }
             return transport.getItemIdRequirements()
                     .stream()
-                    .flatMap(Collection::stream)
-                    .anyMatch(itemId -> Rs2Equipment.isWearing(itemId) || Rs2Inventory.hasItem(itemId));
+                    .allMatch(alternatives -> alternatives.stream().anyMatch(itemId -> Rs2Equipment.isWearing(itemId) || Rs2Inventory.hasItem(itemId)));
         }
 
         return true;
@@ -215,6 +224,9 @@ public final class Rs2WalkerBankingPlanner {
                         }
                     }
 
+                    if (preferredItemId != null && transport.getParsedItemRequirements() != null) {
+                        requiredQuantity = transport.requiredItemQuantity(preferredItemId);
+                    }
                     // The bank holds none of the alternatives — withdrawing the item is impossible.
                     // If one of them is vendor-purchasable at its transport (the Shantay pass
                     // pattern), withdraw the fare instead so the buy-at-transport step can run.
@@ -233,7 +245,7 @@ public final class Rs2WalkerBankingPlanner {
                             itemQuantityMap.merge(currencyItemId, fare, Integer::sum);
                             log.debug("Transport item {} not banked but purchasable — withdrawing fare {} x{} instead",
                                     purchasable.itemId, purchasable.costCurrencyName, fare);
-                            break;
+                            continue;
                         }
                     }
                     if (preferredItemId != null) {
@@ -242,7 +254,6 @@ public final class Rs2WalkerBankingPlanner {
                         log.debug("Added transport item requirement: itemId={} x{} (bank has: {} short={})",
                                 preferredItemId, requiredQuantity, preferredBankQuantity, preferredBankQuantity < requiredQuantity);
                     }
-                    break;
                 }
             }
         });

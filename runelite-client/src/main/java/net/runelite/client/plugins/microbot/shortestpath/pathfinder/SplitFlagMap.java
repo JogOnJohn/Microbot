@@ -129,6 +129,10 @@ public class SplitFlagMap {
         }
     }
 
+    public static SplitFlagMap fromInputStream(InputStream source) {
+        return fromZip(source);
+    }
+
     public static SplitFlagMap fromZip(InputStream source) {
         Map<Integer, byte[]> compressedRegions = new HashMap<>();
         try (ZipInputStream in = new ZipInputStream(source)) {
