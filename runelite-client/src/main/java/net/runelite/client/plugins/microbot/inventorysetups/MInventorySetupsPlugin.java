@@ -142,6 +142,13 @@ import static net.runelite.client.plugins.microbot.inventorysetups.ui.InventoryS
 @Slf4j
 public class MInventorySetupsPlugin extends Plugin
 {
+	@Override
+	public com.google.inject.Module getPublicModule()
+	{
+		return binder -> binder.bind(MInventorySetupsPlugin.class)
+			.toProvider(com.google.inject.util.Providers.of(this));
+	}
+
 
 	public static final String CONFIG_GROUP = "inventorysetups";
 
@@ -238,7 +245,6 @@ public class MInventorySetupsPlugin extends Plugin
 	@Inject
 	private BankTagsService bankTagsService;
 
-	@Inject
 	private BankTagsPlugin bankTagsPlugin;
 
 	@Inject
@@ -336,7 +342,7 @@ public class MInventorySetupsPlugin extends Plugin
 		try
 		{
 			final Properties props = new Properties();
-			InputStream is = MInventorySetupsPlugin.class.getResourceAsStream("/invsetups_version.txt");
+			InputStream is = MInventorySetupsPlugin.class.getResourceAsStream("/version_and_patch_notes/version.txt");
 			props.load(is);
 			this.currentVersion = props.getProperty("version");
 		}
@@ -369,6 +375,7 @@ public class MInventorySetupsPlugin extends Plugin
 		this.ammoHandler = new InventorySetupsAmmoHandler(this, client, itemManager, panel, config);
 		this.pluginMessageHandler = new InventorySetupsPluginMessageHandler(this, clientThread, eventBus, panel);
 		this.layoutUtilities = new InventorySetupLayoutUtilities(itemManager, tagManager, layoutManager, config, client);
+		this.bankTagsPlugin = findBankTagsPlugin();
 		this.canUseLayouts = canUseLayouts();
 
 		InventorySetupsChatboxItemSearchFilter chatboxSearchFilter = new InventorySetupsChatboxItemSearchFilter(client.getItemCount());
@@ -425,15 +432,46 @@ public class MInventorySetupsPlugin extends Plugin
 		return currentVersion;
 	}
 
+	public String getPatchNotesString()
+	{
+		String updateText;
+		try
+		{
+			InputStream is = MInventorySetupsPlugin.class.getResourceAsStream("/version_and_patch_notes/patch_notes.txt");
+			updateText = new String(is.readAllBytes());
+		}
+		catch (Exception e)
+		{
+			log.warn("Could not get plugin patch notes.", e);
+			updateText = "Unable to get patch notes at this time. Please report this issue to " + SUGGESTION_LINK;
+		}
+		return updateText;
+	}
+
+	private BankTagsPlugin findBankTagsPlugin()
+	{
+		return pluginManager.getPlugins().stream()
+			.filter(BankTagsPlugin.class::isInstance)
+			.map(BankTagsPlugin.class::cast)
+			.findFirst()
+			.orElse(null);
+	}
+
 	private boolean canUseLayouts()
 	{
 		// If Bank Tags is off, layouts will not work.
-		return pluginManager.isPluginEnabled(bankTagsPlugin);
+		return bankTagsPlugin != null && pluginManager.isPluginEnabled(bankTagsPlugin);
 	}
 
 	public void enableLayouts()
 	{
 		// Turn on Bank Tags and configure hub plugin bank tag layouts setting to be off.
+		if (bankTagsPlugin == null)
+		{
+			log.error("Could not find Bank Tags plugin.");
+			return;
+		}
+
 		if (!pluginManager.isPluginEnabled(bankTagsPlugin))
 		{
 			log.info("Turning on Bank Tags plugin");
@@ -782,15 +820,16 @@ public class MInventorySetupsPlugin extends Plugin
 
 		if (panel.getCurrentSelectedSetup() != null)
 		{
-			if (panel.getCurrentSelectedSetup().isFilterBank())
+			if (panel.getCurrentSelectedSetup().isFilterBank() && this.canUseLayouts)
 			{
-				if (this.canUseLayouts && config.useLayouts())
+				if (config.useLayouts())
 				{
 					// Add Auto layouts
 					createAutoLayoutSubMenuOnWornItems();
 				}
 
 				// add menu entry to re-filter/layout setup
+				// canUseLayouts also influences classic filtering
 				client.getMenu()
 						.createMenuEntry(-1)
 						.setOption("Filter Bank")
@@ -1079,6 +1118,60 @@ public class MInventorySetupsPlugin extends Plugin
 		});
 	}
 
+	public void addInventorySetup(String name) {
+		// Use the provided name instead of prompting via a dialog box
+		if (null == name || name.isEmpty()) {
+			return;
+		}
+
+		if (MAX_SETUP_NAME_LENGTH < name.length()) {
+			name = name.substring(0, MAX_SETUP_NAME_LENGTH);
+		}
+
+		if (cache.getInventorySetupNames().containsKey(name)) {
+			String finalName = name;
+			InventorySetup inventorySetup = MInventorySetupsPlugin.getInventorySetups().stream().filter(java.util.Objects::nonNull).filter(x -> x.getName().equalsIgnoreCase(finalName)).findFirst().orElse(null);
+			updateCurrentSetup(inventorySetup);
+			return;
+		}
+
+		final String newName = name;
+
+		clientThread.invokeLater(() ->
+		{
+			List<InventorySetupsItem> inv = getNormalizedContainer(InventoryID.INV);
+			List<InventorySetupsItem> eqp = getNormalizedContainer(InventoryID.WORN);
+
+			List<InventorySetupsItem> runePouchData = ammoHandler.getRunePouchDataIfInContainer(inv);
+			List<InventorySetupsItem> boltPouchData = ammoHandler.getBoltPouchDataIfInContainer(inv);
+			List<InventorySetupsItem> quiverData = ammoHandler.getQuiverDataIfInSetup(inv, eqp);
+
+			int spellbook = getCurrentSpellbook();
+
+			final InventorySetup invSetup = new InventorySetup(inv, eqp, runePouchData, boltPouchData, quiverData,
+					new HashMap<>(),
+					newName,
+					"",
+					config.highlightColor(),
+					config.highlightDifference(),
+					config.enableDisplayColor() ? config.displayColor() : null,
+					config.bankFilter(),
+					config.highlightUnorderedDifference(),
+					spellbook, false, -1, config.attackOption() ? attackStyleCache.getCurrentAttackOption() : "");
+
+			cache.addSetup(invSetup);
+			inventorySetups.add(invSetup);
+			dataManager.updateConfig(true, false);
+
+			Layout setupLayout = layoutUtilities.createSetupLayout(invSetup);
+			layoutManager.saveLayout(setupLayout);
+			tagManager.setHidden(setupLayout.getTag(), true);
+
+			SwingUtilities.invokeLater(() -> panel.redrawOverviewPanel(false));
+
+		});
+	}
+
 	public void addSection()
 	{
 		final String msg = "Enter the name of this section (max " + MAX_SETUP_NAME_LENGTH + " chars).";
@@ -1239,6 +1332,9 @@ public class MInventorySetupsPlugin extends Plugin
 
 			if (currentSelectedSetup == null || !currentSelectedSetup.isFilterBank() || !isFilteringAllowed())
 			{
+				log.debug("Inventory Setups bank filter skipped: setup={}, filterEnabled={}, filteringAllowed={}",
+					currentSelectedSetup == null ? null : currentSelectedSetup.getName(),
+					currentSelectedSetup != null && currentSelectedSetup.isFilterBank(), isFilteringAllowed());
 				// There is a chance Bank Tags is remembering the last tag opened, and will try to open an Inventory Setup
 				// tag even if the current selected setup is null.
 				if (isInventorySetupTagOpen())
@@ -1248,28 +1344,69 @@ public class MInventorySetupsPlugin extends Plugin
 				return;
 			}
 
-			if (client.getWidget(InterfaceID.Bankmain.UNIVERSE) == null)
+			openBankFilter(currentSelectedSetup);
+		});
+	}
+
+	public void toggleBankFilter(final InventorySetup setup)
+	{
+		clientThread.invoke(() ->
+		{
+			final String tagName = InventorySetupLayoutUtilities.getTagNameForLayout(setup.getName());
+			if (!setup.isFilterBank())
 			{
+				log.info("Inventory Setups bank filter disabled for '{}'", setup.getName());
+				if (tagName.equals(bankTagsService.getActiveTag()))
+				{
+					resetBankScrollBar();
+					bankTagsService.closeBankTag();
+				}
 				return;
 			}
 
-			final String tagName = InventorySetupLayoutUtilities.getTagNameForLayout(currentSelectedSetup.getName());
-			if (!config.useLayouts())
-			{
-				bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS | BankTagsService.OPTION_NO_LAYOUT);
-			}
-			else
-			{
-				String activeTag = bankTagsService.getActiveTag();
-				if (activeTag == null || !activeTag.equals(tagName))
-				{
-					// Reset the scrollbar if we are selecting a new setup.
-					resetBankScrollBar();
-				}
-				bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS);
-			}
-
+			log.info("Inventory Setups bank filter enabled for '{}'", setup.getName());
+			openBankFilter(setup);
 		});
+	}
+
+	private void openBankFilter(final InventorySetup setup)
+	{
+		if (client.getWidget(InterfaceID.Bankmain.UNIVERSE) == null)
+		{
+			log.debug("Inventory Setups bank filter deferred for '{}': bank is closed", setup.getName());
+			return;
+		}
+
+		final String tagName = InventorySetupLayoutUtilities.getTagNameForLayout(setup.getName());
+		Layout layout = layoutManager.loadLayout(tagName);
+		if (layout == null)
+		{
+			log.info("Creating missing Bank Tags layout for Inventory Setup '{}'", setup.getName());
+			layout = layoutUtilities.createSetupLayout(setup);
+			layoutManager.saveLayout(layout);
+			tagManager.setHidden(layout.getTag(), true);
+		}
+		else
+		{
+			layoutUtilities.recalculateLayout(setup);
+		}
+
+		if (!config.useLayouts())
+		{
+			bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS | BankTagsService.OPTION_NO_LAYOUT);
+		}
+		else
+		{
+			String activeTag = bankTagsService.getActiveTag();
+			if (activeTag == null || !activeTag.equals(tagName))
+			{
+				// Reset the scrollbar if we are selecting a new setup.
+				resetBankScrollBar();
+			}
+			bankTagsService.openBankTag(tagName, BANK_TAG_OPTIONS);
+		}
+
+		log.info("Opened Bank Tags filter '{}' for Inventory Setup '{}'", tagName, setup.getName());
 	}
 
 	public void resetBankScrollBar()
@@ -2672,6 +2809,16 @@ public class MInventorySetupsPlugin extends Plugin
 	public void broadcastSetupsChanged()
 	{
 		pluginMessageHandler.broadcastSetupsChanged();
+	}
+
+	public void broadcastActiveSetupChanged()
+	{
+		pluginMessageHandler.broadcastActiveSetupChanged();
+	}
+
+	public boolean hasActiveSetup()
+	{
+		return panel.getCurrentSelectedSetup() != null;
 	}
 
 	@Subscribe

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
+import net.runelite.api.VarClientInt;
 import net.runelite.client.plugins.microbot.Microbot;
 
 import java.io.IOException;
@@ -44,6 +45,7 @@ public class StateHandler extends AgentHandler {
 		if (Microbot.isLoggedIn()) {
 			try {
 				Microbot.getClientThread().runOnClientThreadOptional(() -> {
+					state.put("camera", cameraSnapshot(client));
 					Player localPlayer = client.getLocalPlayer();
 					if (localPlayer == null) return null;
 
@@ -76,5 +78,17 @@ public class StateHandler extends AgentHandler {
 
 		state.put("scriptsPaused", Microbot.pauseAllScripts.get());
 		sendJson(exchange, 200, state);
+	}
+
+	/** Called on the client thread with the rest of the state snapshot. */
+	static Map<String, Object> cameraSnapshot(Client client) {
+		Map<String, Object> camera = new LinkedHashMap<>();
+		boolean resized = client.isResized();
+		camera.put("zoom", client.getVarcIntValue(resized
+				? VarClientInt.CAMERA_ZOOM_RESIZABLE_VIEWPORT : VarClientInt.CAMERA_ZOOM_FIXED_VIEWPORT));
+		camera.put("pitch", client.getCameraPitch());
+		camera.put("yaw", client.getCameraYaw());
+		camera.put("resized", resized);
+		return camera;
 	}
 }

@@ -551,7 +551,7 @@ public class Rs2GrandExchange {
      * @param quantity the number of items to buy
      * @return {@code true} if the buy offer was successfully placed; {@code false} otherwise
      */
-    public static boolean buyItem(String itemName, int price, int quantity) {
+    public static boolean buyItem(String itemName, long price, int quantity) {
         GrandExchangeRequest request = GrandExchangeRequest.builder()
                 .action(GrandExchangeAction.BUY)
                 .itemName(itemName)
@@ -617,7 +617,7 @@ public class Rs2GrandExchange {
      *
      * @param price the price per item to set for the offer
      */
-    private static void setPrice(int price) {
+    private static void setPrice(long price) {
         if (price != getOfferPrice()) {
             Widget pricePerItemButtonX = GrandExchangeWidget.getPricePerItemButton_X();
             if (pricePerItemButtonX == null) return;
@@ -654,7 +654,7 @@ public class Rs2GrandExchange {
      * @param price    the price per item in coins
      * @return {@code true} if the sell offer was successfully placed; {@code false} otherwise
      */
-    public static boolean sellItem(String itemName, int quantity, int price) {
+    public static boolean sellItem(String itemName, int quantity, long price) {
         GrandExchangeRequest request = GrandExchangeRequest.builder()
                 .action(GrandExchangeAction.SELL)
                 .itemName(itemName)
@@ -1690,7 +1690,7 @@ public class Rs2GrandExchange {
         return Microbot.getVarbitValue(4398);
     }
 
-    public static void setChatboxValue(int value) {
+    public static void setChatboxValue(long value) {
         var chatboxInputWidget = Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT2);
         if (chatboxInputWidget == null) {
             return;
@@ -2004,7 +2004,7 @@ public class Rs2GrandExchange {
         try {
             int itemId = (Integer) offerDetails.get("itemId");
             int remainingQuantity = (Integer) offerDetails.get("remainingQuantity");
-            int price = (Integer) offerDetails.get("price");
+            long price = ((Number) offerDetails.get("price")).longValue();
             boolean isBuyOffer = (Boolean) offerDetails.get("isBuyOffer");
 
             // Skip if no remaining quantity

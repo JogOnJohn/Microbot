@@ -180,6 +180,16 @@ public class LootTrackerPluginTest
 	}
 
 	@Test
+	public void testLoginChatBeforeLocalPlayer()
+	{
+		when(client.getLocalPlayer()).thenReturn(null);
+		lootTrackerPlugin.onChatMessage(new ChatMessage(null, ChatMessageType.GAMEMESSAGE,
+			"", "Welcome to Old School RuneScape.", "", 0));
+		org.mockito.Mockito.verify(lootTrackerPlugin, org.mockito.Mockito.never())
+			.addLoot(any(), anyInt(), any(), any(), any(Collection.class));
+	}
+
+	@Test
 	public void testPickPocket()
 	{
 		ChatMessage chatMessage = new ChatMessage(null, ChatMessageType.SPAM, "", "You pick the hero's pocket.", "", 0);
@@ -262,8 +272,8 @@ public class LootTrackerPluginTest
 		});
 		when(client.getItemContainer(InventoryID.RAIDS_REWARDS)).thenReturn(itemContainer);
 
-		when(itemManager.getItemPrice(ItemID.TWISTED_BOW)).thenReturn(1_100_000_000);
-		when(itemManager.getItemPrice(ItemID.BLANKRUNE_HIGH)).thenReturn(6);
+		when(itemManager.getItemPrice(ItemID.TWISTED_BOW)).thenReturn(1_100_000_000L);
+		when(itemManager.getItemPrice(ItemID.BLANKRUNE_HIGH)).thenReturn(6L);
 
 		WidgetLoaded widgetLoaded = new WidgetLoaded();
 		widgetLoaded.setGroupId(InterfaceID.RAIDS_REWARDS);

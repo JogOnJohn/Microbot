@@ -171,6 +171,10 @@ public class BankedTransportItemPlanningTest {
         for (Transport t : jungle) {
             if (t.getItemIdRequirements() == null || t.getItemIdRequirements().isEmpty()) continue;
             gated++;
+            assertTrue("jungle obstacle must preserve axe alternatives: " + describe(t),
+                    t.getItemIdRequirements().stream().anyMatch(group -> group.contains(1351)));
+            assertTrue("jungle obstacle must preserve machete alternatives: " + describe(t),
+                    t.getItemIdRequirements().stream().anyMatch(group -> group.contains(975)));
             assertTrue("a machete-gated obstacle must be plannable: " + describe(t),
                     Rs2WalkerBankingPlanner.planningCoversPlainTransport(t));
         }

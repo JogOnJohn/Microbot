@@ -1,0 +1,224 @@
+From d3899bb581565bcd9b54a22a2a2e7fbe75f0fce3 Mon Sep 17 00:00:00 2001
+From: Bizza12345 <bizz4rs@gmail.com>
+Date: Mon, 5 Oct 2026 09:30:53 +1100
+Subject: [PATCH] Fix UI handler startup ordering and subscription cleanup for
+ Microbot
+
+---
+ build.gradle                                  | 94 ++++++++++---------
+ .../controller/FlippingPlugin.java            |  8 +-
+ .../controller/GameUiChangesHandler.java      | 10 +-
+ .../controller/GameUiChangesHandlerTest.java  | 18 +++-
+ 4 files changed, 80 insertions(+), 50 deletions(-)
+
+diff --git a/build.gradle b/build.gradle
+index b66d079..0b0e281 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -1,43 +1,51 @@
+-
+-plugins {
+-	id 'java'
+-}
+-
+-repositories {
+-	maven {
+-		url = 'https://repo.runelite.net'
+-	}
+-	mavenCentral()
+-}
+-
+-def runeLiteVersion = 'latest.release'
+-def lombokVersion = '1.18.30'
+-
+-dependencies {
+-    compileOnly group: 'net.runelite', name:'client', version: runeLiteVersion
+-    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+-    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+-
+-    implementation "org.apache.commons:commons-csv:1.4"
+-
+-    testImplementation 'junit:junit:4.12'
+-    testImplementation 'org.slf4j:slf4j-simple:1.7.12'
+-    testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion, {
+-        exclude group: 'ch.qos.logback', module: 'logback-classic'
+-    }
+-}
+-
+-group = 'com.flippingutilities'
+-version = '1.4.1'
+-
+-tasks.withType(JavaCompile) {
+-	options.encoding = 'UTF-8'
+-	options.release.set(11)
+-}
+-
+-tasks.register('runPlugin', JavaExec) {
+-    classpath = sourceSets.test.runtimeClasspath
+-    mainClass = 'com.flippingutilities.PluginRunner'
+-    jvmArgs "-ea"
+-    args "--developer-mode"
+-}
+\ No newline at end of file
++
++plugins {
++	id 'java'
++}
++
++repositories {
++	maven {
++		url = 'https://repo.runelite.net'
++	}
++	mavenCentral()
++}
++
++def preparedClient = providers.gradleProperty('microbotClientPath').get()
++def lombokVersion = '1.18.30'
++
++dependencies {
++    compileOnly files(preparedClient)
++    compileOnly "org.projectlombok:lombok:${lombokVersion}"
++    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
++
++    implementation "org.apache.commons:commons-csv:1.4"
++
++    testImplementation 'junit:junit:4.12'
++    testImplementation 'org.slf4j:slf4j-simple:1.7.12'
++    testImplementation files(preparedClient)
++}
++
++group = 'com.flippingutilities'
++version = '1.4.1'
++
++jar {
++    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
++    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
++    from('runelite-plugin.properties')
++}
++
++tasks.withType(JavaCompile) {
++	options.encoding = 'UTF-8'
++	options.release.set(11)
++}
++
++tasks.register('runPlugin', JavaExec) {
++    classpath = sourceSets.test.runtimeClasspath
++    mainClass = 'com.flippingutilities.PluginRunner'
++    jvmArgs "-ea"
++    args "--developer-mode"
++}
++
++test {
++    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(11) }
++}
+diff --git a/src/main/java/com/flippingutilities/controller/FlippingPlugin.java b/src/main/java/com/flippingutilities/controller/FlippingPlugin.java
+index e1fa290..91c399b 100644
+--- a/src/main/java/com/flippingutilities/controller/FlippingPlugin.java
++++ b/src/main/java/com/flippingutilities/controller/FlippingPlugin.java
+@@ -242,12 +242,11 @@ public class FlippingPlugin extends Plugin {
+ 
+         optionHandler = new OptionHandler(this);
+         dataHandler = new DataHandler(this);
+-        gameUiChangesHandler = new GameUiChangesHandler(this, eventBus);
++        gameUiChangesHandler = new GameUiChangesHandler(this);
+         newOfferEventPipelineHandler = new NewOfferEventPipelineHandler(this);
+         apiAuthHandler = new ApiAuthHandler(this);
+         apiRequestHandler = new ApiRequestHandler(this);
+         slotStateDrawer = new SlotStateDrawer(this, this.tooltipManager, client, timeseriesFetcher);
+-        eventBus.register(slotStateDrawer);
+         flippingPanel = new FlippingPanel(this);
+         statPanel = new StatsPanel(this);
+         geHistoryTabPanel = new GeHistoryTabPanel(this);
+@@ -256,6 +255,9 @@ public class FlippingPlugin extends Plugin {
+ 
+         masterPanel = new MasterPanel(this, flippingPanel, statPanel, slotsPanel, loginPanel);
+         masterPanel.addView(geHistoryTabPanel, "ge history");
++        // Register only after every panel used by the handlers has been constructed.
++        eventBus.register(gameUiChangesHandler);
++        eventBus.register(slotStateDrawer);
+         navButton = NavigationButton.builder()
+                 .tooltip("Flipping Utilities")
+                 .icon(ImageUtil.loadImageResource(getClass(), "/graph_icon_green.png"))
+@@ -296,6 +298,8 @@ public class FlippingPlugin extends Plugin {
+ 
+     @Override
+     protected void shutDown() {
++        eventBus.unregister(gameUiChangesHandler);
++        eventBus.unregister(slotStateDrawer);
+         log.debug("shutdown running!");
+         if (generalRepeatingTasks != null) {
+             generalRepeatingTasks.cancel(true);
+diff --git a/src/main/java/com/flippingutilities/controller/GameUiChangesHandler.java b/src/main/java/com/flippingutilities/controller/GameUiChangesHandler.java
+index 13d704e..4a0add5 100644
+--- a/src/main/java/com/flippingutilities/controller/GameUiChangesHandler.java
++++ b/src/main/java/com/flippingutilities/controller/GameUiChangesHandler.java
+@@ -23,7 +23,6 @@ import net.runelite.api.widgets.WidgetPositionMode;
+ import net.runelite.api.widgets.WidgetSizeMode;
+ import net.runelite.api.widgets.WidgetTextAlignment;
+ import net.runelite.api.widgets.WidgetType;
+-import net.runelite.client.eventbus.EventBus;
+ import net.runelite.client.eventbus.Subscribe;
+ import net.runelite.client.game.ItemStats;
+ 
+@@ -42,9 +41,8 @@ public class GameUiChangesHandler {
+     Optional<FlippingItem> highlightedItem = Optional.empty();
+     int highlightedItemId;
+ 
+-    GameUiChangesHandler(FlippingPlugin plugin, EventBus eventBus) {
++    GameUiChangesHandler(FlippingPlugin plugin) {
+         this.plugin = plugin;
+-        eventBus.register(this);
+     }
+ 
+     @Subscribe
+@@ -141,6 +139,11 @@ public class GameUiChangesHandler {
+ 
+     @Subscribe
+     public void onVarbitChanged(VarbitChanged event) {
++        // Startup runs on the EDT while game events run on the client thread.
++        FlippingPanel flippingPanel = plugin.getFlippingPanel();
++        if (flippingPanel == null) {
++            return;
++        }
+         Client client = plugin.getClient();
+         int varpId = event.getVarpId();
+ 
+@@ -150,7 +153,6 @@ public class GameUiChangesHandler {
+             return;
+         }
+ 
+-        FlippingPanel flippingPanel = plugin.getFlippingPanel();
+         OfferEditorContainerPanel offerEditorContainerPanel = flippingPanel.getOfferEditorContainerPanel();
+         if (varpId == Constants.GE_SETUP_PRICE_VARP && offerEditorContainerPanel != null) {
+             AbstractOfferEditorPanel quantityEditorPanel = offerEditorContainerPanel.quantityEditorPanel;
+diff --git a/src/test/java/com/flippingutilities/controller/GameUiChangesHandlerTest.java b/src/test/java/com/flippingutilities/controller/GameUiChangesHandlerTest.java
+index 959181b..773d1fd 100644
+--- a/src/test/java/com/flippingutilities/controller/GameUiChangesHandlerTest.java
++++ b/src/test/java/com/flippingutilities/controller/GameUiChangesHandlerTest.java
+@@ -91,6 +91,22 @@ public class GameUiChangesHandlerTest {
+                 return clientThread;
+             }
+         };
+-        return new GameUiChangesHandler(plugin, new EventBus());
++        return new GameUiChangesHandler(plugin);
++    }
++
++    @Test
++    public void varbitBeforePanelInitializationIsIgnored() {
++        FlippingPlugin plugin = new FlippingPlugin() {
++            @Override
++            public Client getClient() {
++                throw new AssertionError("Uninitialized UI must not query game state");
++            }
++        };
++        EventBus bus = new EventBus();
++        GameUiChangesHandler handler = new GameUiChangesHandler(plugin);
++        bus.register(handler);
++        bus.post(new net.runelite.api.events.VarbitChanged());
++        bus.unregister(handler);
++        handler.onVarbitChanged(new net.runelite.api.events.VarbitChanged());
+     }
+ }
+-- 
+2.45.2.windows.1
+

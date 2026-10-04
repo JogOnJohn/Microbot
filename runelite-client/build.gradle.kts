@@ -171,6 +171,10 @@ tasks.register<Test>("runTests") {
 }
 
 tasks.register<Test>("runUnitTests") {
+    providers.environmentVariable("MBOT_PREP_PLUGIN_DIR").orNull?.let { stagedDir ->
+        inputs.property("stagedHubPluginDir", stagedDir)
+        inputs.dir(stagedDir).withPathSensitivity(PathSensitivity.RELATIVE)
+    }
     group = "verification"
     description = "Run unit tests only (no client, no login) — safe for CI"
 

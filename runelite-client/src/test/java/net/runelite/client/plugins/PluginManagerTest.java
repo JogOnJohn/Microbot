@@ -39,9 +39,13 @@ import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import net.runelite.api.Client;
@@ -58,6 +62,8 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertSame;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -88,10 +94,34 @@ public class PluginManagerTest
 
 	private Set<Class<?>> pluginClasses;
 	private Set<Class<?>> configClasses;
+	private Injector previousInjector;
+	private final Map<Field, Object> previousMicrobotDependencies = new LinkedHashMap<>();
+
+	@After
+	public void restoreStaticDependencies() throws IllegalAccessException
+	{
+		// RuneLiteModule replaces Microbot's static services, including the client
+		// thread used for synchronous Hub loading. None may leak into route tests.
+		for (Map.Entry<Field, Object> entry : previousMicrobotDependencies.entrySet())
+		{
+			entry.getKey().set(null, entry.getValue());
+		}
+		RuneLite.setInjector(previousInjector);
+	}
 
 	@Before
-	public void before() throws IOException
+	public void before() throws IOException, IllegalAccessException
 	{
+		previousInjector = RuneLite.getInjector();
+		for (Field field : Microbot.class.getDeclaredFields())
+		{
+			if (Modifier.isStatic(field.getModifiers()) && field.isAnnotationPresent(javax.inject.Inject.class))
+			{
+				field.setAccessible(true);
+				previousMicrobotDependencies.put(field, field.get(null));
+			}
+		}
+
 		OkHttpClient okHttpClient = mock(OkHttpClient.class);
 		when(okHttpClient.newCall(any(Request.class)))
 			.thenThrow(new RuntimeException("in plugin manager test"));
@@ -139,7 +169,7 @@ public class PluginManagerTest
 	@Test
 	public void testLoadPlugins() throws Exception
 	{
-		var pluginManager = new PluginManager(false, null, null, null, null);
+		var pluginManager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
 		pluginManager.loadCorePlugins();
 		var plugins = pluginManager.getPlugins();
 
@@ -154,13 +184,66 @@ public class PluginManagerTest
 		assertEquals(expected, plugins.size());
 	}
 
+	@Test
+	public void loadStagedHubJarsWithPublicModules() throws Exception
+	{
+		String directory = System.getenv("MBOT_PREP_PLUGIN_DIR");
+		org.junit.Assume.assumeNotNull(directory);
+		java.util.ArrayList<String> failures = new java.util.ArrayList<>();
+		PluginManager manager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
+		manager.loadCorePlugins();
+		assertEquals("Core plugins must load before Hub dependencies", pluginClasses.size(), manager.getPlugins().size());
+		when(client.isClientThread()).thenReturn(true);
+		File[] jars = new File(directory).listFiles((dir, name) -> name.endsWith(".jar") && !name.startsWith("Microbot-Hub"));
+		assertTrue("Staged plugin artifacts required", jars != null && jars.length > 0);
+		for (File jar : jars)
+		{
+			try (net.runelite.client.plugins.microbot.externalplugins.PluginJarClassLoader loader =
+				new net.runelite.client.plugins.microbot.externalplugins.PluginJarClassLoader(jar, getClass().getClassLoader());
+				java.util.jar.JarFile archive = new java.util.jar.JarFile(jar))
+			{
+				java.util.ArrayList<Class<?>> entries = new java.util.ArrayList<>();
+				java.util.Enumeration<java.util.jar.JarEntry> files = archive.entries();
+				while (files.hasMoreElements())
+				{
+					String name = files.nextElement().getName();
+					if (!name.startsWith("net/runelite/client/plugins/microbot/") || !name.endsWith(".class") || name.contains("$")) continue;
+					Class<?> type = loader.loadClass(name.substring(0, name.length() - 6).replace('/', '.'));
+					if (type.getAnnotation(PluginDescriptor.class) != null) entries.add(type);
+				}
+				assertTrue(jar + " contains no plugins", !entries.isEmpty());
+				List<Plugin> loaded = manager.loadPlugins(entries, null);
+				assertEquals(jar.toString(), entries.size(), loaded.size());
+				for (Plugin plugin : loaded)
+				{
+					if (!plugin.getClass().getSimpleName().equals("AIOFighterPlugin")) continue;
+					Class<?> bankerType = loader.loadClass("net.runelite.client.plugins.microbot.aiofighter.bank.BankerScript");
+					Object banker = plugin.getInjector().getInstance(bankerType);
+					java.lang.reflect.Field setupField = bankerType.getDeclaredField("inventorySetupsPlugin");
+					setupField.setAccessible(true);
+					Object coreSetups = manager.getPlugins().stream()
+						.filter(value -> value instanceof net.runelite.client.plugins.microbot.inventorysetups.MInventorySetupsPlugin)
+						.findFirst().orElseThrow();
+					assertSame("AIO Fighter must receive the loaded Inventory Setups instance", coreSetups, setupField.get(banker));
+				}
+				System.out.println("STAGED_HUB_LOADING PASS " + jar.getName());
+			}
+			catch (Throwable failure)
+			{
+				failures.add(jar.getName() + ": " + failure);
+				System.out.println("STAGED_HUB_LOADING FAIL " + jar.getName() + ": " + failure);
+			}
+		}
+		assertTrue(failures.toString(), failures.isEmpty());
+	}
+
 	//Added to ignore because it made PluginDescriptor name tags fail due to attempting to create a file with illegal characters
 	//ex - C:\Users\Brent\AppData\Local\Temp\junit1285191539980835487\junit7101190188546249539\<html>[<font color=#1E90FF>J<\font>] Auto Chinchompa.dot
 	//Will not be looking for a fix cause fuck tests - OG
 	@Ignore
 	public void dumpGraph() throws Exception
 	{
-		PluginManager pluginManager = new PluginManager(false, null, null, null, null);
+		PluginManager pluginManager = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
 		pluginManager.loadCorePlugins();
 
 		Injector graphvizInjector = Guice.createInjector(new GraphvizModule());

@@ -307,6 +307,15 @@ public class BreakHandlerScript extends Script {
      * Break should start but waiting for safe conditions (not in combat/interacting).
      */
     private void handleBreakRequestedState() {
+        if (BreakPreparation.isAborted()) {
+            log.warn("Break preparation failed or timed out; skipping this break");
+            initializeNextBreakTimer();
+            transitionToState(BreakHandlerState.WAITING_FOR_BREAK);
+            return;
+        }
+        if (BreakPreparation.shouldDeferBreak()) {
+            return;
+        }
         // Check for timeout on waiting for safe conditions
         if (safeConditionWaitStartTime != null) {
             long waitTime = Duration.between(safeConditionWaitStartTime, Instant.now()).toMillis();
@@ -694,6 +703,9 @@ public class BreakHandlerScript extends Script {
      * This method is thread-safe and can be called from any thread.
      */
     private static void transitionToState(BreakHandlerState newState) {
+        if (newState == BreakHandlerState.WAITING_FOR_BREAK) {
+            BreakPreparation.finishBreak();
+        }
         BreakHandlerState oldState = currentState.get();
         if (oldState != newState) {
             log.debug("State transition: {} -> {}", oldState, newState);

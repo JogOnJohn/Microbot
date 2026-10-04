@@ -15,8 +15,10 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.ProtocolFamily;
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -128,19 +130,33 @@ public class UdsHttpServerTest {
     private String roundTrip(String request) throws Exception {
         try (SocketChannel client = openUnixChannel()) {
             client.connect(newUnixAddress(socketPath));
-            client.write(ByteBuffer.wrap(request.getBytes(StandardCharsets.ISO_8859_1)));
+            ByteBuffer requestBytes = ByteBuffer.wrap(request.getBytes(StandardCharsets.ISO_8859_1));
+            while (requestBytes.hasRemaining()) client.write(requestBytes);
 
             ByteBuffer buf = ByteBuffer.allocate(8 * 1024);
-            int read;
             StringBuilder out = new StringBuilder();
-            while ((read = client.read(buf)) > 0) {
-                buf.flip();
-                byte[] chunk = new byte[read];
-                buf.get(chunk);
-                out.append(new String(chunk, StandardCharsets.ISO_8859_1));
-                buf.clear();
+            client.configureBlocking(false);
+            try (Selector selector = Selector.open()) {
+                client.register(selector, SelectionKey.OP_READ);
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (true) {
+                    int read = client.read(buf);
+                    if (read < 0) return out.toString();
+                    if (read > 0) {
+                        buf.flip();
+                        byte[] chunk = new byte[read];
+                        buf.get(chunk);
+                        out.append(new String(chunk, StandardCharsets.ISO_8859_1));
+                        buf.clear();
+                    }
+                    long remaining = deadline - System.nanoTime();
+                    if (remaining <= 0) {
+                        throw new SocketTimeoutException("UDS response did not reach EOF: " + out);
+                    }
+                    selector.select(Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+                    selector.selectedKeys().clear();
+                }
             }
-            return out.toString();
         }
     }
 

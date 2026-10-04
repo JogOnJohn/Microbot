@@ -43,7 +43,7 @@ public class GrandExchangeRequest
 	/**
 	 * The price per item for the request.
 	 */
-	private final int price;
+	private final long price;
 
 	/**
 	 * An optional percentage adjustment to the price (e.g., 5, -5, 22, -22).

@@ -258,6 +258,11 @@ public class NpcAggroAreaPlugin extends Plugin
 
 	private boolean isNpcMatch(NPC npc)
 	{
+		if (client.getLocalPlayer() == null)
+		{
+			return false;
+		}
+
 		NPCComposition composition = npc.getTransformedComposition();
 		if (composition == null)
 		{
@@ -302,7 +307,7 @@ public class NpcAggroAreaPlugin extends Plugin
 	private void scanNpcs()
 	{
 		WorldView wv = client.getTopLevelWorldView();
-		if (wv == null)
+		if (wv == null || client.getLocalPlayer() == null)
 		{
 			return;
 		}
@@ -346,6 +351,18 @@ public class NpcAggroAreaPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		if (client.getLocalPlayer() == null)
+		{
+			return;
+		}
+
+		if (loggingIn)
+		{
+			onLogin();
+			loggingIn = false;
+			scanNpcs();
+		}
+
 		WorldPoint newLocation = client.getLocalPlayer().getWorldLocation();
 
 		if (active && notifyOnce && Instant.now().isAfter(endTime))
@@ -483,10 +500,18 @@ public class NpcAggroAreaPlugin extends Plugin
 		switch (event.getGameState())
 		{
 			case LOGGED_IN:
+				// Microbot may publish LOGGED_IN before the local player is available.
+				// Keep the pending login until the first player-backed game tick so saved
+				// aggression state is loaded and cleared exactly once.
+				if (client.getLocalPlayer() == null)
+				{
+					break;
+				}
+
 				if (loggingIn)
 				{
-					loggingIn = false;
 					onLogin();
+					loggingIn = false;
 				}
 
 				scanNpcs();
@@ -497,6 +522,7 @@ public class NpcAggroAreaPlugin extends Plugin
 				break;
 
 			case LOGIN_SCREEN:
+				loggingIn = false;
 				if (lastPlayerLocation != null)
 				{
 					saveConfig();
