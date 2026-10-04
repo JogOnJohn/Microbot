@@ -180,6 +180,16 @@ public class LootTrackerPluginTest
 	}
 
 	@Test
+	public void testLoginChatBeforeLocalPlayer()
+	{
+		when(client.getLocalPlayer()).thenReturn(null);
+		lootTrackerPlugin.onChatMessage(new ChatMessage(null, ChatMessageType.GAMEMESSAGE,
+			"", "Welcome to Old School RuneScape.", "", 0));
+		org.mockito.Mockito.verify(lootTrackerPlugin, org.mockito.Mockito.never())
+			.addLoot(any(), anyInt(), any(), any(), any(Collection.class));
+	}
+
+	@Test
 	public void testPickPocket()
 	{
 		ChatMessage chatMessage = new ChatMessage(null, ChatMessageType.SPAM, "", "You pick the hero's pocket.", "", 0);

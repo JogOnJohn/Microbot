@@ -1028,6 +1028,12 @@ public class LootTrackerPlugin extends Plugin
 	@Subscribe
 	public void onChatMessage(ChatMessage event)
 	{
+		// Login chat can arrive before the local player has been created.
+		if (client.getLocalPlayer() == null)
+		{
+			return;
+		}
+
 		var chatType = event.getType();
 		if (chatType != ChatMessageType.GAMEMESSAGE && chatType != ChatMessageType.SPAM
 			&& chatType != ChatMessageType.MESBOX)
