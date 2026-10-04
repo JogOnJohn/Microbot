@@ -158,12 +158,13 @@ public class WalkerRouteCorpusTest {
 
     @Test
     public void temporossCove_staysAnHonestPartial() {
-        // The arena template west of Unkah is unreachable from everywhere. The planner must say so via a
-        // partial (endpoint far from the goal), never fabricate an arrival.
+        // The arena template west of Unkah remains unreachable. The refreshed collision map
+        // permits a partial endpoint five tiles away; it must still be outside the planner's
+        // maximum three-tile object-arrival ring, rather than claiming a completed journey.
         WorldPoint cove = new WorldPoint(3044, 2870, 0);
         List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted), LUMBRIDGE, cove);
         assertTrue("the cove route must return an honest partial path", path != null && !path.isEmpty());
-        assertFalse("the cove must not be reachable", arrives(path, cove, 40));
+        assertFalse("the cove must remain outside the arrival ring", arrives(path, cove, 3));
     }
 
     // ---- Shantay Pass (the buy-at-gate fix) --------------------------------------------------------

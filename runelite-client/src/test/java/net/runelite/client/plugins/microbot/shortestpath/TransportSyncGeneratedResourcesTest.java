@@ -19,6 +19,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Properties;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.security.MessageDigest;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -66,16 +70,19 @@ public class TransportSyncGeneratedResourcesTest
 	}
 
 	@Test
-	public void generatedCatalogParsesWithoutCapabilityCollapse() throws IOException
+    public void generatedCatalogParsesWithoutCapabilityCollapse() throws Exception
 	{
 		String generatedProperty = System.getProperty("microbot.transport.generated.dir");
 		// Staged output only exists after running the converter; generic test sweeps
 		// (runUnitTests etc.) must skip this, not fail. validateTransportSync sets the property.
 		Assume.assumeTrue("skipped: run via :client:validateTransportSync", generatedProperty != null);
 		Path generatedRoot = Paths.get(generatedProperty);
-		assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
+        assertTrue("generated transport directory is missing: " + generatedRoot, Files.isDirectory(generatedRoot));
+        validateProvenance(generatedRoot);
 
-		CollisionMap collisionMap = new CollisionMap(SplitFlagMap.fromResources());
+        CollisionMap collisionMap = new CollisionMap(SplitFlagMap.fromResources());
+        CollisionMap candidateCollisionMap = new CollisionMap(SplitFlagMap.fromInputStream(
+                Files.newInputStream(generatedRoot.resolve("collision-map.zip"))));
 		int totalRows = 0;
 		for (Map.Entry<String, TransportType> category : CATEGORIES.entrySet())
 		{
@@ -91,16 +98,66 @@ public class TransportSyncGeneratedResourcesTest
 			// Ratchet against the shipped collision map: a sync must not introduce transports
 			// whose endpoints land on fully blocked tiles (door-into-wall = incompatible
 			// transport/collision revisions). Existing offenders are tolerated but not added to.
-			int generatedBlocked = countBlockedEndpoints(generated, category.getValue(), collisionMap);
+            int generatedBlocked = countBlockedEndpoints(generated, category.getValue(), candidateCollisionMap);
 			int baselineBlocked = countBlockedEndpoints(baseline, category.getValue(), collisionMap);
 			assertTrue(filename + " added transports with collision-blocked endpoints: generated=" +
-				generatedBlocked + " baseline=" + baselineBlocked, generatedBlocked <= baselineBlocked);
+                generatedBlocked + " baseline=" + baselineBlocked + " new=" + newBlockedEndpoints(generated, baseline, category.getValue(), candidateCollisionMap, collisionMap), generatedBlocked <= baselineBlocked);
 			totalRows += generatedRows;
 		}
 		assertTrue("expected the full transport catalog, parsed only " + totalRows + " rows", totalRows > 7_000);
 	}
 
-	private static int countBlockedEndpoints(List<String> lines, TransportType type, CollisionMap collisionMap)
+    private static Set<WorldPoint> newBlockedEndpoints(List<String> candidate, List<String> baseline,
+            TransportType type, CollisionMap candidateMap, CollisionMap baselineMap) {
+        Set<WorldPoint> result = new HashSet<>();
+        for (Transport transport : parseRows(candidate, type)) {
+            if (blockedEndpoint(transport.getOrigin(), candidateMap) > 0) result.add(transport.getOrigin());
+            if (blockedEndpoint(transport.getDestination(), candidateMap) > 0) result.add(transport.getDestination());
+        }
+        for (Transport transport : parseRows(baseline, type)) {
+            if (blockedEndpoint(transport.getOrigin(), baselineMap) > 0) result.remove(transport.getOrigin());
+            if (blockedEndpoint(transport.getDestination(), baselineMap) > 0) result.remove(transport.getDestination());
+        }
+        return result;
+    }
+
+    private static void validateProvenance(Path root) throws Exception {
+        Properties provenance = new Properties();
+        try (InputStream stream = Files.newInputStream(root.resolve("sync-provenance.properties"))) {
+            provenance.load(stream);
+        }
+        assertEquals("candidate collision archive does not match its pinned hash",
+                provenance.getProperty("candidate_collision_map_sha256"),
+                hex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(root.resolve("collision-map.zip")))));
+        List<String> filenames = new ArrayList<>(CATEGORIES.keySet());
+        filenames.add("collision-map.zip");
+        for (String local : Arrays.asList("blocked_edges.tsv", "dangerous_tiles.tsv", "npcs.tsv", "restrictions.tsv")) {
+            filenames.add(local);
+            try (InputStream stream = Transport.class.getResourceAsStream(local)) {
+                assertNotNull(local, stream);
+                org.junit.Assert.assertArrayEquals("local-only resource was modified: " + local,
+                        stream.readAllBytes(), Files.readAllBytes(root.resolve(local)));
+            }
+        }
+        Collections.sort(filenames);
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        for (String filename : filenames) {
+            digest.update(filename.getBytes(StandardCharsets.UTF_8));
+            digest.update((byte) 0);
+            digest.update(Files.readAllBytes(root.resolve(filename)));
+            digest.update((byte) 0);
+        }
+        assertEquals("staged catalog differs from the reviewed payload",
+                provenance.getProperty("generated_payload_sha256"), hex(digest.digest()));
+    }
+
+    private static String hex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte value : bytes) result.append(String.format("%02x", value & 255));
+        return result.toString();
+    }
+
+    private static int countBlockedEndpoints(List<String> lines, TransportType type, CollisionMap collisionMap)
 	{
 		int blocked = 0;
 		for (Transport transport : parseRows(lines, type))
@@ -118,7 +175,13 @@ public class TransportSyncGeneratedResourcesTest
 		{
 			return 0;
 		}
-		return collisionMap.isBlocked(point.getX(), point.getY(), point.getPlane()) ? 1 : 0;
+        int x = point.getX(), y = point.getY(), z = point.getPlane();
+        if (!collisionMap.isBlocked(x, y, z)) return 0;
+        // CollisionMap.getNeighbors enters an object-origin tile from a walkable cardinal
+        // neighbour and permits leaving a blocked landing tile by the same mechanism.
+        if (!collisionMap.isBlocked(x + 1, y, z) || !collisionMap.isBlocked(x - 1, y, z)
+                || !collisionMap.isBlocked(x, y + 1, z) || !collisionMap.isBlocked(x, y - 1, z)) return 0;
+        return 1;
 	}
 
 	private static List<Transport> parseRows(List<String> lines, TransportType type)
@@ -174,7 +237,17 @@ public class TransportSyncGeneratedResourcesTest
 			{
 				fieldMap.put(headers[i], i < fields.length ? fields[i] : "");
 			}
-			Transport transport = new Transport(fieldMap, expectedType);
+            Transport transport = new Transport(fieldMap, expectedType);
+            String items = fieldMap.getOrDefault("Items", fieldMap.getOrDefault("Item IDs", "")).trim();
+            if (!items.isEmpty()) {
+                assertTrue(filename + ":" + lineNumber + " item requirements were dropped: " + items,
+                        transport.getParsedItemRequirements() != null || !transport.getItemIdRequirements().isEmpty());
+            }
+            String quests = fieldMap.getOrDefault("Quests", "").trim();
+            if (!quests.isEmpty()) {
+                assertEquals(filename + ":" + lineNumber + " quest requirements were dropped: " + quests,
+                        quests.split(";").length, transport.getQuests().size());
+            }
 			assertNotNull(filename + ":" + lineNumber + " produced no type", transport.getType());
 			assertTrue(filename + ":" + lineNumber + " changed handler classification",
 				transport.getType() == expectedType ||

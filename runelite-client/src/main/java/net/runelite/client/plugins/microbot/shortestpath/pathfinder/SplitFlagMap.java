@@ -6,6 +6,7 @@ import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
 import net.runelite.client.plugins.microbot.shortestpath.Util;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -100,8 +101,12 @@ public class SplitFlagMap {
     }
 
     public static SplitFlagMap fromResources() {
+        return fromInputStream(ShortestPathPlugin.class.getResourceAsStream("collision-map.zip"));
+    }
+
+    public static SplitFlagMap fromInputStream(InputStream stream) {
         Map<Integer, byte[]> compressedRegions = new HashMap<>();
-        try (ZipInputStream in = new ZipInputStream(ShortestPathPlugin.class.getResourceAsStream("collision-map.zip"))) {
+        try (ZipInputStream in = new ZipInputStream(stream)) {
             int minX = Integer.MAX_VALUE;
             int minY = Integer.MAX_VALUE;
             int maxX = 0;

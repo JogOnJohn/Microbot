@@ -7,10 +7,13 @@ import net.runelite.api.*;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.api.gameval.DBTableID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.plugins.itemcharges.ItemChargeConfig;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.shortestpath.*;
+import net.runelite.client.plugins.microbot.shortestpath.transport.requirement.ItemRequirement;
+import net.runelite.client.plugins.microbot.shortestpath.transport.requirement.Unlock;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionOverlay;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionSnapshot;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionView;
@@ -234,6 +237,10 @@ public class PathfinderConfig {
     private volatile boolean useBankItems = false;
 
     private Set<Integer> refreshAvailableItemIds;
+    private Map<Integer, Integer> refreshItemCounts;
+    private Set<Unlock> declaredUnlocks = Collections.emptySet();
+    private int[] refreshExtraLevels = new int[3];
+    private int maximumQuestPoints;
     private int[] refreshBoostedLevels;
     private Map<String, int[]> refreshCurrencyCache;
     // Varplayer values snapshot for the current refreshTransports pass. Without it, every varp
@@ -405,6 +412,10 @@ public class PathfinderConfig {
         useGrappleShortcuts = ShortestPathPlugin.override("useGrappleShortcuts", config.useGrappleShortcuts());
         useBoats = ShortestPathPlugin.override("useBoats", config.useBoats());
         useCanoes = ShortestPathPlugin.override("useCanoes", config.useCanoes());
+        declaredUnlocks = EnumSet.noneOf(Unlock.class);
+        if (ShortestPathPlugin.override("unlockCanoeAxe", config.unlockCanoeAxe())) declaredUnlocks.add(Unlock.CANOE_AXE);
+        if (ShortestPathPlugin.override("unlockDragontoothPassage", config.unlockDragontoothPassage())) declaredUnlocks.add(Unlock.DRAGONTOOTH);
+        if (ShortestPathPlugin.override("unlockXericsHonour", config.unlockXericsHonour())) declaredUnlocks.add(Unlock.XERICS_HONOUR);
         useCharterShips = ShortestPathPlugin.override("useCharterShips", config.useCharterShips());
         useShips = ShortestPathPlugin.override("useShips", config.useShips());
         useMinecarts = ShortestPathPlugin.override("useMinecarts", config.useMinecarts());
@@ -530,6 +541,17 @@ public class PathfinderConfig {
                 && QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.TWILIGHTS_PROMISE));
 
         final Rs2LeaguesTransport.LeaguesContext leaguesCtx = Rs2LeaguesTransport.leaguesContext();
+        Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            refreshExtraLevels = new int[]{client.getTotalLevel(),
+                    client.getLocalPlayer() == null ? 0 : client.getLocalPlayer().getCombatLevel(),
+                    client.getVarpValue(VarPlayer.QUEST_POINTS)};
+            if (maximumQuestPoints == 0) {
+                maximumQuestPoints = client.getDBTableRows(DBTableID.Quest.ID).stream()
+                        .filter(row -> (Integer) client.getDBTableField(row, DBTableID.Quest.COL_RELEASE_TYPE, 0)[0] != 0)
+                        .mapToInt(row -> (Integer) client.getDBTableField(row, DBTableID.Quest.COL_QUESTPOINTS, 0)[0]).sum();
+            }
+            return true;
+        });
         final int refreshCacheKeyHash = computeTransportRefreshCacheKeyHash(target, leaguesCtx);
 
         TransportRefreshSnapshot snap = transportRefreshSnapshots.get(refreshCacheKeyHash);
@@ -608,12 +630,9 @@ public class PathfinderConfig {
 
         long cacheStart = System.currentTimeMillis();
         refreshAvailableItemIds = new HashSet<>();
+        refreshItemCounts = collectAvailableItemCounts();
         refreshCurrencyCache = new HashMap<>();
-        Rs2Inventory.items().forEach(item -> refreshAvailableItemIds.add(item.getId()));
-        Rs2Equipment.all().forEach(item -> refreshAvailableItemIds.add(item.getId()));
-        if (useBankItems) {
-            Rs2Bank.getAll().forEach(item -> refreshAvailableItemIds.add(item.getId()));
-        }
+        refreshAvailableItemIds.addAll(refreshItemCounts.keySet());
 
         Set<Integer> varbitIds = new HashSet<>();
         List<int[]> varbitConditions = new ArrayList<>();
@@ -649,6 +668,13 @@ public class PathfinderConfig {
                     t.getItemIdRequirements().stream()
                             .filter(Objects::nonNull)
                             .forEach(relevantItemIds::addAll);
+                }
+                if (t.getParsedItemRequirements() != null) {
+                    for (ItemRequirement requirement : t.getParsedItemRequirements().getRequirements()) {
+                        if (requirement.getItemIds() != null) {
+                            for (int id : requirement.getItemIds()) relevantItemIds.add(id);
+                        }
+                    }
                 }
                 if (t.getCurrencyAmount() > 0 && t.getCurrencyName() != null && !t.getCurrencyName().isEmpty()) {
                     relevantCurrencyNames.add(t.getCurrencyName());
@@ -803,6 +829,7 @@ public class PathfinderConfig {
         emitTeleportAudit(teleportAuditRejected);
 
         refreshAvailableItemIds = null;
+        refreshItemCounts = null;
         refreshBoostedLevels = null;
         refreshCurrencyCache = null;
         refreshVarplayerValues = null;
@@ -1490,11 +1517,11 @@ public class PathfinderConfig {
                     int bankCount = useBankItems ? Rs2Bank.count(name) : 0;
                     return new int[]{invCount, bankCount};
                 });
-                if (cached[0] < transport.getCurrencyAmount() && cached[1] < transport.getCurrencyAmount()) {
+                if ((long) cached[0] + cached[1] < transport.getCurrencyAmount()) {
                     log.debug("Transport ( O: {} D: {} ) requires {} x {}", transport.getOrigin(), transport.getDestination(), transport.getCurrencyAmount(), transport.getCurrencyName());
                     return false;
                 }
-            } else if (!Rs2Inventory.hasItemAmount(transport.getCurrencyName(), transport.getCurrencyAmount())
+        } else if (!Rs2Inventory.hasItemAmount(transport.getCurrencyName(), transport.getCurrencyAmount())
                     && !(useBankItems && Rs2Bank.count(transport.getCurrencyName()) >= transport.getCurrencyAmount())) {
                 log.debug("Transport ( O: {} D: {} ) requires {} x {}", transport.getOrigin(), transport.getDestination(), transport.getCurrencyAmount(), transport.getCurrencyName());
                 return false;
@@ -1527,7 +1554,7 @@ public class PathfinderConfig {
         }
 
         // Used for Generic Item Requirements
-        if (!transport.getItemIdRequirements().isEmpty()) {
+        if (transport.getParsedItemRequirements() != null || !transport.getItemIdRequirements().isEmpty()) {
             boolean hasRequiredItems = hasRequiredItems(transport);
             if (!hasRequiredItems) {
                 log.debug("Transport ( O: {} D: {} ) requires items {}", transport.getOrigin(), transport.getDestination(), transport.getItemIdRequirements().stream().flatMap(Set::stream).collect(Collectors.toSet()));
@@ -1557,6 +1584,9 @@ public class PathfinderConfig {
      * Checks if the player has all the required skill levels for the transport
      */
     private boolean hasRequiredLevels(Transport transport) {
+        if (transport.isRequiresMaximumTotalLevel() && refreshExtraLevels[0] < 99 * SKILLS.length) return false;
+        if (transport.getRequiredCombatLevel() > refreshExtraLevels[1]) return false;
+        if (transport.isRequiresMaximumQuestPoints() && (maximumQuestPoints == 0 || refreshExtraLevels[2] < maximumQuestPoints)) return false;
         int[] requiredLevels = transport.getSkillLevels();
         if (refreshBoostedLevels != null) {
             for (int i = 0; i < requiredLevels.length; i++) {
@@ -1824,16 +1854,19 @@ public class PathfinderConfig {
     private boolean hasRequiredItems(Transport transport) {
         if (requiresChronicle(transport)) return hasChronicleCharges();
 
+        if (transport.getParsedItemRequirements() != null) {
+            Map<Integer, Integer> counts = refreshItemCounts != null ? refreshItemCounts : collectAvailableItemCounts();
+            return transport.getParsedItemRequirements().isSatisfiedBy(counts, Collections.emptySet(), Integer.MAX_VALUE, declaredUnlocks);
+        }
+
         if (refreshAvailableItemIds != null) {
             return transport.getItemIdRequirements()
                     .stream()
-                    .flatMap(Collection::stream)
-                    .anyMatch(refreshAvailableItemIds::contains);
+                    .allMatch(alternatives -> alternatives.stream().anyMatch(refreshAvailableItemIds::contains));
         }
         return transport.getItemIdRequirements()
                 .stream()
-                .flatMap(Collection::stream)
-                .anyMatch(itemId -> Rs2Equipment.isWearing(itemId) || Rs2Inventory.hasItem(itemId) || (ShortestPathPlugin.getPathfinderConfig().useBankItems && Rs2Bank.hasItem(itemId)));
+                .allMatch(alternatives -> alternatives.stream().anyMatch(itemId -> Rs2Equipment.isWearing(itemId) || Rs2Inventory.hasItem(itemId) || (useBankItems && Rs2Bank.hasItem(itemId))));
     }
 
     /**
@@ -1844,6 +1877,23 @@ public class PathfinderConfig {
                 .stream()
                 .flatMap(Collection::stream)
                 .anyMatch(itemId -> Rs2Equipment.isWearing(itemId) || Rs2Inventory.hasItem(itemId));
+    }
+
+    private Map<Integer, Integer> collectAvailableItemCounts() {
+        return collectItemCounts(useBankItems);
+    }
+
+    public boolean hasCarriedTransportItems(Transport transport) {
+        return transport.getParsedItemRequirements().isSatisfiedBy(collectItemCounts(false),
+                Collections.emptySet(), Integer.MAX_VALUE, declaredUnlocks);
+    }
+
+    private Map<Integer, Integer> collectItemCounts(boolean includeBank) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        Rs2Inventory.items().forEach(item -> counts.merge(item.getId(), item.getQuantity(), Integer::sum));
+        Rs2Equipment.all().forEach(item -> counts.merge(item.getId(), item.getQuantity(), Integer::sum));
+        if (includeBank) Rs2Bank.getAll().forEach(item -> counts.merge(item.getId(), item.getQuantity(), Integer::sum));
+        return counts;
     }
 
 
@@ -2189,6 +2239,8 @@ public class PathfinderConfig {
         WorldPoint effectiveTarget = target != null ? target : Rs2Walker.getCurrentTarget();
         return Objects.hash(
                 packTransportRefreshToggleBits(),
+                declaredUnlocks,
+                Arrays.hashCode(refreshExtraLevels),
                 useTeleportationItems,
                 ignoreTeleportAndItems,
                 useBankItems,

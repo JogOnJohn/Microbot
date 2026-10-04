@@ -174,3 +174,10 @@ mapsquare entries: `21_56`, `21_57`, and `53_48`.
 The refresh passed the standalone Python suite, staged payload validation, golden-route corpus,
 and transport resource loading before promotion from `spike/shortest-path-data-sync` to
 `playable/shortest-path`.
+
+## 2026-10-05 transport and collision refresh
+
+See `docs/shortest-path-upstream-review-20261005.md` for the exact official pair, selective source
+adapters, 40 durable overrides, collision hash, compatibility exclusions and validation scope.
+The converter's `docs/UPDATE_20261005.md` records matching pins and conversion changes.
+Build a new release artifact without changing or restarting the pinned interactive client.
