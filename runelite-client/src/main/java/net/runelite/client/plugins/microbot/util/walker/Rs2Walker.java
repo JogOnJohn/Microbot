@@ -60,6 +60,8 @@ import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.leaguetransport.LeaguesRegion;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.walker.banking.TransportWithdrawalConfirmation;
+import net.runelite.client.plugins.microbot.util.walker.banking.WithdrawNoteModePolicy;
 import net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorClassifier;
 import net.runelite.client.plugins.microbot.util.walker.door.DoorProbeContext;
 import net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorDetection;
@@ -7910,7 +7912,7 @@ public class Rs2Walker {
 			if (w == null) continue;
 			scannedWalls++;
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(w);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -7936,7 +7938,7 @@ public class Rs2Walker {
 			if (g == null) continue;
 			scannedGames++;
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(g);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8001,7 +8003,7 @@ public class Rs2Walker {
 			if (!Rs2GameObject.hasLineOfSight(playerLoc, w)) continue;
 
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(w);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8038,7 +8040,7 @@ public class Rs2Walker {
 			if (!Rs2GameObject.hasLineOfSight(playerLoc, g)) continue;
 
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(g);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8134,7 +8136,7 @@ public class Rs2Walker {
 				}
 
 				ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(w);
-				if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+				if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 				if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 				String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8173,7 +8175,7 @@ public class Rs2Walker {
 				}
 
 				ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(g);
-				if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+				if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 				if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 				String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8623,7 +8625,7 @@ public class Rs2Walker {
 				if (object == null) continue;
 
 				ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
-				if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+				if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 				if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 				// Gate by "door-like" name or by having a known door-like action.
@@ -13053,30 +13055,54 @@ public class Rs2Walker {
             // Step 3: Withdraw missing transport items
             if (!missingItemsWithQuantities.isEmpty()) {
                 log.debug("Withdrawing transport items with quantities: " + missingItemsWithQuantities);
-
-                // Withdraw the correct amount of each unique item
+                boolean restoreNoted = WithdrawNoteModePolicy.shouldSwitchToItemMode(
+                        WithdrawNoteModePolicy.requiresItemMode(
+                                missingItemsWithQuantities.keySet(), itemId -> {
+                                    Rs2ItemModel row = Rs2Bank.getBankItemForSavedId(itemId);
+                                    return row != null && row.isStackable();
+                                }), Rs2Bank.hasWithdrawAsNote());
+                try {
+                    if (restoreNoted && !Rs2Bank.setWithdrawAsItem()) {
+                        return WalkerState.EXIT;
+                    }
                 for (Map.Entry<Integer, Integer> entry : missingItemsWithQuantities.entrySet()) {
                     int itemId = entry.getKey();
                     int amountNeeded = entry.getValue();
-                    int currentCount = Rs2Inventory.count(itemId);
                     int amountToWithdraw = Math.max(0, amountNeeded );
 
                     if (amountToWithdraw > 0) {
                         if (Rs2Bank.hasBankItem(itemId, amountToWithdraw)) {
                             log.debug("Withdrawing {} x {} (item ID: {})", amountToWithdraw, itemId, itemId);
-                            Rs2Bank.withdrawX(itemId, amountToWithdraw);
-                            sleepUntil(() -> Rs2Inventory.count(itemId) >= currentCount + amountToWithdraw, 3000);
+                            Rs2ItemModel row = Rs2Bank.getBankItemForSavedId(itemId);
+                            TransportWithdrawalConfirmation confirmation =
+                                    TransportWithdrawalConfirmation.start(
+                                            itemId, row == null ? -1 : row.getId(), amountToWithdraw, Rs2Inventory::itemQuantity);
+                            if (!Rs2Bank.withdrawX(itemId, amountToWithdraw)) {
+                                return WalkerState.EXIT;
+                            }
+                            sleepUntil(() -> confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
+                                            != TransportWithdrawalConfirmation.State.PENDING,
+                                    TransportWithdrawalConfirmation.TIMEOUT_MS);
+                            if (confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
+                                    != TransportWithdrawalConfirmation.State.CONFIRMED) {
+                                log.warn("Required transport withdrawal was not observed for {}", itemId);
+                                return WalkerState.EXIT;
+                            }
                         } else {
                             log.warn("Required transport item {} not found in bank (need {} but bank has less)",
                                     itemId, amountToWithdraw);
+                            return WalkerState.EXIT;
                         }
                     } else {
-                        log.debug("Already have enough of item {}: {} (need {})", itemId, currentCount, amountNeeded);
+                        log.debug("No withdrawal needed for item {}", itemId);
                     }
                 }
 
-                // Wait a bit for all withdrawals to complete
-                sleepTickJitter(1);
+                } finally {
+                    if (restoreNoted && !Rs2Bank.setWithdrawAsNote()) {
+                        log.warn("Failed to restore bank noted withdrawal mode");
+                    }
+                }
             }
 
             // Step 4: Close bank

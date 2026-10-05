@@ -1468,6 +1468,19 @@ public class PathfinderConfig {
     }
 
     private boolean useTransport(Transport transport) {
+        // The Zanaris shed is a quest/staff portal, not an unrestricted opening door.
+        // Keep the generated transport resource unchanged for converter reproducibility.
+        if (transport.getObjectId() == 2406
+                && new WorldPoint(3202, 3169, 0).equals(transport.getOrigin())
+                && new WorldPoint(2452, 4473, 0).equals(transport.getDestination())) {
+            boolean membersWorld = Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    client.getWorldType().contains(WorldType.MEMBERS)).orElse(false);
+            boolean hasStaff = Rs2Inventory.contains(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
+                    || Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
+            if (!membersWorld || !QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.LOST_CITY)) || !hasStaff) {
+                return false;
+            }
+        }
         if (isTransportRuntimeBlocked(transport)) {
             log.debug("Transport ( O: {} D: {} ) is runtime-blocked after a failed execution", transport.getOrigin(), transport.getDestination());
             return false;

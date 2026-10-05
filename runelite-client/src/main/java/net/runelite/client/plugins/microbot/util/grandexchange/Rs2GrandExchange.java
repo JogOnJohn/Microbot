@@ -234,7 +234,7 @@ public class Rs2GrandExchange {
 
                 setPrice(request.getPrice());
                 if (request.getPercent() != 0) {
-                    adjustPriceByPercent(request.getPercent());
+                    if (!adjustPriceByPercent(request.getPercent())) return false;
                 }
                 if (!setQuantity(request.getQuantity())) {
                     //failed to set quantity
@@ -257,7 +257,7 @@ public class Rs2GrandExchange {
                     setPrice(request.getPrice());
                 }
                 if (request.getPercent() != 0) {
-                    adjustPriceByPercent(request.getPercent());
+                    if (!adjustPriceByPercent(request.getPercent())) return false;
                 }
                 if (request.getQuantity() > 0) {
                     if (!setQuantity(request.getQuantity())) {
@@ -477,9 +477,9 @@ public class Rs2GrandExchange {
      * @param percent the percentage by which to adjust the offer price; positive to increase, negative to decrease,
      *                and {@code 0} will result in no action
      */
-    private static void adjustPriceByPercent(int percent) {
+    private static boolean adjustPriceByPercent(int percent) {
         if (percent == 0) {
-            return;
+            return true;
         }
 
         boolean isIncrease = percent > 0;
@@ -493,15 +493,17 @@ public class Rs2GrandExchange {
 
             if (adjust5Widget == null) {
                 Microbot.log("Unable to find +-5% button widget.");
-                return;
+                return false;
             }
 
             int times = absPercent / 5;
-            IntStream.range(0, times).forEach(i -> {
+            for (int i = 0; i < times; i++) {
                 long priceBeforeClick = getOfferPrice();
-                Rs2Widget.clickWidget(adjust5Widget);
-                sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(priceBeforeClick), 1600);
-            });
+                if (!Rs2Widget.clickWidget(adjust5Widget)
+                        || !sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(priceBeforeClick), 1600)) {
+                    return false;
+                }
+            }
         } else {
             Widget adjustXWidget = isIncrease
                     ? GrandExchangeWidget.getPricePerItemButton_PlusXPercent()
@@ -509,7 +511,7 @@ public class Rs2GrandExchange {
 
             if (adjustXWidget == null) {
                 Microbot.log("Unable to find +-X% button widget.");
-                return;
+                return false;
             }
 
             int currentPercent = Rs2UiHelper.extractNumber(adjustXWidget.getText());
@@ -533,20 +535,21 @@ public class Rs2GrandExchange {
                     Microbot.doInvoke(menuEntry, bounds);
                 }
 
-                sleepUntil(() -> Rs2Widget.hasWidget("Set a percentage to decrease/increase"), 2000);
+                if (!sleepUntil(() -> Rs2Widget.hasWidget("Set a percentage to decrease/increase"), 2000)) return false;
                 Rs2Keyboard.typeString(Integer.toString(absPercent));
                 Rs2Keyboard.enter();
-                sleepUntil(() -> {
+                if (!sleepUntil(() -> {
                     Widget updatedWidget = isIncrease
                             ? GrandExchangeWidget.getPricePerItemButton_PlusXPercent()
                             : GrandExchangeWidget.getPricePerItemButton_MinusXPercent();
                     return updatedWidget != null && Rs2UiHelper.extractNumber(updatedWidget.getText()) != currentPercent;
-                }, 2000);
+                }, 2000)) return false;
             }
 
-            Rs2Widget.clickWidget(adjustXWidget);
-            sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(basePrice), 2000);
+            return Rs2Widget.clickWidget(adjustXWidget)
+                    && sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(basePrice), 2000);
         }
+        return true;
     }
 
 

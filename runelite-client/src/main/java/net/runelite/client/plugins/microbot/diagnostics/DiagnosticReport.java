@@ -101,6 +101,10 @@ public final class DiagnosticReport
 		String text = HTML_TAG.matcher(raw).replaceAll(" ");
 		text = CONTROL.matcher(text).replaceAll(" ");
 		text = URL_CREDENTIALS.matcher(text).replaceAll("$1[redacted]@");
+		// Exception paths can contain spaces; conservatively redact through their quote or line end.
+		text = Pattern.compile("(?i)(?:[a-z]:\\\\|\\\\\\\\)(?:(?!\\s+(?:and|or)\\s)[^\\r\\n\"',;)])*").matcher(text).replaceAll("[path]");
+		text = Pattern.compile("(?i)(?<![\\w.:/])~?/(?:(?!\\s+(?:and|or)\\s)[^\\r\\n\"',;)])*")
+			.matcher(text).replaceAll("[path]");
 		text = WINDOWS_PATH.matcher(text).replaceAll("[path]");
 		text = UNIX_PATH.matcher(text).replaceAll("[path]");
 		text = EMAIL.matcher(text).replaceAll("[redacted]");

@@ -70,8 +70,11 @@ public class DiagnosticReportCollector
 
 		try
 		{
-			builder.gameRevision(client.getRevision());
-			builder.gpuRendererActive(client.isGpu());
+			Microbot.getClientThread().runOnClientThreadOptional(() -> {
+				builder.gameRevision(client.getRevision());
+				builder.gpuRendererActive(client.isGpu());
+				return true;
+			});
 		}
 		catch (RuntimeException e)
 		{
@@ -87,7 +90,7 @@ public class DiagnosticReportCollector
 		{
 			ShortestPathConfig walker = configManager.getConfig(ShortestPathConfig.class);
 			MicrobotConfig microbot = configManager.getConfig(MicrobotConfig.class);
-			builder.plannerMode(String.valueOf(walker.plannerSelectionMode()))
+			builder.plannerMode("custom W330/general pathfinder")
 				.walkerSetting("autoRun", onOff(microbot.enableAutoRunOn()))
 				.walkerSetting("staminaPots", onOff(microbot.useStaminaPotsIfNeeded()))
 				.walkerSetting("inputYielding", onOff(!microbot.disableInputYielding()))

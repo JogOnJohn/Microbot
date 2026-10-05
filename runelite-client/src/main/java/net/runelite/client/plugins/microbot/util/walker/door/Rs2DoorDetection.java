@@ -37,6 +37,7 @@ public final class Rs2DoorDetection {
         }
         ObjectComposition comp = resolveCompositionForDoorProbe(object);
         if (comp == null
+                || Rs2DoorClassifier.isTrapdoorName(comp.getName())
                 || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())
                 || Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) {
             return false;
