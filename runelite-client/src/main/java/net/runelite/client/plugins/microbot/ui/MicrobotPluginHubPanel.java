@@ -39,7 +39,6 @@ import net.runelite.client.plugins.config.SearchablePlugin;
 import net.runelite.client.plugins.microbot.externalplugins.MicrobotPluginClient;
 import net.runelite.client.plugins.microbot.externalplugins.MicrobotPluginManager;
 import net.runelite.client.plugins.microbot.externalplugins.MicrobotPluginManifest;
-import net.runelite.client.plugins.microbot.ui.search.MicrobotPluginSearch;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.ui.*;
 import net.runelite.client.ui.components.IconTextField;
@@ -78,7 +77,6 @@ public class MicrobotPluginHubPanel extends MicrobotPluginPanel {
     private static final ImageIcon HELP_ICON;
     private static final ImageIcon CONFIGURE_ICON;
     private static final Pattern SPACES = Pattern.compile(" +");
-    private static final String NEWLY_ADDED_FILTER_QUERY = "New";
     private static final Color PASTEL_GREEN = new Color(0x7CB987);
     private static final Color PASTEL_ORANGE = new Color(0xD4A574);
 
@@ -711,7 +709,7 @@ public class MicrobotPluginHubPanel extends MicrobotPluginPanel {
         searchBar.setIcon(IconTextField.Icon.SEARCH);
         searchBar.setBackground(ColorScheme.DARKER_GRAY_COLOR);
         searchBar.setHoverBackgroundColor(ColorScheme.DARK_GRAY_HOVER_COLOR);
-        searchBar.getSuggestionListModel().addElement(NEWLY_ADDED_FILTER_QUERY);
+        searchBar.getSuggestionListModel().addElement(MicrobotPluginHubOrder.NEWLY_ADDED_FILTER_QUERY);
         searchBar.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -915,27 +913,12 @@ public class MicrobotPluginHubPanel extends MicrobotPluginPanel {
             return;
         }
 
-        String query = searchBar.getText();
-        String trimmedQuery = query == null ? "" : query.trim();
-        boolean onlyNew = isNewlyAddedFilterQuery(trimmedQuery);
-        String effectiveQuery = onlyNew ? "" : query;
-        boolean isSearching = effectiveQuery != null && !effectiveQuery.trim().isEmpty();
-        List<PluginItem> filteredPlugins = plugins.stream()
-                .filter(plugin -> !onlyNew || plugin.manifest.isNewlyAdded())
-                .collect(Collectors.toList());
-
-        List<PluginItem> pluginItems;
-        if (isSearching) {
-            pluginItems = MicrobotPluginSearch.search(filteredPlugins, effectiveQuery);
-        } else {
-            pluginItems = filteredPlugins.stream()
-                    .sorted(Comparator.comparing(PluginItem::isInstalled)
-                            .thenComparingInt(PluginItem::getUserCount)
-                            .reversed()
-                            .thenComparing(p -> p.manifest.getInternalName())
-                    )
-                    .collect(Collectors.toList());
-        }
+        List<PluginItem> pluginItems = MicrobotPluginHubOrder.order(
+                plugins,
+                searchBar.getText(),
+                plugin -> plugin.manifest,
+                PluginItem::isInstalled,
+                PluginItem::getUserCount);
 
         SwingUtilities.invokeLater(() ->
         {
@@ -943,11 +926,6 @@ public class MicrobotPluginHubPanel extends MicrobotPluginPanel {
             pluginItems.forEach(mainPanel::add);
             mainPanel.revalidate();
         });
-    }
-
-    private boolean isNewlyAddedFilterQuery(String query) {
-        return NEWLY_ADDED_FILTER_QUERY.equalsIgnoreCase(query)
-                || "Newly Added".equalsIgnoreCase(query);
     }
 
     @Override
