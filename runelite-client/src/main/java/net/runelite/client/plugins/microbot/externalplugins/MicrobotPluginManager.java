@@ -48,6 +48,7 @@ import net.runelite.client.events.ClientShutdown;
 import net.runelite.client.events.ExternalPluginsChanged;
 import net.runelite.client.plugins.*;
 import net.runelite.client.plugins.microbot.MicrobotApi;
+import net.runelite.client.plugins.microbot.recovery.StartupRecovery;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.ui.SplashScreen;
@@ -349,6 +350,7 @@ public class MicrobotPluginManager {
                     log.trace("Class not found during sideloading: {}", classInfo.getName(), e);
                 } catch(Throwable t) {
                     log.error("Incompatible plugin found: " + internalName);
+                    StartupRecovery.pluginFailed(internalName, getInstalledPluginVersion(internalName).orElse(null), "class loading", t);
                 }
             }
             loadPlugins(plugins, null);
@@ -455,11 +457,14 @@ public class MicrobotPluginManager {
             if (pluginDescriptor.isExternal() && !Rs2UiHelper.isClientVersionCompatible(pluginDescriptor.minClientVersion())) {
                 log.error("Plugin {} requires client version {} or higher, but current version is {}. Skipping plugin loading.",
                         clazz.getSimpleName(), pluginDescriptor.minClientVersion(), RuneLiteProperties.getMicrobotVersion());
+                StartupRecovery.pluginFailed(clazz.getSimpleName(), pluginDescriptor.version(), "compatibility check",
+                        "requires Microbot " + pluginDescriptor.minClientVersion() + " or newer, running " + RuneLiteProperties.getMicrobotVersion());
                 continue;
             }
 
             if (pluginDescriptor.disable()) {
                 log.error("Plugin {} has been disabled upstream", clazz.getSimpleName());
+                StartupRecovery.pluginFailed(clazz.getSimpleName(), pluginDescriptor.version(), "compatibility check", "disabled upstream");
                 continue;
             }
 
@@ -494,6 +499,7 @@ public class MicrobotPluginManager {
                 loaded++;
             } catch (PluginInstantiationException ex) {
                 log.error("Error instantiating plugin!", ex);
+                StartupRecovery.pluginFailed(pluginClazz.getSimpleName(), pluginClazz.getAnnotation(PluginDescriptor.class).version(), "load", ex);
             }
 
             if (onPluginLoaded != null) {
@@ -608,6 +614,7 @@ public class MicrobotPluginManager {
     public void onClientShutdown(ClientShutdown shutdown) {
         log.info("Client shutdown detected, stopping all Microbot plugins");
         shutdown();
+        StartupRecovery.cleanExit();
     }
 
     /**
@@ -819,6 +826,7 @@ public class MicrobotPluginManager {
                             log.trace("Class not found during plugin loading: {}", classInfo.getName(), e);
                         } catch(Throwable t) {
                             log.error("Incompatible plugin found: " + pluginName);
+                            StartupRecovery.pluginFailed(pluginName, manifest.getVersion(), "class loading", t);
                         }
                     }
 
@@ -843,6 +851,7 @@ public class MicrobotPluginManager {
                     throw e;
                 } catch (Throwable e) {
                     log.warn("Unable to load or start plugin \"{}\"", pluginName, e);
+                    StartupRecovery.pluginFailed(pluginName, manifest.getVersion(), "load or start", e);
                 }
             }
 
