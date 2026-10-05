@@ -1475,8 +1475,7 @@ public class PathfinderConfig {
                 && new WorldPoint(2452, 4473, 0).equals(transport.getDestination())) {
             boolean membersWorld = Microbot.getClientThread().runOnClientThreadOptional(() ->
                     client.getWorldType().contains(WorldType.MEMBERS)).orElse(false);
-            boolean hasStaff = Rs2Inventory.contains(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
-                    || Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
+            boolean hasStaff = Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
             if (!membersWorld || !QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.LOST_CITY)) || !hasStaff) {
                 return false;
             }

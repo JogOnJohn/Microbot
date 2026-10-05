@@ -13065,38 +13065,38 @@ public class Rs2Walker {
                     if (restoreNoted && !Rs2Bank.setWithdrawAsItem()) {
                         return WalkerState.EXIT;
                     }
-                for (Map.Entry<Integer, Integer> entry : missingItemsWithQuantities.entrySet()) {
-                    int itemId = entry.getKey();
-                    int amountNeeded = entry.getValue();
-                    int amountToWithdraw = Math.max(0, amountNeeded );
+                    for (Map.Entry<Integer, Integer> entry : missingItemsWithQuantities.entrySet()) {
+                        int itemId = entry.getKey();
+                        int amountNeeded = entry.getValue();
+                        int amountToWithdraw = Math.max(0, amountNeeded );
 
-                    if (amountToWithdraw > 0) {
-                        if (Rs2Bank.hasBankItem(itemId, amountToWithdraw)) {
-                            log.debug("Withdrawing {} x {} (item ID: {})", amountToWithdraw, itemId, itemId);
-                            Rs2ItemModel row = Rs2Bank.getBankItemForSavedId(itemId);
-                            TransportWithdrawalConfirmation confirmation =
-                                    TransportWithdrawalConfirmation.start(
-                                            itemId, row == null ? -1 : row.getId(), amountToWithdraw, Rs2Inventory::itemQuantity);
-                            if (!Rs2Bank.withdrawX(itemId, amountToWithdraw)) {
-                                return WalkerState.EXIT;
-                            }
-                            sleepUntil(() -> confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
-                                            != TransportWithdrawalConfirmation.State.PENDING,
-                                    TransportWithdrawalConfirmation.TIMEOUT_MS);
-                            if (confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
-                                    != TransportWithdrawalConfirmation.State.CONFIRMED) {
-                                log.warn("Required transport withdrawal was not observed for {}", itemId);
+                        if (amountToWithdraw > 0) {
+                            if (Rs2Bank.hasBankItem(itemId, amountToWithdraw)) {
+                                log.debug("Withdrawing {} x {} (item ID: {})", amountToWithdraw, itemId, itemId);
+                                Rs2ItemModel row = Rs2Bank.getBankItemForSavedId(itemId);
+                                TransportWithdrawalConfirmation confirmation =
+                                        TransportWithdrawalConfirmation.start(
+                                                itemId, row == null ? -1 : row.getId(), amountToWithdraw, Rs2Inventory::itemQuantity);
+                                if (!Rs2Bank.withdrawX(itemId, amountToWithdraw)) {
+                                    return WalkerState.EXIT;
+                                }
+                                sleepUntil(() -> confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
+                                                != TransportWithdrawalConfirmation.State.PENDING,
+                                        TransportWithdrawalConfirmation.TIMEOUT_MS);
+                                if (confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
+                                        != TransportWithdrawalConfirmation.State.CONFIRMED) {
+                                    log.warn("Required transport withdrawal was not observed for {}", itemId);
+                                    return WalkerState.EXIT;
+                                }
+                            } else {
+                                log.warn("Required transport item {} not found in bank (need {} but bank has less)",
+                                        itemId, amountToWithdraw);
                                 return WalkerState.EXIT;
                             }
                         } else {
-                            log.warn("Required transport item {} not found in bank (need {} but bank has less)",
-                                    itemId, amountToWithdraw);
-                            return WalkerState.EXIT;
+                            log.debug("No withdrawal needed for item {}", itemId);
                         }
-                    } else {
-                        log.debug("No withdrawal needed for item {}", itemId);
                     }
-                }
 
                 } finally {
                     if (restoreNoted && !Rs2Bank.setWithdrawAsNote()) {
