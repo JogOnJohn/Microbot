@@ -299,6 +299,10 @@ public class MicrobotPluginListPanel extends MicrobotPluginPanel {
     }
 
     void stopPlugin(Plugin plugin) {
+        if (pluginManager.isPluginAlwaysOn(plugin)) {
+            return;
+        }
+
         pluginManager.setPluginEnabled(plugin, false);
 
         try {

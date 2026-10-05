@@ -44,6 +44,7 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.PluginChanged;
 import net.runelite.client.events.ProfileChanged;
+import net.runelite.client.plugins.microbot.AlwaysOnPlugins;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.task.Schedule;
 import net.runelite.client.task.ScheduledMethod;
@@ -457,6 +458,10 @@ public class PluginManager {
     }
 
     public void setPluginEnabled(Plugin plugin, boolean enabled) {
+        if (!enabled && isPluginAlwaysOn(plugin)) {
+            return;
+        }
+
         final PluginDescriptor pluginDescriptor = plugin.getClass().getAnnotation(PluginDescriptor.class);
         final String keyName = Strings.isNullOrEmpty(pluginDescriptor.configName()) ? plugin.getClass().getSimpleName() : pluginDescriptor.configName();
         configManager.setConfiguration(RuneLiteConfig.GROUP_NAME, keyName.toLowerCase(), String.valueOf(enabled));
@@ -482,10 +487,14 @@ public class PluginManager {
         final String keyName = Strings.isNullOrEmpty(pluginDescriptor.configName()) ? plugin.getClass().getSimpleName() : pluginDescriptor.configName();
         final String value = configManager.getConfiguration(RuneLiteConfig.GROUP_NAME, keyName.toLowerCase());
 
-        if (pluginDescriptor.alwaysOn())
+        if (isPluginAlwaysOn(plugin))
             return true;
 
         return value != null ? Boolean.parseBoolean(value) : pluginDescriptor.enabledByDefault();
+    }
+
+    public boolean isPluginAlwaysOn(Plugin plugin) {
+        return AlwaysOnPlugins.isLocked(plugin.getClass().getAnnotation(PluginDescriptor.class));
     }
 
     /**
