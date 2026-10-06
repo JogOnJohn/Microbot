@@ -16,22 +16,21 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 import java.awt.*;
 import java.awt.geom.Line2D;
 import java.awt.geom.Rectangle2D;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 public class PathTileOverlay extends Overlay {
     private final Client client;
     private final ShortestPathPlugin plugin;
+    private final PreferredTeleportAssistant assistant;
     private static final int TRANSPORT_LABEL_GAP = 3;
 
     @Inject
-    public PathTileOverlay(Client client, ShortestPathPlugin plugin) {
+    public PathTileOverlay(Client client, ShortestPathPlugin plugin, PreferredTeleportAssistant assistant) {
         this.client = client;
         this.plugin = plugin;
+        this.assistant = assistant;
         setPosition(OverlayPosition.DYNAMIC);
         setPriority(Overlay.PRIORITY_LOW);
         setLayer(OverlayLayer.ABOVE_SCENE);
@@ -144,7 +143,7 @@ public class PathTileOverlay extends Overlay {
             }
         }
 
-        drawPreferredTeleports(graphics, path);
+        drawPreferredTeleports(graphics);
 
         return null;
     }
@@ -284,14 +283,10 @@ public class PathTileOverlay extends Overlay {
     }
 
     /**
-     * Labels the teleport-from-anywhere (spell/item) teleports the current path will use, drawn on
-     * the player so they are visible as soon as the path is calculated — not only once the player
-     * reaches the tile the pathfinder teleports from. These teleports have a null origin and live in
-     * usableTeleports, so the pathfinder emits them as a long jump path[i] -> path[i+1] where
-     * path[i+1] is the teleport destination. Collect those in path order and stack them on the player.
+     * Draws the shared upcoming teleport choice, including the retained POH facility during loading.
      */
-    private void drawPreferredTeleports(Graphics2D graphics, List<WorldPoint> path) {
-        if (!plugin.showTeleportLabels || path == null || path.size() < 2) {
+    private void drawPreferredTeleports(Graphics2D graphics) {
+        if (!plugin.showTeleportLabels) {
             return;
         }
         LocalPoint playerLp = client.getLocalPlayer() != null ? client.getLocalPlayer().getLocalLocation() : null;
@@ -303,36 +298,7 @@ public class PathTileOverlay extends Overlay {
             return;
         }
 
-        Map<WorldPoint, Set<Transport>> transports = ShortestPathPlugin.getTransports();
-        List<String> labels = new ArrayList<>();
-        for (int i = 0; i + 1 < path.size(); i++) {
-            WorldPoint from = path.get(i);
-            WorldPoint to = path.get(i + 1);
-            // A teleport is always a long jump, never a step onto an adjacent tile — so a normal walk
-            // step that merely ends on a teleport's landing tile is not mistaken for a teleport.
-            if (from == null || to == null || from.distanceTo(to) <= 1) {
-                continue;
-            }
-            // Find the teleport-like transport that produced this jump, matched by destination so it
-            // works regardless of origin frame. Cover all the ways teleports are stored: usable
-            // spell/item teleports; POH facility teleports (jewellery box, etc.) keyed under the house
-            // anchor (the jump origin); and origin-less teleports like the world-330 house entry keyed
-            // under null. This lets the label update from "house tab" to the actual PoH teleport.
-            // transports.get(from) covers PoH facility teleports keyed under the house anchor;
-            // usableTeleports covers spell/item teleports and the origin-less world-330 house entry. Do NOT
-            // look up transports.get(null): getTransports() is a ConcurrentHashMap, which throws on a
-            // null key (and can never hold one anyway), so that call only ever NPE'd the overlay.
-            Transport preferred = transports == null ? null
-                    : PreferredTeleportAssistant.matchTeleportByDestination(transports.get(from), to);
-            if (preferred == null) {
-                preferred = PreferredTeleportAssistant.matchTeleportByDestination(
-                        ShortestPathPlugin.getUsableTeleports(), to);
-            }
-            String info = preferred == null ? null : preferred.getDisplayInfo();
-            if (info != null && !labels.contains(info)) {
-                labels.add(info);
-            }
-        }
+        List<String> labels = assistant.resolveRouteLabels();
 
         int vertical_offset = 0;
         for (String text : labels) {

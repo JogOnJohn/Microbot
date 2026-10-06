@@ -43,6 +43,8 @@ final class PreferredTeleportAssistant
 	private List<PohTransport> plannedPohChoices = Collections.emptyList();
 	private int cachedTick = Integer.MIN_VALUE;
 	private Optional<HighlightTarget> cachedTarget = Optional.empty();
+	private List<String> cachedRouteLabels = Collections.emptyList();
+	private int lastPathTick = Integer.MIN_VALUE;
 
 	@Inject
 	PreferredTeleportAssistant(Client client)
@@ -67,13 +69,17 @@ final class PreferredTeleportAssistant
 		Pathfinder pathfinder = ShortestPathPlugin.getPathfinder();
 		List<WorldPoint> path = pathfinder == null ? null : pathfinder.getPath();
 		WorldPoint player = client.getLocalPlayer() == null ? null : client.getLocalPlayer().getWorldLocation();
-		Set<WorldPoint> targets = pathfinder == null
-			? Collections.emptySet()
-			: pathfinder.getTargets();
+		boolean inHostedHouse = isInHostedHouse();
+		if (pathfinder != null) lastPathTick = client.getTickCount();
+		Set<WorldPoint> targets = pathfinder == null && inHostedHouse
+			&& lastPathTick != Integer.MIN_VALUE && client.getTickCount() - lastPathTick <= 8
+			? plannedTargets : pathfinder == null ? Collections.emptySet() : pathfinder.getTargets();
 		rememberPlannedPohChoices(targets, path != null && path.size() >= 2, findUpcomingPohTransports(
 			path,
 			player,
-			ShortestPathPlugin.getTransports()));
+			ShortestPathPlugin.getTransports()), inHostedHouse);
+		cachedRouteLabels = routeLabels(path, player, ShortestPathPlugin.getTransports(),
+			ShortestPathPlugin.getUsableTeleports(), plannedPohChoices, inHostedHouse);
 
 		// A W330 route is a two-stage chain: enter the hosted house, then use a POH facility.
 		// While outside, the first edge correctly highlights the house tab. Once a facility menu is
@@ -150,10 +156,26 @@ final class PreferredTeleportAssistant
 		plannedPohChoices = Collections.emptyList();
 		cachedTick = Integer.MIN_VALUE;
 		cachedTarget = Optional.empty();
+		cachedRouteLabels = Collections.emptyList();
+		lastPathTick = Integer.MIN_VALUE;
 	}
 
-	private void rememberPlannedPohChoices(Set<WorldPoint> targets, boolean hasComputedPath,
-		List<PohTransport> choices)
+	List<String> resolveRouteLabels()
+	{
+		resolveCurrentTarget();
+		return cachedRouteLabels;
+	}
+
+	private boolean isInHostedHouse()
+	{
+		if (client.getWorld() != 330 || !client.isInInstancedRegion() || client.getLocalPlayer() == null)
+			return false;
+		WorldPoint template = WorldPoint.fromLocalInstance(client, client.getLocalPlayer().getLocalLocation());
+		return template != null && template.getY() >= 7000 && template.getY() <= 8000;
+	}
+
+	void rememberPlannedPohChoices(Set<WorldPoint> targets, boolean hasComputedPath,
+		List<PohTransport> choices, boolean inHostedHouse)
 	{
 		Set<WorldPoint> currentTargets = targets == null
 			? Collections.emptySet()
@@ -163,10 +185,40 @@ final class PreferredTeleportAssistant
 			plannedTargets = currentTargets;
 			plannedPohChoices = Collections.emptyList();
 		}
-		if (hasComputedPath)
+		if (hasComputedPath && (!choices.isEmpty() || !inHostedHouse))
 		{
 			plannedPohChoices = new ArrayList<>(choices);
 		}
+	}
+
+	List<PohTransport> plannedPohChoices()
+	{
+		return Collections.unmodifiableList(plannedPohChoices);
+	}
+
+	static List<String> routeLabels(List<WorldPoint> path, WorldPoint player,
+		Map<WorldPoint, Set<Transport>> transports, Set<Transport> teleports,
+		List<PohTransport> pohChoices, boolean inHostedHouse)
+	{
+		List<String> labels = new ArrayList<>();
+		if (inHostedHouse && !pohChoices.isEmpty())
+		{
+			for (PohTransport choice : pohChoices)
+				if (choice.getDisplayInfo() != null && !labels.contains(choice.getDisplayInfo()))
+					labels.add(choice.getDisplayInfo());
+			return labels;
+		}
+		if (path == null) return labels;
+		for (int i = closestPathIndex(path, player); i + 1 < path.size(); i++)
+		{
+			WorldPoint from = path.get(i), to = path.get(i + 1);
+			if (from == null || to == null || from.distanceTo(to) <= 1) continue;
+			Transport next = transports == null ? null : matchTeleportByDestination(transports.get(from), to);
+			if (next == null) next = matchTeleportByDestination(teleports, to);
+			if (next != null && next.getDisplayInfo() != null && !labels.contains(next.getDisplayInfo()))
+				labels.add(next.getDisplayInfo());
+		}
+		return labels;
 	}
 
 	private HighlightTarget resolveDestinationChoice(Transport transport)
@@ -229,7 +281,7 @@ final class PreferredTeleportAssistant
 			{
 				return null;
 			}
-			String spell = sourceLabel(transport);
+			String spell = transport.getSpellName();
 			Widget widget = findBestTextWidget(root, spell);
 			return widget == null ? null
 				: new HighlightTarget(transport, widget, root, spell, false, null);
@@ -330,6 +382,7 @@ final class PreferredTeleportAssistant
 		{
 			return null;
 		}
+		Transport preferred = null;
 		for (Transport transport : candidates)
 		{
 			if (!destination.equals(transport.getDestination()))
@@ -340,10 +393,18 @@ final class PreferredTeleportAssistant
 				|| transport.getType() == TransportType.GNOME_GLIDER
 				|| TransportType.isTeleport(transport.getType(), transport.getOrigin()))
 			{
-				return transport;
+				if (preferred == null || houseSpellBeatsTablet(transport, preferred)) preferred = transport;
 			}
 		}
-		return null;
+		return preferred;
+	}
+
+	private static boolean houseSpellBeatsTablet(Transport candidate, Transport current)
+	{
+		return candidate.getType() == TransportType.TELEPORTATION_SPELL
+			&& candidate.getSpellName().equalsIgnoreCase("Teleport to House")
+			&& current.getType() == TransportType.TELEPORTATION_ITEM
+			&& flattenItemIds(current).contains(net.runelite.api.gameval.ItemID.POH_TABLET_TELEPORTTOHOUSE);
 	}
 
 	static String destinationLabel(Transport transport)

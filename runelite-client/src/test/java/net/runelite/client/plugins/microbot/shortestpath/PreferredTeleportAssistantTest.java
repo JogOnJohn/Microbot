@@ -18,6 +18,70 @@ import static org.mockito.Mockito.when;
 public class PreferredTeleportAssistantTest
 {
 	@Test
+	public void usableHouseSpellBeatsTabletInEitherIterationOrder()
+	{
+		WorldPoint destination = new WorldPoint(1858, 7051, 0);
+		Transport spell = new Transport(destination, "Teleport to House (Inside)",
+			TransportType.TELEPORTATION_SPELL, true, 4, Map.of());
+		Transport tablet = new Transport(destination, "Teleport to House tablet (Inside)",
+			TransportType.TELEPORTATION_ITEM, true, 3,
+			Set.of(Set.of(net.runelite.api.gameval.ItemID.POH_TABLET_TELEPORTTOHOUSE)));
+		for (List<Transport> order : List.of(List.of(tablet, spell), List.of(spell, tablet)))
+			Assert.assertSame(spell, PreferredTeleportAssistant.matchTeleportByDestination(
+				new java.util.LinkedHashSet<>(order), destination));
+		Assert.assertSame(tablet, PreferredTeleportAssistant.matchTeleportByDestination(Set.of(tablet), destination));
+		Assert.assertNull(PreferredTeleportAssistant.matchTeleportByDestination(Set.of(spell), new WorldPoint(2953, 3224, 0)));
+	}
+
+	@Test
+	public void houseSpellVariantsResolveToTheCastableSpellWithoutLosingRouteLabel()
+	{
+		for (String label : List.of("Teleport to House (Inside)", "Teleport to House (Outside)", "Teleport to House"))
+		{
+			Transport spell = new Transport(new WorldPoint(1858, 7051, 0), label,
+				TransportType.TELEPORTATION_SPELL, true, 4, Map.of());
+			Assert.assertEquals("Teleport to House", spell.getSpellName());
+			Assert.assertEquals(net.runelite.client.plugins.microbot.util.magic.Rs2Spells.TELEPORT_TO_HOUSE,
+				net.runelite.client.plugins.microbot.util.magic.Rs2Magic.getRs2Spell(spell.getSpellName()));
+			Assert.assertEquals(label, spell.getDisplayInfo());
+		}
+	}
+
+	@Test
+	public void houseHintSurvivesEmptyInstanceRecalculationAndClearsOnNewTargetOrExit()
+	{
+		PreferredTeleportAssistant assistant = new PreferredTeleportAssistant(mock(net.runelite.api.Client.class));
+		PohTransport nexus = new PohTransport(new WorldPoint(1877, 7052, 1), NexusPortal.VARROCK);
+		Set<WorldPoint> targets = Set.of(nexus.getDestination());
+		assistant.rememberPlannedPohChoices(targets, true, List.of(nexus), false);
+		assistant.rememberPlannedPohChoices(targets, true, List.of(), true);
+		Assert.assertEquals(List.of(nexus.getDisplayInfo()), PreferredTeleportAssistant.routeLabels(
+			List.of(), null, Map.of(), Set.of(), assistant.plannedPohChoices(), true));
+		assistant.rememberPlannedPohChoices(Set.of(new WorldPoint(3000, 3000, 0)), false, List.of(), true);
+		Assert.assertTrue(assistant.plannedPohChoices().isEmpty());
+		assistant.rememberPlannedPohChoices(targets, true, List.of(nexus), false);
+		assistant.rememberPlannedPohChoices(targets, true, List.of(), false);
+		Assert.assertTrue(assistant.plannedPohChoices().isEmpty());
+		assistant.rememberPlannedPohChoices(targets, true, List.of(nexus), false);
+		assistant.reset();
+		Assert.assertTrue(assistant.plannedPohChoices().isEmpty());
+	}
+
+	@Test
+	public void whiteHintSkipsCompletedHouseEntryAndKeepsTheFacilityDestination()
+	{
+		WorldPoint outside = new WorldPoint(2954, 3224, 0);
+		WorldPoint anchor = new WorldPoint(1877, 7052, 1);
+		PohTransport nexus = new PohTransport(anchor, NexusPortal.VARROCK);
+		Assert.assertEquals(List.of(nexus.getDisplayInfo()), PreferredTeleportAssistant.routeLabels(
+			List.of(outside, anchor, nexus.getDestination()), new WorldPoint(2011, 7106, 1),
+			Map.of(anchor, Set.of(nexus)), Set.of(), List.of(nexus), true));
+		Assert.assertTrue(PreferredTeleportAssistant.routeLabels(
+			List.of(anchor, nexus.getDestination()), nexus.getDestination(),
+			Map.of(anchor, Set.of(nexus)), Set.of(), List.of(), false).isEmpty());
+	}
+
+	@Test
 	public void originSpecificPohChoiceWinsOverOriginlessTeleportAtSameDestination()
 	{
 		WorldPoint origin = new WorldPoint(3200, 3200, 0);

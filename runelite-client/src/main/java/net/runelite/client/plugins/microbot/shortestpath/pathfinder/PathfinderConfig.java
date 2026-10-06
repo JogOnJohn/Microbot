@@ -1911,10 +1911,7 @@ public class PathfinderConfig {
 
     private boolean isTeleportationSpellUsable(Transport transport) {
 
-        boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
-        String displayInfo = hasMultipleDestination
-                ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                : transport.getDisplayInfo();
+        String displayInfo = transport.getSpellName();
         Rs2Spells rs2Spell = Rs2Magic.getRs2Spell(displayInfo);
         if (rs2Spell == null) return false;
         return Rs2Magic.hasRequiredRunes(rs2Spell, RuneFilter.builder().includeBank(useBankItems).build());

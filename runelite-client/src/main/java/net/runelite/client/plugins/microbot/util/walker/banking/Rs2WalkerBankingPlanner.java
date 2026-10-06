@@ -108,13 +108,8 @@ public final class Rs2WalkerBankingPlanner {
                 || transport.getType() == TransportType.MAGIC_CARPET
                 || planningCoversPlainTransport(transport)) {
             if (transport.getType() == TransportType.TELEPORTATION_SPELL && transport.getDisplayInfo() != null) {
-                String spellName = transport.getDisplayInfo().contains(":")
-                        ? transport.getDisplayInfo().split(":")[0].trim()
-                        : transport.getDisplayInfo().trim();
-                boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
-                String displayInfo = hasMultipleDestination
-                        ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                        : transport.getDisplayInfo();
+                String spellName = transport.getSpellName();
+                String displayInfo = spellName;
                 log.debug("Looking for spell rune requirements for: '{}' - display info {}", spellName, displayInfo);
                 Rs2Spells rs2Spell = Rs2Magic.getRs2Spell(displayInfo);
                 return Rs2Magic.hasRequiredRunes(rs2Spell);
@@ -446,13 +441,8 @@ public final class Rs2WalkerBankingPlanner {
             return runeRequirements;
         }
         try {
-            String spellName = transport.getDisplayInfo().contains(":")
-                    ? transport.getDisplayInfo().split(":")[0].trim()
-                    : transport.getDisplayInfo().trim();
-            boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
-            String displayInfo = hasMultipleDestination
-                    ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                    : transport.getDisplayInfo();
+            String spellName = transport.getSpellName();
+            String displayInfo = spellName;
             log.debug("Looking for spell rune requirements for: '{}' - display info {}", spellName, displayInfo);
             Rs2Spells rs2Spell = Rs2Magic.getRs2Spell(displayInfo);
             if (rs2Spell == null) {

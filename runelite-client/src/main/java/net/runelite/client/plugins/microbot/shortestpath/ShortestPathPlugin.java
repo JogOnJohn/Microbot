@@ -1237,6 +1237,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
 
     private void setTargets(Set<WorldPoint> targets, boolean append) {
         if (targets == null || targets.isEmpty()) {
+            preferredTeleportAssistant.reset();
             synchronized (pathfinderMutex) {
                 if (pathfinder != null) {
                     pathfinder.cancel();

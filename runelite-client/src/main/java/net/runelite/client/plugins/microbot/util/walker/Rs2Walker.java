@@ -10804,9 +10804,7 @@ public class Rs2Walker {
         if (Rs2Pvp.isInWilderness() && (Rs2Pvp.getWildernessLevelFrom(Rs2Player.getWorldLocation()) > (transport.getMaxWildernessLevel() + 1))) return false;
         boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
 
-        String spellName = hasMultipleDestination
-                ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                : transport.getDisplayInfo().toLowerCase();
+        String spellName = transport.getSpellName().toLowerCase(java.util.Locale.ROOT);
 
         String option = hasMultipleDestination
                 ? transport.getDisplayInfo().split(":")[1].trim().toLowerCase()

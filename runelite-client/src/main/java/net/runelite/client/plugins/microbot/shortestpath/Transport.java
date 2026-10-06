@@ -19,6 +19,15 @@ import java.util.*;
  */
 @Slf4j
 public class Transport {
+    public String getSpellName() {
+        String label = displayInfo == null ? "" : displayInfo.split(":", 2)[0].trim();
+        if (label.equalsIgnoreCase("Teleport to House (Inside)")
+                || label.equalsIgnoreCase("Teleport to House (Outside)")) {
+            return "Teleport to House";
+        }
+        return label;
+    }
+
     //START microbot variables
     @Getter
 	@Setter

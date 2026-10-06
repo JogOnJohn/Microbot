@@ -18,6 +18,11 @@ Run-orb energy, geometry, and pending-click semantics: [movement gotcha 21](move
 
 ## Format
 
+Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use
+`Transport.getSpellName()` for spell lookup, banking and casting, retaining the original label
+and destination/varbit gates. In a W330 instance, white hints and blue highlights must share
+the same retained POH choice during route recalculation; clear it when the target changes.
+
 Each entity guide is a numbered list of gotchas. Each entry follows this structure:
 
 ```
