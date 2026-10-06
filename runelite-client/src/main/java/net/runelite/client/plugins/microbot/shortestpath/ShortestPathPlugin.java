@@ -434,7 +434,11 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
 
     public boolean isNearPath(WorldPoint location) {
         if (pathfinder == null || !pathfinder.isDone() || pathfinder.getPath() == null || pathfinder.getPath().isEmpty() ||
-                config.recalculateDistance() < 0 || lastLocation.equals(lastLocation = location)) {
+                location == null || config.recalculateDistance() < 0 || Objects.equals(lastLocation, lastLocation = location)) {
+            return true;
+        }
+
+        if (nearPendingTeleportStart(location, pathfinder.getPath(), getUsableTeleports(), config.recalculateDistance())) {
             return true;
         }
 
@@ -446,6 +450,18 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         }
 
         return false;
+    }
+
+    static boolean nearPendingTeleportStart(WorldPoint player, List<WorldPoint> path,
+            Set<Transport> teleports, int recalculateDistance) {
+        if (player == null || path == null || path.size() < 2 || recalculateDistance < 0) return false;
+        WorldPoint start = path.get(0), landing = path.get(1);
+        if (start == null || landing == null || player.getPlane() != start.getPlane()
+                || start.distanceTo(landing) <= 1 || teleports == null) return false;
+        boolean pending = teleports.stream().anyMatch(t -> t.getOrigin() == null && landing.equals(t.getDestination()));
+        // A manual player may walk instead of taking the offered teleport. Reassess after meaningful
+        // movement, not after every short step away from the synthetic teleport attachment tile.
+        return pending && player.distanceTo2D(start) < Math.max(32L, 4L * recalculateDistance);
     }
 
     private static final Set<String> PATH_REFRESH_CONFIG_KEYS = Set.of(

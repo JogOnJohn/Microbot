@@ -51,6 +51,7 @@ import java.util.List;
 
 import static net.runelite.client.plugins.microbot.questhelper.QuestHelperConfig.ObjectHighlightStyle.CLICK_BOX;
 
+@lombok.extern.slf4j.Slf4j
 public class ObjectStep extends DetailedQuestStep
 {
 	protected final ArrayList<Integer> alternateObjectIDs = new ArrayList<>();
@@ -397,13 +398,13 @@ public class ObjectStep extends DetailedQuestStep
 					);
 					break;
 				case OUTLINE:
-					modelOutlineRenderer.drawOutline(
+					drawOutlineIfModelReady(() -> modelOutlineRenderer.drawOutline(
 						tileObject,
 						questHelper.getConfig().outlineThickness(),
 						configColor,
 						questHelper.getConfig().
 							outlineFeathering()
-					);
+					));
 					break;
 				default:
 			}
@@ -424,6 +425,21 @@ public class ObjectStep extends DetailedQuestStep
 	public void setForceClickboxHighlight(boolean forceClickboxHighlight)
 	{
 		this.forceClickboxHighlight = forceClickboxHighlight;
+	}
+
+	static boolean drawOutlineIfModelReady(Runnable drawOutline)
+	{
+		try
+		{
+			drawOutline.run();
+			return true;
+		}
+		catch (NullPointerException unavailableModel)
+		{
+			// Injected object-model construction can fail for one frame as the scene is replaced.
+			log.debug("Quest object model unavailable during outline rendering", unavailableModel);
+			return false;
+		}
 	}
 
 	@Override
