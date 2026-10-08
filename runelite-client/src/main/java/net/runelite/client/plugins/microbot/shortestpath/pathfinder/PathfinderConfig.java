@@ -1672,7 +1672,11 @@ public class PathfinderConfig {
     }
 
     static boolean allowsPersonalHouseEntry(Transport transport, boolean prefersHostedHouse) {
-        return !prefersHostedHouse || !"Inside".equals(transport.getHouseTeleportOption());
+        if (!prefersHostedHouse || transport instanceof World330HostedHouseTransport) return true;
+        // Imported portal, cape, tree and ring entries share the personal POH anchor.
+        // Filtering only spell labels still lets an outside teleport route through Home Portal.
+        return !"Inside".equals(transport.getHouseTeleportOption())
+                && !new WorldPoint(1858, 7051, 0).equals(transport.getDestination());
     }
 
     private boolean isFeatureEnabled(Transport transport) {
