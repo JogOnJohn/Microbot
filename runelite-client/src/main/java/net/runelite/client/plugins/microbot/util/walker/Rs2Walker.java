@@ -2858,7 +2858,7 @@ public class Rs2Walker {
                                 }
 								final WorldPoint posBeforeWait = playerLoc;
 								sleepUntil(() ->
-												interimFinal.distanceTo2D(Rs2Player.getWorldLocation()) <= interimPreclickTiles()
+												isPlayerWithin2D(interimFinal, interimPreclickTiles())
 														|| !Rs2Player.isMoving(),
 										INTERIM_MOVING_POLL_MS);
                                 WorldPoint posAfterWait = Rs2Player.getWorldLocation();
@@ -3110,7 +3110,7 @@ public class Rs2Walker {
                     // Keep stuck-detection honest: observed movement resets the movement timer.
                     // Without this, isStuckTooLong() fires after long successful walks because
                     // routeState.lastMovedTimeMs is only refreshed at processWalk entry (not during the loop).
-                    if (posBefore.distanceTo2D(Rs2Player.getWorldLocation()) > 0) {
+                    if (hasPlayerMovedFrom2D(posBefore)) {
                         routeState.lastMovedTimeMs = System.currentTimeMillis();
                         routeState.stuckCount = 0;
                     }
@@ -3199,11 +3199,11 @@ public class Rs2Walker {
                         }
                     }
 
-                    if (Rs2Tile.isTileReachable(finalTile) && Rs2Player.getWorldLocation().distanceTo(finalTile) >= finishTh) {
+                    WorldPoint finalPlayerLoc = Rs2Player.getWorldLocation();
+                    if (finalPlayerLoc != null && Rs2Tile.isTileReachable(finalTile) && finalPlayerLoc.distanceTo(finalTile) >= finishTh) {
                         final WorldPoint canvasClickWp = finalTile;
-                        WorldPoint finalPlayerLoc = Rs2Player.getWorldLocation();
                         boolean finalClick;
-                        if (rawPath != null && !rawPath.isEmpty() && finalPlayerLoc != null) {
+                        if (rawPath != null && !rawPath.isEmpty()) {
                             int rawAnchorIndex = rawAnchorIndexForPathPosition(rawPath, path, finalPlayerLoc);
                             finalClick = clickRouteBackedShortWalk(rawPath, canvasClickWp, finalPlayerLoc,
                                     NORMAL_MINIMAP_REACH_EUCLIDEAN - 1, rawAnchorIndex);
@@ -3227,9 +3227,10 @@ public class Rs2Walker {
                     && Rs2Player.isMoving()) {
                 exitReason = "route-move-in-flight";
             }
-            WorldPoint pathLastForFinish = path.get(path.size() - 1);
-            int finishThreshold = tightFinishThreshold(target, pathLastForFinish, distance);
-            int finalDist = Rs2Player.getWorldLocation().distanceTo(target);
+            int finishThreshold = tightFinishThreshold(target, path.get(path.size() - 1), distance);
+            WorldPoint finishPlayerLoc = Rs2Player.getWorldLocation();
+            if (finishPlayerLoc == null) { return WalkerState.MOVING; }
+            int finalDist = finishPlayerLoc.distanceTo(target);
             if (finalDist <= finishThreshold) {
                 if (tryHandleArrivalSceneTransition(target)) {
                     setTarget(null, "rs2walker:processWalk:arrival-scene-transition");
@@ -3341,7 +3342,7 @@ public class Rs2Walker {
                 walkerDiag("continue outer tail nextIdx=%d exitReason=%s finalDist=%d partialPath=%s",
                         processWalkTail + 1,
                         exitReason,
-                        Rs2Player.getWorldLocation().distanceTo(target),
+                        finalDist,
                         partialPath);
                 continue;
             }
@@ -11062,6 +11063,16 @@ public class Rs2Walker {
     public static boolean isNear(WorldPoint target) {
         WorldPoint pl = Rs2Player.getWorldLocation();
         return pl != null && pl.equals(target);
+    }
+
+    private static boolean isPlayerWithin2D(WorldPoint from, int tiles) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        return playerLoc != null && from.distanceTo2D(playerLoc) <= tiles;
+    }
+
+    private static boolean hasPlayerMovedFrom2D(WorldPoint from) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        return playerLoc != null && from.distanceTo2D(playerLoc) > 0;
     }
 
     public static boolean isNearPath() {
