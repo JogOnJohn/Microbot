@@ -14,6 +14,7 @@ import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.util.Text;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,6 +39,7 @@ public enum World330HostedHouse implements PohTeleport {
     private static final int ENTER_CONTAINER_WIDGET = 3407891;
     private static final int SORT_ASCENDING_SPRITE = 1050;
     private static final int MAX_ADVERTISED_HOST_ATTEMPTS = 8;
+    private static final Set<String> EXCLUDED_ADVERTISED_HOSTS = Set.of("v 3");
     public static final WorldPoint POH_INSTANCE_ANCHOR = new WorldPoint(1877, 7052, 1);
 
     enum HouseTeleportAction {
@@ -205,7 +207,7 @@ public enum World330HostedHouse implements PohTeleport {
             List<String> advertisedHosts = advertisedHouseNames(containerNames);
             for (int row = 0; row < advertisedHosts.size(); row++) {
                 String houseOwner = advertisedHosts.get(row);
-                if (failedAdvertisedHosts.contains(houseOwner)) {
+                if (isExcludedAdvertisedHost(houseOwner) || failedAdvertisedHosts.contains(houseOwner)) {
                     continue;
                 }
                 Widget enter = matchingEnterWidget(containerEnter, houseOwner);
@@ -257,6 +259,10 @@ public enum World330HostedHouse implements PohTeleport {
             }
         }
         return true;
+    }
+
+    static boolean isExcludedAdvertisedHost(String houseOwner) {
+        return houseOwner != null && EXCLUDED_ADVERTISED_HOSTS.contains(Text.standardize(houseOwner));
     }
 
     private List<String> advertisedHouseNames(Widget containerNames) {
