@@ -36,10 +36,13 @@ public class ScriptErrorReporterTest
 	private MicrobotApi api;
 	private ClientSessionManager sessions;
 	private ScriptErrorReporter reporter;
+	private String previousErrorReporting;
 
 	@Before
 	public void setUp()
 	{
+		previousErrorReporting = System.getProperty("microbot.enableScriptErrorReporting");
+		System.setProperty("microbot.enableScriptErrorReporting", "true");
 		api = mock(MicrobotApi.class);
 		sessions = mock(ClientSessionManager.class);
 		when(sessions.getMicrobotSessionId()).thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000001"));
@@ -61,6 +64,14 @@ public class ScriptErrorReporterTest
 	public void tearDown()
 	{
 		System.clearProperty("microbot.disableTelemetry");
+		if (previousErrorReporting == null)
+		{
+			System.clearProperty("microbot.enableScriptErrorReporting");
+		}
+		else
+		{
+			System.setProperty("microbot.enableScriptErrorReporting", previousErrorReporting);
+		}
 	}
 
 	private void log(Level level, String message, Throwable ex)
