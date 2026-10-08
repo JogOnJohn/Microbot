@@ -118,6 +118,26 @@ public class WalkerRouteCorpusTest {
 
     private static final WorldPoint LUMBRIDGE = new WorldPoint(3222, 3218, 0);
 
+    @Test
+    public void ardougneMahoganyHomes_upstairsUsesItsOwnLadder() {
+        WorldPoint upstairs = new WorldPoint(2616, 3315, 1);
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(2614, 3318, 0), upstairs);
+        assertTrue("Mahogany Homes upstairs must be reachable", arrives(path, upstairs, 0));
+        assertTrue("route must use the assigned house ladder",
+                visits(path, new WorldPoint(2616, 3315, 0), 0));
+        assertFalse("route must not use the neighbouring house ladder",
+                visits(path, new WorldPoint(2616, 3323, 1), 0));
+    }
+
+    @Test
+    public void ardougneMahoganyHomes_downstairsUsesItsOwnLadder() {
+        WorldPoint downstairs = new WorldPoint(2614, 3318, 0);
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(2616, 3315, 1), downstairs);
+        assertTrue("Mahogany Homes downstairs must be reachable", arrives(path, downstairs, 0));
+    }
+
     // ---- baseline ----------------------------------------------------------------------------------
 
     @Test
