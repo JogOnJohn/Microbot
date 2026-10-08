@@ -666,6 +666,7 @@ public class Rs2GameObject {
     }
 
     public static TileObject getTileObject(Predicate<TileObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return null;
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             // POH fix: see Rs2GameObject.getGameObject(Predicate, WorldPoint, int).
@@ -722,6 +723,7 @@ public class Rs2GameObject {
     }
 
     public static List<TileObject> getTileObjects(Predicate<TileObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return Collections.emptyList();
         LocalPoint anchorLocal = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), anchor);
         if (anchorLocal == null) {
             // POH fix: Rs2Player.getWorldLocation() returns the template tile inside a POH
@@ -860,6 +862,7 @@ public class Rs2GameObject {
     }
 
     public static GameObject getGameObject(Predicate<GameObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return null;
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             // POH fix: inside a POH instance, the default anchor passed in by the convenience
@@ -922,6 +925,7 @@ public class Rs2GameObject {
     }
 
     public static List<GameObject> getGameObjects(Predicate<GameObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return Collections.emptyList();
         LocalPoint anchorLocal = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), anchor);
         if (anchorLocal == null) {
             // POH fix: fall back to player's real LocalLocation when the world anchor doesn't
@@ -1049,6 +1053,7 @@ public class Rs2GameObject {
     }
 
     public static GroundObject getGroundObject(Predicate<GroundObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return null;
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             if (Microbot.getClient() != null && Microbot.getClient().getLocalPlayer() != null) {
@@ -1104,6 +1109,7 @@ public class Rs2GameObject {
     }
 
     public static List<GroundObject> getGroundObjects(Predicate<GroundObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return Collections.emptyList();
         LocalPoint anchorLocal = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), anchor);
         if (anchorLocal == null) {
             if (Microbot.getClient().getLocalPlayer() != null) {
@@ -1237,6 +1243,7 @@ public class Rs2GameObject {
     }
 
     public static WallObject getWallObject(Predicate<WallObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return null;
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             if (Microbot.getClient() != null && Microbot.getClient().getLocalPlayer() != null) {
@@ -1292,6 +1299,7 @@ public class Rs2GameObject {
     }
 
     public static List<WallObject> getWallObjects(Predicate<WallObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return Collections.emptyList();
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             if (Microbot.getClient() != null && Microbot.getClient().getLocalPlayer() != null) {
@@ -1425,6 +1433,7 @@ public class Rs2GameObject {
     }
 
     public static DecorativeObject getDecorativeObject(Predicate<DecorativeObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return null;
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             if (Microbot.getClient() != null && Microbot.getClient().getLocalPlayer() != null) {
@@ -1480,6 +1489,7 @@ public class Rs2GameObject {
     }
 
     public static List<DecorativeObject> getDecorativeObjects(Predicate<DecorativeObject> predicate, WorldPoint anchor, int distance) {
+        if (anchor == null) return Collections.emptyList();
         LocalPoint anchorLocal = localPointFromWorldSafe(anchor);
         if (anchorLocal == null) {
             if (Microbot.getClient() != null && Microbot.getClient().getLocalPlayer() != null) {
