@@ -16,6 +16,21 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PathfinderConfigWorld330MergeTest {
+    @Test
+    public void shortW330TripNeverFallsBackToPersonalHouse() {
+        assertTrue(PathfinderConfig.shouldSkipWorld330ForLocalTrip(
+                new WorldPoint(3167, 3488, 0), new WorldPoint(3047, 3343, 0), 150));
+        for (TransportType type : new TransportType[]{TransportType.TELEPORTATION_SPELL, TransportType.TELEPORTATION_ITEM}) {
+            Transport inside = new Transport(null, new WorldPoint(1858, 7051, 0),
+                    "Teleport to House (Inside)", type, true, 4);
+            assertFalse(PathfinderConfig.allowsPersonalHouseEntry(inside, true));
+            assertTrue(PathfinderConfig.allowsPersonalHouseEntry(inside, false));
+        }
+        assertTrue(PathfinderConfig.allowsPersonalHouseEntry(
+                new World330HostedHouseTransport(new WorldPoint(1877, 7052, 1)), true));
+        assertTrue(PathfinderConfig.allowsPersonalHouseEntry(
+                teleport(new WorldPoint(2964, 3378, 0), TransportType.TELEPORTATION_SPELL), true));
+    }
 
     @Test
     public void targetlessRefreshPreservesPendingConcreteTarget() {

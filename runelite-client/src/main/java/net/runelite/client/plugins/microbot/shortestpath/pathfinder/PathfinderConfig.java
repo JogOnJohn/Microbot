@@ -1167,7 +1167,7 @@ public class PathfinderConfig {
             mergeWorld330Transports(mergedTransports, world330Transports, inWorld330HostedHouse);
         }
 
-        if (!usePoh) {
+        if (!usePoh || prefersHostedHouse()) {
             return mergedTransports;
         }
 
@@ -1667,8 +1667,18 @@ public class PathfinderConfig {
         return true;
     }
 
+    private boolean prefersHostedHouse() {
+        return useWorld330MaxHouse && client != null && client.getWorld() == 330;
+    }
+
+    static boolean allowsPersonalHouseEntry(Transport transport, boolean prefersHostedHouse) {
+        return !prefersHostedHouse || !"Inside".equals(transport.getHouseTeleportOption());
+    }
+
     private boolean isFeatureEnabled(Transport transport) {
         TransportType type = transport.getType();
+
+        if (!allowsPersonalHouseEntry(transport, prefersHostedHouse())) return false;
 
         if (transport instanceof World330HostedHouseTransport) {
             return shouldUseWorld330MaxHouse();

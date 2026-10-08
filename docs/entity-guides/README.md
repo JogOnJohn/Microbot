@@ -23,6 +23,12 @@ Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. 
 and destination/varbit gates. In a W330 instance, white hints and blue highlights must share
 the same retained POH choice during route recalculation; clear it when the target changes.
 
+House teleport toggle 4744 is 1 for Outside, 0 for Inside. The requirement policy adapts
+the inverted imported house rows without changing synced data. Resolve the live spell
+widget's Inside/Outside action and operation index; do not assume Cast/1 or Outside/2.
+When W330 hosted routing is enabled, skipping it for a short trip must not enable a
+personal-house fallback. A spell dispatch is not a landing: propagate failed landing waits.
+
 Each entity guide is a numbered list of gotchas. Each entry follows this structure:
 
 ```

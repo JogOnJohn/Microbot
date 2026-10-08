@@ -9495,12 +9495,18 @@ public class Rs2Walker {
 
                     if (transport.getType() == TransportType.TELEPORTATION_SPELL) {
                         if (attemptObserved(transport, () -> handleTeleportSpell(transport))) {
+                            boolean landed;
                             if (isLumbridgeHomeTeleport(transport)) {
-                                sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET), 600, 35000);
+                                landed = sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET), 600, 35000);
                             } else {
                                 sleepUntil(() -> !Rs2Player.isAnimating());
-                                sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),
+                                landed = sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),
                                         TRANSPORT_LANDING_WAIT_POLL_MS, TRANSPORT_LANDING_WAIT_TIMEOUT_MS);
+                            }
+                            if (!landed) {
+                                WebWalkLog.spWarn("spell landing not confirmed spell={} destination={} player={}",
+                                        transport.getDisplayInfo(), transport.getDestination(), Rs2Player.getWorldLocation());
+                                return false;
                             }
                             Rs2Tab.switchTo(InterfaceTab.INVENTORY);
                             return finishHandledTransport(transport);
@@ -10816,6 +10822,10 @@ public class Rs2Walker {
 
         MagicAction magicSpell = Arrays.stream(MagicAction.values()).filter(x -> x.getName().toLowerCase().contains(spellName)).findFirst().orElse(null);
         if (magicSpell != null) {
+            if (magicSpell == MagicAction.TELEPORT_TO_HOUSE) {
+                String houseOption = transport.getHouseTeleportOption();
+                return Rs2Magic.cast(magicSpell, houseOption == null ? "Outside" : houseOption, 1);
+            }
             if (magicSpell == MagicAction.LUMBRIDGE_HOME_TELEPORT) {
                 return Rs2Magic.quickCast(magicSpell);
             }
