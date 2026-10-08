@@ -715,12 +715,11 @@ public class PathfinderConfig {
                 ? Collections.unmodifiableSet(relevantItemIds)
                 : null;
 
-        refreshBoostedLevels = new int[SKILLS.length];
+        int[] boostedLevels = new int[SKILLS.length];
+        refreshBoostedLevels = boostedLevels;
         Map<Integer, Integer> varplayerValues = new HashMap<>();
         Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            for (int i = 0; i < SKILLS.length; i++) {
-                refreshBoostedLevels[i] = client.getBoostedSkillLevel(SKILLS[i]);
-            }
+            readRequirementLevels(client, boostedLevels);
             for (int id : varbitIds) {
                 Microbot.getVarbitValue(id);
             }
@@ -811,9 +810,9 @@ public class PathfinderConfig {
                 .sorted()
                 .toArray();
         int[] sortedSkillOrdinals = requiredSkillOrdinals.stream().mapToInt(Integer::intValue).sorted().toArray();
-        int verificationHash = computeTransportRefreshVerificationHash(refreshBoostedLevels, sortedSkillOrdinals,
+        int verificationHash = computeTransportRefreshVerificationHash(boostedLevels, sortedSkillOrdinals,
                 sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
-        int[] verificationComponents = computeTransportRefreshVerificationComponents(refreshBoostedLevels,
+        int[] verificationComponents = computeTransportRefreshVerificationComponents(boostedLevels,
                 sortedSkillOrdinals, sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
         transportRefreshSnapshots.put(refreshCacheKeyHash, TransportRefreshSnapshot.capture(
                 refreshCacheKeyHash, verificationHash, verificationComponents,
@@ -1609,6 +1608,12 @@ public class PathfinderConfig {
         return IntStream.range(0, requiredLevels.length)
             .filter(i -> requiredLevels[i] > 0)
             .allMatch(i -> Microbot.getClient().getBoostedSkillLevel(SKILLS[i]) >= requiredLevels[i]);
+    }
+
+    static void readRequirementLevels(Client client, int[] levels) {
+        for (int i = 0; i < SKILLS.length; i++) {
+            levels[i] = client.getBoostedSkillLevel(SKILLS[i]);
+        }
     }
 
     /**
