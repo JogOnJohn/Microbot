@@ -78,7 +78,8 @@ public enum World330HostedHouse implements PohTeleport {
 
     @Override
     public int getDuration() {
-        return 12;
+        // Includes casting outside, reaching the board and entering the advertised house.
+        return 24;
     }
 
     @Override

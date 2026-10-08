@@ -1524,8 +1524,9 @@ public class PathfinderConfig {
         if (transport.getCurrencyAmount() > 0) {
             if (refreshCurrencyCache != null) {
                 int[] cached = refreshCurrencyCache.computeIfAbsent(transport.getCurrencyName(), name -> {
-                    int invCount = Rs2Inventory.itemQuantity(name);
-                    int bankCount = useBankItems ? Rs2Bank.count(name) : 0;
+                    int currencyId = currencyItemId(name);
+                    int invCount = currencyId > 0 ? Rs2Inventory.itemQuantity(currencyId) : Rs2Inventory.itemQuantity(name);
+                    int bankCount = useBankItems ? (currencyId > 0 ? Rs2Bank.count(currencyId) : Rs2Bank.count(name)) : 0;
                     return new int[]{invCount, bankCount};
                 });
                 if ((long) cached[0] + cached[1] < transport.getCurrencyAmount()) {
