@@ -215,7 +215,9 @@ public class ScriptErrorReporter extends UnsynchronizedAppenderBase<ILoggingEven
 
 	private boolean isDisabled()
 	{
-		return disableTelemetry || Microbot.isTelemetryDisabled();
+		// This local fork requires explicit consent before uploading script errors.
+		return !Boolean.getBoolean("microbot.enableScriptErrorReporting")
+			|| disableTelemetry || Microbot.isTelemetryDisabled();
 	}
 
 	private void attribute(JsonObject error)
