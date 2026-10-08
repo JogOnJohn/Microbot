@@ -324,3 +324,18 @@ energy (>1000 by default), replacing the walker's rounded >10% (>=1100) check.
 
 **Defensive check:** `Rs2PlayerRunEnergyTest` covers threshold boundaries, explicit disable,
 missing/hidden orbs, interior geometry, pending updates, and client-thread requests.
+
+## 16. Do not turn an unreachable upstairs goal into a boat trip
+
+For a nearby target on another plane, reject a partial result whose endpoint makes no
+horizontal progress before dispatching any transport. Mariah's missing house ladder
+previously made the closest reachable upper-plane tile a boat deck, so the walker crossed
+a gangplank instead of reporting the missing connection. Keep genuine progressing and
+long-distance partial routes available. At a partial endpoint, stop proactive prefetching
+and let the bounded partial-retry branch drain; otherwise repeated recalculation bypasses
+its retry limit.
+
+**Where this applies:** `Rs2Walker.processWalk`.
+
+**Defensive check:** `Rs2WalkerPartialRouteSafetyTest` pins the boat detour and endpoint
+prefetch boundary; `WalkerRouteCorpusTest` pins each repaired house ladder in both directions.

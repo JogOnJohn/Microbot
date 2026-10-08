@@ -1671,6 +1671,19 @@ public class Rs2Walker {
         return endpoint != null && endpoint.distanceTo(target) <= Math.max(0, distance);
     }
 
+    static boolean rejectsLocalFloorChangePartial(WorldPoint player, WorldPoint target, WorldPoint endpoint) {
+        return player != null && target != null && endpoint != null
+                && player.getPlane() != target.getPlane()
+                && player.distanceTo2D(target) <= NORMAL_MINIMAP_REACH_EUCLIDEAN
+                && endpoint.distanceTo2D(target) >= player.distanceTo2D(target);
+    }
+
+    static boolean shouldPrefetchPartialContinuation(int distanceToEndpoint, int remainingSteps,
+            int arrivalDistance) {
+        return distanceToEndpoint > Math.max(1, arrivalDistance) && remainingSteps > 1
+                && (distanceToEndpoint <= 12 || remainingSteps <= 10);
+    }
+
     /**
      * Core walk method contains all the logic to successfully walk to the destination
      * this contains doors, game objects, teleports, spells etc...
@@ -1832,6 +1845,12 @@ public class Rs2Walker {
                 if (path != null && path.size() > 1) {
                     WebWalkLog.partialSegment(dst, dst.distanceTo(target), target, path.size());
                     partialPath = true;
+                    if (rejectsLocalFloorChangePartial(walkLoop.playerLoc, target, dst)) {
+                        Telemetry.recordUnreachable("local-floor-change-partial-detour", walkLoop.playerLoc,
+                                target, dst, path.size(), distance, pathfinder);
+                        setTarget(null, "rs2walker:processWalk:local-floor-change-partial-detour");
+                        return WalkerState.UNREACHABLE;
+                    }
                 } else {
                     Telemetry.recordUnreachable("no-walkable-path", walkLoop.playerLoc,
                             target, dst, path == null ? 0 : path.size(), distance, pathfinder);
@@ -1853,10 +1872,10 @@ public class Rs2Walker {
                     int distToGoal = playerPt.distanceTo2D(target);
                     int closestEarly = walkLoop.closestTileIndex(path);
                     int remainingSteps = closestEarly >= 0 ? (path.size() - 1 - closestEarly) : Integer.MAX_VALUE;
-                    final int nearSegmentEndTiles = 12;
-                    final int nearSegmentEndSteps = 10;
-                    boolean approachingSegmentEnd = distToDstSeg <= nearSegmentEndTiles
-                            || (remainingSteps != Integer.MAX_VALUE && remainingSteps <= nearSegmentEndSteps);
+                    // At the endpoint, let the bounded partial-retry branch run instead of
+                    // restarting pathfinding forever before the retry budget is charged.
+                    boolean approachingSegmentEnd = shouldPrefetchPartialContinuation(
+                            distToDstSeg, remainingSteps, distance);
                     if (approachingSegmentEnd && distToGoal > distance) {
                         long now = System.currentTimeMillis();
                         if (now - routeState.lastPartialTransRecalcMs >= PARTIAL_TRANS_RECAL_COOLDOWN_MS) {

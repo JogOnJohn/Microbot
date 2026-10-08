@@ -119,6 +119,34 @@ public class WalkerRouteCorpusTest {
     private static final WorldPoint LUMBRIDGE = new WorldPoint(3222, 3218, 0);
 
     @Test
+    public void mariahHosidius_upstairsUsesHouseLadderNotBoat() {
+        WorldPoint upstairs = new WorldPoint(1766, 3620, 1);
+        assertTrue("ascent must use the live ground-floor ladder ID",
+                allTransports.get(new WorldPoint(1766, 3620, 0)).stream()
+                        .anyMatch(t -> upstairs.equals(t.getDestination()) && t.getObjectId() == 11794));
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(1764, 3622, 0), upstairs);
+        assertTrue("Mariah's upstairs work floor must be reachable", arrives(path, upstairs, 0));
+        assertTrue("route must use Mariah's ladder", visits(path, new WorldPoint(1766, 3620, 0), 0));
+        assertFalse("house route must not board the nearby boat",
+                visits(path, new WorldPoint(1811, 3679, 1), 0));
+    }
+
+    @Test
+    public void mariahHosidius_downstairsUsesHouseLadder() {
+        WorldPoint downstairs = new WorldPoint(1767, 3622, 0);
+        assertTrue("descent must use the live upstairs ladder ID",
+                allTransports.get(new WorldPoint(1766, 3620, 1)).stream()
+                        .anyMatch(t -> new WorldPoint(1766, 3620, 0).equals(t.getDestination())
+                                && t.getObjectId() == 11802));
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(1766, 3620, 1), downstairs);
+        assertTrue("Mariah's homeowner must remain reachable downstairs", arrives(path, downstairs, 0));
+        assertTrue("return route must descend at Mariah's ladder",
+                visits(path, new WorldPoint(1766, 3620, 0), 0));
+    }
+
+    @Test
     public void ardougneMahoganyHomes_upstairsUsesItsOwnLadder() {
         WorldPoint upstairs = new WorldPoint(2616, 3315, 1);
         List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
