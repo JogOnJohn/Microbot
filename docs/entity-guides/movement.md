@@ -1,5 +1,18 @@
 # Movement Gotchas
 
+## Interaction completion and loaded landings
+
+An ordinary arrival may complete while the walking pose still reports movement.
+Floor transitions instead require the expected plane, proximity to their landing,
+and loaded live collision. Keep the dispatch deadline bounded even while moving.
+A nearby NPC being visible is insufficient for early handoff: verify its action,
+plane and live reachability, then let the owning synchronous walk return before
+clicking. Re-query the NPC after return and resume approach if dispatch fails.
+
+Door fast completion must test the exact crossing in live collision on the client
+thread; reachability via a different door does not prove this crossing opened.
+See [the measured baseline and rollout notes](../walker-interaction-efficiency-20261009.md).
+
 ## 1. Do not recurse on failed minimap clicks without changing the click target
 
 `Rs2Walker.processWalk` holds the walker lock while processing a path. If a minimap click is rejected because the calculated point is outside the minimap clip, immediately recursing with the same target can spin forever while still holding the lock. Shrink the click target toward the player or otherwise change the condition before retrying.
