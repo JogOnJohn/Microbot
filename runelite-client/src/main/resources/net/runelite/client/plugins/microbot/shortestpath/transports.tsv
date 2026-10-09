@@ -293,6 +293,8 @@
 1768 5366 1	1772 5366 0	Climb-down Stairs 25338
 1766 3620 0	1766 3620 1	Climb-up Ladder 11794						2
 1766 3620 1	1766 3620 0	Climb-down Ladder 11802						2
+1787 3592 0	1787 3592 1	Climb-up Ladder 11794						2
+1787 3592 1	1787 3592 0	Climb-down Ladder 11802						2
 1795 3106 0	1799 9506 0	Enter Colosseum entrance 50749
 1795 3107 0	1799 9506 0	Enter Colosseum entrance 50749
 1798 9969 0	1670 3569 0	Climb-up Staircase 34864						1
