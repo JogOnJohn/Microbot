@@ -339,3 +339,16 @@ its retry limit.
 
 **Defensive check:** `Rs2WalkerPartialRouteSafetyTest` pins the boat detour and endpoint
 prefetch boundary; `WalkerRouteCorpusTest` pins each repaired house ladder in both directions.
+
+## 17. Recover a missing hosted-house facility before blocking the destination
+
+A W330 house can advertise useful facilities without having a mounted Xeric's talisman.
+Wait for scene loading, then leave and try another advertised host with a bounded budget.
+Temporarily skip hosts rejected in this client session. If recovery fails, invalidate the
+cached route as well as transport assembly; otherwise its failed POH edge keeps executing
+despite the teleport blocklist. Do not treat a house switch as arrival at the teleport goal.
+
+**Where this applies:** `PohTransport`, `World330HostedHouse`, `Rs2Walker`.
+
+**Defensive check:** `PohTransportRecoveryTest` covers success, bounded retries, failed
+exit/entry and interruption.

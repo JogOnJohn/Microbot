@@ -23,6 +23,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
@@ -40,6 +42,8 @@ public enum World330HostedHouse implements PohTeleport {
     private static final int SORT_ASCENDING_SPRITE = 1050;
     private static final int MAX_ADVERTISED_HOST_ATTEMPTS = 8;
     private static final Set<String> EXCLUDED_ADVERTISED_HOSTS = Set.of("v 3");
+    private static final Map<String, Long> unsuitableHosts = new ConcurrentHashMap<>();
+    private static volatile String currentAdvertisedHost;
     public static final WorldPoint POH_INSTANCE_ANCHOR = new WorldPoint(1877, 7052, 1);
 
     enum HouseTeleportAction {
@@ -100,6 +104,23 @@ public enum World330HostedHouse implements PohTeleport {
             return false;
         }
         return sleepUntil(this::isInHostedHouse, 16000);
+    }
+
+    public boolean switchUnsuitableHouse() {
+        if (!isInHostedHouse() || Thread.currentThread().isInterrupted()) {
+            return false;
+        }
+        if (currentAdvertisedHost != null) {
+            excludeUnsuitableHost(currentAdvertisedHost, System.currentTimeMillis());
+        }
+        log.info("[W330POH] leaving house without required facility; trying another host");
+        boolean clicked = Microbot.getRs2TileObjectCache().query()
+                .interact(net.runelite.api.gameval.ObjectID.POH_EXIT_PORTAL, "Enter");
+        if (!clicked || !sleepUntil(() -> !isInHostedHouse() && isNearHouseAdvertisement(), 12000)) {
+            return false;
+        }
+        currentAdvertisedHost = null;
+        return enterHostedHouse();
     }
 
     public boolean isInHostedHouse() {
@@ -221,6 +242,7 @@ public enum World330HostedHouse implements PohTeleport {
                 Rs2Widget.clickChildWidget(ENTER_CONTAINER_WIDGET, enter.getIndex());
                 boolean entered = sleepUntil(this::isInHostedHouse, 9000);
                 if (entered) {
+                    currentAdvertisedHost = houseOwner;
                     return true;
                 }
 
@@ -262,7 +284,20 @@ public enum World330HostedHouse implements PohTeleport {
     }
 
     static boolean isExcludedAdvertisedHost(String houseOwner) {
-        return houseOwner != null && EXCLUDED_ADVERTISED_HOSTS.contains(Text.standardize(houseOwner));
+        return isExcludedAdvertisedHost(houseOwner, System.currentTimeMillis());
+    }
+
+    static boolean isExcludedAdvertisedHost(String houseOwner, long now) {
+        if (houseOwner == null) return false;
+        String name = Text.standardize(houseOwner);
+        Long until = unsuitableHosts.get(name);
+        return EXCLUDED_ADVERTISED_HOSTS.contains(name) || (until != null && now < until);
+    }
+
+    static void excludeUnsuitableHost(String houseOwner, long now) {
+        if (houseOwner != null) {
+            unsuitableHosts.put(Text.standardize(houseOwner), now + 10 * 60_000L);
+        }
     }
 
     private List<String> advertisedHouseNames(Widget containerNames) {

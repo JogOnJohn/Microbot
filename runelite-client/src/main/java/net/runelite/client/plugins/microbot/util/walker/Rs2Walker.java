@@ -9364,6 +9364,9 @@ public class Rs2Walker {
                             // re-attempting the dead teleport forever.
                             PohTeleports.blockFailedTeleport(((PohTransport) transport).getTeleport(), "execute failed");
                             ShortestPathPlugin.getPathfinderConfig().invalidateTransportRefreshCache();
+                            // Invalidating assembly alone leaves this cached path's failed edge live.
+                            recalculatePath();
+                            return true;
                         }
                         if (pohResult) {
                             // Shares ship/NPC/boat 10s landing budget — intentional single timeout constant.
