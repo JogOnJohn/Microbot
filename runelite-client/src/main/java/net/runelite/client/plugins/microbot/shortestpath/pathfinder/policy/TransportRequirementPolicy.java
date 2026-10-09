@@ -1,11 +1,13 @@
 package net.runelite.client.plugins.microbot.shortestpath.pathfinder.policy;
 
 import net.runelite.api.QuestState;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 import java.util.List;
+import java.util.function.IntUnaryOperator;
 
 public final class TransportRequirementPolicy {
     private TransportRequirementPolicy() {
@@ -26,9 +28,21 @@ public final class TransportRequirementPolicy {
     }
 
     public static boolean varbitChecks(Transport transport) {
+        return varbitChecks(transport, Microbot::getVarbitValue);
+    }
+
+    public static boolean varbitChecks(Transport transport, IntUnaryOperator values) {
         return transport.getVarbits().isEmpty()
                 || transport.getVarbits().stream()
-                .allMatch(varbitCheck -> varbitCheck.matches(Microbot.getVarbitValue(varbitCheck.getVarbitId())));
+                .allMatch(check -> {
+                    int actual = values.applyAsInt(check.getVarbitId());
+                    String houseOption = transport.getHouseTeleportOption();
+                    // Imported house rows encode this toggle backwards. Keep this adapter across data syncs.
+                    if (check.getVarbitId() == VarbitID.POH_TELE_TOGGLE && houseOption != null) {
+                        return actual == ("Outside".equals(houseOption) ? 1 : 0);
+                    }
+                    return check.matches(actual);
+                });
     }
 
     public static boolean varplayerChecks(Transport transport) {

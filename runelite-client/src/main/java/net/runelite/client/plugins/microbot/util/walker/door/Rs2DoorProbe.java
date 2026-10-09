@@ -176,6 +176,10 @@ public final class Rs2DoorProbe {
         if (transport == null || transport.getType() != TransportType.TRANSPORT) {
             return false;
         }
+        if (Rs2DoorClassifier.isTrapdoorName(transport.getName())
+                || Rs2DoorClassifier.isTrapdoorName(transport.getDisplayInfo())) {
+            return false;
+        }
         return Rs2DoorClassifier.isDoorLikeGameObjectName(transport.getName())
                 || Rs2DoorClassifier.isDoorLikeGameObjectName(transport.getDisplayInfo())
                 || isDoorLikeTransportAction(transport.getAction());

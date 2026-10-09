@@ -45,7 +45,7 @@ public final class Rs2WalkerBankingPlanner {
         boolean originalUseBankItems = Rs2PathApi.getPathfinderConfig().isUseBankItems();
         try {
             Rs2PathApi.getPathfinderConfig().setUseBankItems(useBankItems);
-            Rs2PathApi.getPathfinderConfig().refresh();
+            Rs2PathApi.getPathfinderConfig().refresh(destination);
             Pathfinder pf = new Pathfinder(Rs2PathApi.getPathfinderConfig(), Rs2Player.getWorldLocation(), destination);
             pf.run();
 
@@ -108,13 +108,8 @@ public final class Rs2WalkerBankingPlanner {
                 || transport.getType() == TransportType.MAGIC_CARPET
                 || planningCoversPlainTransport(transport)) {
             if (transport.getType() == TransportType.TELEPORTATION_SPELL && transport.getDisplayInfo() != null) {
-                String spellName = transport.getDisplayInfo().contains(":")
-                        ? transport.getDisplayInfo().split(":")[0].trim()
-                        : transport.getDisplayInfo().trim();
-                boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
-                String displayInfo = hasMultipleDestination
-                        ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                        : transport.getDisplayInfo();
+                String spellName = transport.getSpellName();
+                String displayInfo = spellName;
                 log.debug("Looking for spell rune requirements for: '{}' - display info {}", spellName, displayInfo);
                 Rs2Spells rs2Spell = Rs2Magic.getRs2Spell(displayInfo);
                 return Rs2Magic.hasRequiredRunes(rs2Spell);
@@ -281,7 +276,10 @@ public final class Rs2WalkerBankingPlanner {
             return new TransportRouteAnalysis(new ArrayList<>(), null, null, new ArrayList<>(), new ArrayList<>(), "Cannot determine starting location");
         }
 
+        boolean originalUseBankItems = Rs2PathApi.getPathfinderConfig().isUseBankItems();
         try {
+            // The direct route and the journey to the bank cannot spend banked supplies.
+            Rs2PathApi.getPathfinderConfig().setUseBankItems(false);
             performanceLog.append("\tStart Point: ").append(startPoint).append(", Target: ").append(target).append("\n");
             long directPathStartTime = System.nanoTime();
             List<WorldPoint> directPath = Rs2Walker.getWalkPath(startPoint, target);
@@ -298,9 +296,8 @@ public final class Rs2WalkerBankingPlanner {
             int bankingRouteDistance = -1;
 
             try {
-                boolean originalUseBankItems = Rs2PathApi.getPathfinderConfig().isUseBankItems();
                 try {
-                    Rs2PathApi.getPathfinderConfig().setUseBankItems(true);
+                    Rs2PathApi.getPathfinderConfig().setUseBankItems(false);
                     Rs2PathApi.getPathfinderConfig().refresh(target);
 
                     performanceLog.append("\t-Bank items available: ").append(Rs2Bank.bankItems().size()).append("\n");
@@ -321,6 +318,7 @@ public final class Rs2WalkerBankingPlanner {
                         double pathToBankTimeMs = (pathToBankEndTime - pathToBankStartTime) / 1_000_000.0;
                         int distanceToBank = Rs2Walker.getTotalTilesFromPath(pathToBank, bankLocation);
 
+                        Rs2PathApi.getPathfinderConfig().setUseBankItems(true);
                         long pathFromBankStartTime = System.nanoTime();
                         pathFromBankToTarget = Rs2Walker.getWalkPath(bankLocation, target);
                         long pathFromBankEndTime = System.nanoTime();
@@ -446,13 +444,8 @@ public final class Rs2WalkerBankingPlanner {
             return runeRequirements;
         }
         try {
-            String spellName = transport.getDisplayInfo().contains(":")
-                    ? transport.getDisplayInfo().split(":")[0].trim()
-                    : transport.getDisplayInfo().trim();
-            boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
-            String displayInfo = hasMultipleDestination
-                    ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                    : transport.getDisplayInfo();
+            String spellName = transport.getSpellName();
+            String displayInfo = spellName;
             log.debug("Looking for spell rune requirements for: '{}' - display info {}", spellName, displayInfo);
             Rs2Spells rs2Spell = Rs2Magic.getRs2Spell(displayInfo);
             if (rs2Spell == null) {

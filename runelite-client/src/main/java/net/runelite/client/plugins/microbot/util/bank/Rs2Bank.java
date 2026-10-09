@@ -1296,7 +1296,7 @@ public class Rs2Bank {
 
         invokeMenu(xPromptOffset, rs2Item);
         boolean foundEnterAmount = sleepUntil(() -> {
-            Widget widget = Rs2Widget.getWidget(162, 43);
+            Widget widget = Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT);
             return widget != null && widget.getText().equalsIgnoreCase("Enter amount:");
         }, 5000);
         if (!foundEnterAmount) return false;
@@ -2912,10 +2912,13 @@ public class Rs2Bank {
 
     public static boolean setWithdrawAs(boolean noted) {
         if (isWithdrawAs(noted)) return true;
-        int target = noted ? InterfaceID.Bankmain.NOTE : InterfaceID.Bankmain.QUANTITY1_TEXT;
-        boolean clicked = Rs2Widget.clickWidget(target);
+        boolean clicked = Rs2Widget.clickWidget(InterfaceID.Bankmain.NOTE);
         if (!clicked) return false;
         return sleepUntil(() -> isWithdrawAs(noted));
+    }
+
+    public static Rs2ItemModel getBankItemForSavedId(int id) {
+        return id <= 0 ? null : findBankStackRowForSavedId(id);
     }
 
     /**

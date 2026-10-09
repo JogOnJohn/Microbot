@@ -727,12 +727,11 @@ public class PathfinderConfig {
                 ? Collections.unmodifiableSet(relevantItemIds)
                 : null;
 
-        refreshBoostedLevels = new int[SKILLS.length];
+        int[] boostedLevels = new int[SKILLS.length];
+        refreshBoostedLevels = boostedLevels;
         Map<Integer, Integer> varplayerValues = new HashMap<>();
         Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            for (int i = 0; i < SKILLS.length; i++) {
-                refreshBoostedLevels[i] = client.getBoostedSkillLevel(SKILLS[i]);
-            }
+            readRequirementLevels(client, boostedLevels);
             for (int id : varbitIds) {
                 Microbot.getVarbitValue(id);
             }
@@ -823,9 +822,9 @@ public class PathfinderConfig {
                 .sorted()
                 .toArray();
         int[] sortedSkillOrdinals = requiredSkillOrdinals.stream().mapToInt(Integer::intValue).sorted().toArray();
-        int verificationHash = computeTransportRefreshVerificationHash(refreshBoostedLevels, sortedSkillOrdinals,
+        int verificationHash = computeTransportRefreshVerificationHash(boostedLevels, sortedSkillOrdinals,
                 sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
-        int[] verificationComponents = computeTransportRefreshVerificationComponents(refreshBoostedLevels,
+        int[] verificationComponents = computeTransportRefreshVerificationComponents(boostedLevels,
                 sortedSkillOrdinals, sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
         transportRefreshSnapshots.put(refreshCacheKeyHash, TransportRefreshSnapshot.capture(
                 refreshCacheKeyHash, verificationHash, verificationComponents,
@@ -1179,7 +1178,7 @@ public class PathfinderConfig {
             mergeWorld330Transports(mergedTransports, world330Transports, inWorld330HostedHouse);
         }
 
-        if (!usePoh) {
+        if (!usePoh || prefersHostedHouse()) {
             return mergedTransports;
         }
 
@@ -1480,6 +1479,18 @@ public class PathfinderConfig {
     }
 
     private boolean useTransport(Transport transport) {
+        // The Zanaris shed is a quest/staff portal, not an unrestricted opening door.
+        // Keep the generated transport resource unchanged for converter reproducibility.
+        if (transport.getObjectId() == 2406
+                && new WorldPoint(3202, 3169, 0).equals(transport.getOrigin())
+                && new WorldPoint(2452, 4473, 0).equals(transport.getDestination())) {
+            boolean membersWorld = Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    client.getWorldType().contains(WorldType.MEMBERS)).orElse(false);
+            boolean hasStaff = Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
+            if (!membersWorld || !QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.LOST_CITY)) || !hasStaff) {
+                return false;
+            }
+        }
         if (isTransportRuntimeBlocked(transport)) {
             log.debug("Transport ( O: {} D: {} ) is runtime-blocked after a failed execution", transport.getOrigin(), transport.getDestination());
             return false;
@@ -1525,8 +1536,9 @@ public class PathfinderConfig {
         if (transport.getCurrencyAmount() > 0) {
             if (refreshCurrencyCache != null) {
                 int[] cached = refreshCurrencyCache.computeIfAbsent(transport.getCurrencyName(), name -> {
-                    int invCount = Rs2Inventory.itemQuantity(name);
-                    int bankCount = useBankItems ? Rs2Bank.count(name) : 0;
+                    int currencyId = currencyItemId(name);
+                    int invCount = currencyId > 0 ? Rs2Inventory.itemQuantity(currencyId) : Rs2Inventory.itemQuantity(name);
+                    int bankCount = useBankItems ? (currencyId > 0 ? Rs2Bank.count(currencyId) : Rs2Bank.count(name)) : 0;
                     return new int[]{invCount, bankCount};
                 });
                 if ((long) cached[0] + cached[1] < transport.getCurrencyAmount()) {
@@ -1611,6 +1623,12 @@ public class PathfinderConfig {
             .allMatch(i -> Microbot.getClient().getBoostedSkillLevel(SKILLS[i]) >= requiredLevels[i]);
     }
 
+    static void readRequirementLevels(Client client, int[] levels) {
+        for (int i = 0; i < SKILLS.length; i++) {
+            levels[i] = client.getBoostedSkillLevel(SKILLS[i]);
+        }
+    }
+
     /**
      * Checks if the player has all the required skill levels for the restriction
      */
@@ -1667,8 +1685,22 @@ public class PathfinderConfig {
         return true;
     }
 
+    private boolean prefersHostedHouse() {
+        return useWorld330MaxHouse && client != null && client.getWorld() == 330;
+    }
+
+    static boolean allowsPersonalHouseEntry(Transport transport, boolean prefersHostedHouse) {
+        if (!prefersHostedHouse || transport instanceof World330HostedHouseTransport) return true;
+        // Imported portal, cape, tree and ring entries share the personal POH anchor.
+        // Filtering only spell labels still lets an outside teleport route through Home Portal.
+        return !"Inside".equals(transport.getHouseTeleportOption())
+                && !new WorldPoint(1858, 7051, 0).equals(transport.getDestination());
+    }
+
     private boolean isFeatureEnabled(Transport transport) {
         TransportType type = transport.getType();
+
+        if (!allowsPersonalHouseEntry(transport, prefersHostedHouse())) return false;
 
         if (transport instanceof World330HostedHouseTransport) {
             return shouldUseWorld330MaxHouse();
@@ -1911,10 +1943,7 @@ public class PathfinderConfig {
 
     private boolean isTeleportationSpellUsable(Transport transport) {
 
-        boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
-        String displayInfo = hasMultipleDestination
-                ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                : transport.getDisplayInfo();
+        String displayInfo = transport.getSpellName();
         Rs2Spells rs2Spell = Rs2Magic.getRs2Spell(displayInfo);
         if (rs2Spell == null) return false;
         return Rs2Magic.hasRequiredRunes(rs2Spell, RuneFilter.builder().includeBank(useBankItems).build());

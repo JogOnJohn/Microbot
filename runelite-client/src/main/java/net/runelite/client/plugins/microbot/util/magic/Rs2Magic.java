@@ -161,6 +161,9 @@ public class Rs2Magic {
             log("Unable to cast " + magicSpell.getName());
             return false;
         }
+        if (magicSpell == MagicAction.TELEPORT_TO_HOUSE) {
+            return castHouseAction(magicSpell, option);
+        }
         if (magicSpell.getName().toLowerCase().contains("teleport") ||
                 magicSpell.getName().toLowerCase().contains("bones to") ||
                 (magicSpell.getActions() != null && Arrays.stream(magicSpell.getActions()).anyMatch(x -> x != null && x.equalsIgnoreCase("cast")))) {
@@ -184,6 +187,42 @@ public class Rs2Magic {
                 new Rectangle(Rs2Widget.getWidget(magicSpell.getWidgetId()).getBounds()));
         //Rs2Reflection.invokeMenu(-1, magicSpell.getWidgetId(), menuAction.getId(), 1, -1, "Cast", "<col=00ff00>" + magicSpell.getName() + "</col>", -1, -1);
         return true;
+    }
+
+    private static boolean castHouseAction(MagicAction spell, String option) {
+        var click = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Widget book = Rs2Widget.getWidget(218, 0);
+            if (book == null || book.getStaticChildren() == null) return null;
+            Widget widget = Rs2Widget.findWidget(spell.getName(), Arrays.asList(book.getStaticChildren()));
+            if (widget == null || widget.isHidden()) return null;
+            String[] actions = widget.getActions();
+            int index = houseTeleportActionIndex(actions, option,
+                    Microbot.getVarbitValue(VarbitID.POH_TELE_TOGGLE) == 1);
+            if (index < 0) return null;
+            return new AbstractMap.SimpleImmutableEntry<>(new NewMenuEntry()
+                    .option(actions[index]).param0(-1).param1(widget.getId())
+                    .opcode(MenuAction.CC_OP.getId()).identifier(index + 1).itemId(-1)
+                    .target(spell.getName()), new Rectangle(widget.getBounds()));
+        }).orElse(null);
+        if (click == null) return false;
+        Microbot.doInvoke(click.getKey(), click.getValue());
+        return true;
+    }
+
+    static int houseTeleportActionIndex(String[] actions, String option, boolean outsideDefault) {
+        if (actions == null || option == null) return -1;
+        String defaultOption = outsideDefault ? "Outside" : "Inside";
+        String wanted = "cast".equalsIgnoreCase(option) ? defaultOption : option;
+        for (int i = 0; i < actions.length; i++) {
+            if (wanted.equalsIgnoreCase(actions[i])) return i;
+        }
+        // Older widgets expose the configured primary destination as Cast.
+        if (wanted.equalsIgnoreCase(defaultOption)) {
+            for (int i = 0; i < actions.length; i++) {
+                if ("Cast".equalsIgnoreCase(actions[i])) return i;
+            }
+        }
+        return -1;
     }
 
 	public static boolean quickCast(Spell spell) {

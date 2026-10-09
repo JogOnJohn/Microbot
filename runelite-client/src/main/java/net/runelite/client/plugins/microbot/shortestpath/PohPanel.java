@@ -204,7 +204,7 @@ public class PohPanel extends PluginPanel {
 
         transportMap.put(null, Set.of(
                 new Transport(exitPortal, "Construction cape: Tele to POH", TransportType.TELEPORTATION_ITEM, true, 19, Set.of(Set.of(9789), Set.of(9790))),
-                new Transport(exitPortal, "Teleport to House", TransportType.TELEPORTATION_SPELL, true, 19, Map.of(Skill.MAGIC, 40)),
+                new Transport(exitPortal, "Teleport to House (Inside)", TransportType.TELEPORTATION_SPELL, true, 19, Map.of(Skill.MAGIC, 40)),
                 new Transport(exitPortal, "Teleport to House tablet: Inside", TransportType.TELEPORTATION_ITEM, true, 19, Set.of(Set.of(8013)))
         ));
         transportMap.put(outsidePoint, Set.of(

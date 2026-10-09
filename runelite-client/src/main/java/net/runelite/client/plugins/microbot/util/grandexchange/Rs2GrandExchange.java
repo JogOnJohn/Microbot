@@ -54,6 +54,9 @@ public class Rs2GrandExchange {
     private static final int COLLECT_ALL_BUTTON = 30474246;
     @Component
     private static final int GE_FRAME = InterfaceID.GeOffers.FRAME;
+    static final int GE_NEWOFFER_PRICE_VARP = 5753;
+    static final int CHATBOX_SEARCH_RESULTS_CHILD = InterfaceID.Chatbox.MES_LAYER_SCROLLCONTENTS & 0xFFFF;
+    static final int CHATBOX_INPUT_CHILD = InterfaceID.Chatbox.MES_TEXT2 & 0xFFFF;
     private static final String GE_TRACKER_API_URL = "https://www.ge-tracker.com/api/items/";
 
     // Wiki API for real-time prices (Alternative source)
@@ -107,6 +110,10 @@ public class Rs2GrandExchange {
      */
     public static boolean isOfferScreenOpen() {
         return Rs2Widget.isWidgetVisible(InterfaceID.GE_OFFERS, 15);
+    }
+
+    static boolean isOfferSetupOpen() {
+        return Rs2Widget.isWidgetVisible(InterfaceID.GeOffers.SETUP);
     }
 
     /**
@@ -211,7 +218,8 @@ public class Rs2GrandExchange {
                 sleepUntil(GrandExchangeWidget::isOfferTextVisible);
 
 
-                Rs2Widget.sleepUntilHasWidgetText("Start typing the name of an item to search for it", 162, 52, false, 5000);
+                Rs2Widget.sleepUntilHasWidgetText("Start typing the name of an item to search for it",
+                        InterfaceID.CHATBOX, CHATBOX_SEARCH_RESULTS_CHILD, false, 5000);
 
                 String searchName = request.getItemName();
                 boolean itemMatchedWithPreviousSearch = isPreviousSearchMatch(request.getItemName());
@@ -226,14 +234,14 @@ public class Rs2GrandExchange {
 
                 setPrice(request.getPrice());
                 if (request.getPercent() != 0) {
-                    adjustPriceByPercent(request.getPercent());
+                    if (!adjustPriceByPercent(request.getPercent())) return false;
                 }
                 if (!setQuantity(request.getQuantity())) {
                     //failed to set quantity
                     return false;
                 }
                 confirm();
-                success = sleepUntil(() -> !isOfferScreenOpen());
+                success = sleepUntil(() -> !isOfferSetupOpen());
                 break;
 
             case SELL:
@@ -249,7 +257,7 @@ public class Rs2GrandExchange {
                     setPrice(request.getPrice());
                 }
                 if (request.getPercent() != 0) {
-                    adjustPriceByPercent(request.getPercent());
+                    if (!adjustPriceByPercent(request.getPercent())) return false;
                 }
                 if (request.getQuantity() > 0) {
                     if (!setQuantity(request.getQuantity())) {
@@ -259,7 +267,7 @@ public class Rs2GrandExchange {
                 }
 
                 confirm();
-                success = sleepUntil(() -> !isOfferScreenOpen());
+                success = sleepUntil(() -> !isOfferSetupOpen());
                 break;
         }
 
@@ -282,7 +290,8 @@ public class Rs2GrandExchange {
         }
         Rs2Keyboard.typeString(request.getItemName());
 
-        if (!Rs2Widget.sleepUntilHasWidgetText(searchName, 162, 44, false, 5000)) return true;
+        if (!Rs2Widget.sleepUntilHasWidgetText(searchName,
+                InterfaceID.CHATBOX, CHATBOX_INPUT_CHILD, false, 5000)) return true;
 
         sleepUntil(() -> getSearchResultWidget(request.getItemName(), request.isExact()) != null, 2200);
 
@@ -468,14 +477,14 @@ public class Rs2GrandExchange {
      * @param percent the percentage by which to adjust the offer price; positive to increase, negative to decrease,
      *                and {@code 0} will result in no action
      */
-    private static void adjustPriceByPercent(int percent) {
+    private static boolean adjustPriceByPercent(int percent) {
         if (percent == 0) {
-            return;
+            return true;
         }
 
         boolean isIncrease = percent > 0;
         int absPercent = Math.abs(percent);
-        int basePrice = Microbot.getVarbitValue(VarbitID.GE_NEWOFFER_TYPE);
+        long basePrice = getOfferPrice();
 
         if (absPercent % 5 == 0) {
             Widget adjust5Widget = isIncrease
@@ -484,14 +493,17 @@ public class Rs2GrandExchange {
 
             if (adjust5Widget == null) {
                 Microbot.log("Unable to find +-5% button widget.");
-                return;
+                return false;
             }
 
             int times = absPercent / 5;
-            IntStream.range(0, times).forEach(i -> {
-                Rs2Widget.clickWidget(adjust5Widget);
-                sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(basePrice), 1600);
-            });
+            for (int i = 0; i < times; i++) {
+                long priceBeforeClick = getOfferPrice();
+                if (!Rs2Widget.clickWidget(adjust5Widget)
+                        || !sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(priceBeforeClick), 1600)) {
+                    return false;
+                }
+            }
         } else {
             Widget adjustXWidget = isIncrease
                     ? GrandExchangeWidget.getPricePerItemButton_PlusXPercent()
@@ -499,7 +511,7 @@ public class Rs2GrandExchange {
 
             if (adjustXWidget == null) {
                 Microbot.log("Unable to find +-X% button widget.");
-                return;
+                return false;
             }
 
             int currentPercent = Rs2UiHelper.extractNumber(adjustXWidget.getText());
@@ -523,20 +535,21 @@ public class Rs2GrandExchange {
                     Microbot.doInvoke(menuEntry, bounds);
                 }
 
-                sleepUntil(() -> Rs2Widget.hasWidget("Set a percentage to decrease/increase"), 2000);
+                if (!sleepUntil(() -> Rs2Widget.hasWidget("Set a percentage to decrease/increase"), 2000)) return false;
                 Rs2Keyboard.typeString(Integer.toString(absPercent));
                 Rs2Keyboard.enter();
-                sleepUntil(() -> {
+                if (!sleepUntil(() -> {
                     Widget updatedWidget = isIncrease
                             ? GrandExchangeWidget.getPricePerItemButton_PlusXPercent()
                             : GrandExchangeWidget.getPricePerItemButton_MinusXPercent();
                     return updatedWidget != null && Rs2UiHelper.extractNumber(updatedWidget.getText()) != currentPercent;
-                }, 2000);
+                }, 2000)) return false;
             }
 
-            Rs2Widget.clickWidget(adjustXWidget);
-            sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(basePrice), 2000);
+            return Rs2Widget.clickWidget(adjustXWidget)
+                    && sleepUntil(() -> GrandExchangeWidget.hasOfferPriceChanged(basePrice), 2000);
         }
+        return true;
     }
 
 
@@ -1686,8 +1699,9 @@ public class Rs2GrandExchange {
         return Microbot.getVarbitValue(VarbitID.GE_NEWOFFER_QUANTITY);
     }
 
-    static int getOfferPrice() {
-        return Microbot.getVarbitValue(4398);
+    static long getOfferPrice() {
+        return Microbot.getClientThread().runOnClientThreadOptional(() ->
+                Microbot.getClient().getVarpLongValue(GE_NEWOFFER_PRICE_VARP)).orElse(0L);
     }
 
     public static void setChatboxValue(long value) {

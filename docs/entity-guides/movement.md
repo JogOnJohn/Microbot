@@ -304,3 +304,51 @@ Read the top-level WorldView, plane, LocalPoint conversion, and scene tile array
 **Where this applies:** `Rs2Walker.sceneTileStatus` and its scene-load retry helpers.
 
 **Defensive check:** `Rs2WalkerSceneThreadTest` verifies that WorldView lookup occurs inside `runOnClientThreadOptional`; golden-route tests protect movement behavior.
+
+## 15. Apply the shared energy policy before clicking the run orb
+
+Every run-enable caller must pass through `Rs2Player.toggleRunEnergy`: energy must exceed
+`Microbot.runEnergyThreshold` in hundredths of a percent (default 1000 = 10%). The
+walker previously checked whole percentages in one path while direct scene/bank calls
+bypassed the check. An already satisfied state and explicit disable do not require energy.
+
+**Why this matters:** At zero energy, repeated requests cannot enable run. The orb's
+canvas location is its bounding-box corner, outside its circular hit area. Read visibility
+and bounds on the client thread and target the center; perform mouse gestures off-thread.
+A click is only a request: the helper returns true only if the desired state is observed,
+and throttles retries while the update is pending. Normal script iterations can retry.
+
+**Where this applies:** `Rs2Player`, `Rs2Walker`, `Rs2WalkerMovement`, bank/deposit helpers,
+and the base `Script` auto-run policy. The shared threshold now consistently uses raw
+energy (>1000 by default), replacing the walker's rounded >10% (>=1100) check.
+
+**Defensive check:** `Rs2PlayerRunEnergyTest` covers threshold boundaries, explicit disable,
+missing/hidden orbs, interior geometry, pending updates, and client-thread requests.
+
+## 16. Do not turn an unreachable upstairs goal into a boat trip
+
+For a nearby target on another plane, reject a partial result whose endpoint makes no
+horizontal progress before dispatching any transport. Mariah's missing house ladder
+previously made the closest reachable upper-plane tile a boat deck, so the walker crossed
+a gangplank instead of reporting the missing connection. Keep genuine progressing and
+long-distance partial routes available. At a partial endpoint, stop proactive prefetching
+and let the bounded partial-retry branch drain; otherwise repeated recalculation bypasses
+its retry limit.
+
+**Where this applies:** `Rs2Walker.processWalk`.
+
+**Defensive check:** `Rs2WalkerPartialRouteSafetyTest` pins the boat detour and endpoint
+prefetch boundary; `WalkerRouteCorpusTest` pins each repaired house ladder in both directions.
+
+## 17. Recover a missing hosted-house facility before blocking the destination
+
+A W330 house can advertise useful facilities without having a mounted Xeric's talisman.
+Wait for scene loading, then leave and try another advertised host with a bounded budget.
+Temporarily skip hosts rejected in this client session. If recovery fails, invalidate the
+cached route as well as transport assembly; otherwise its failed POH edge keeps executing
+despite the teleport blocklist. Do not treat a house switch as arrival at the teleport goal.
+
+**Where this applies:** `PohTransport`, `World330HostedHouse`, `Rs2Walker`.
+
+**Defensive check:** `PohTransportRecoveryTest` covers success, bounded retries, failed
+exit/entry and interruption.

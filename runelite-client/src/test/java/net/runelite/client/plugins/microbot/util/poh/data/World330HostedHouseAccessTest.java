@@ -14,6 +14,30 @@ import static org.junit.Assert.assertTrue;
 public class World330HostedHouseAccessTest {
 
     @Test
+    public void unsuitableHostIsSkippedAcrossSelectionsButCooldownExpires() {
+        World330HostedHouse.excludeUnsuitableHost(" <col=ffffff>Recovery test host</col> ", 1000);
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost("recovery test host", 1001));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("different test host", 1001));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("recovery test host", 601000));
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost("V 3", 601000));
+    }
+
+    @Test
+    public void permanentlyExcludesTrollHostRegardlessOfWidgetFormatting() {
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost("V 3"));
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost("v 3"));
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost(" <col=ffffff>V\u00A03</col> "));
+    }
+
+    @Test
+    public void hostExclusionDoesNotMatchOtherNames() {
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("V 30"));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("AV 3"));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("Another host"));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost(null));
+    }
+
+    @Test
     public void advertisementAccessAcceptsEitherInventoryTabletOrCastableSpell() {
         assertTrue(World330HostedHouse.hasAdvertisementAccess(false, true, false, false));
         assertTrue(World330HostedHouse.hasAdvertisementAccess(false, false, false, true));

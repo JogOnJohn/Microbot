@@ -1,4 +1,10 @@
 # Category	Match interaction	Origin	Destination	menuOption menuTarget objectID	Currency	Skills	Items	Quests	Varbits	VarPlayers	Duration	Display info	Consumable	Wilderness level	isMembers	Operation	Reason
+transports.tsv		1787 3592 0	1787 3592 1	Climb-up Ladder 11794							2					UPSERT	Live-verified Leela's Hosidius house ladder at 1788 3592 lands at 1787 3592 upstairs; missing connection generated a partial route toward Mariah's house.
+transports.tsv		1787 3592 1	1787 3592 0	Climb-down Ladder 11802							2					UPSERT	Live-verified Leela's return ladder at 1788 3592 lands at 1787 3592 downstairs.
+transports.tsv		1766 3620 0	1766 3620 1	Climb-up Ladder 11794							2					UPSERT	Live-verified Mariah's Hosidius ladder at 1767 3620 lands at 1766 3620 upstairs; missing connection made partial routing board a nearby boat.
+transports.tsv		1766 3620 1	1766 3620 0	Climb-down Ladder 11802							2					UPSERT	Preserve the return connection for Mariah's Hosidius contract house ladder.
+transports.tsv		2616 3315 0	2616 3315 1	Climb-up Ladder 16683							2					UPSERT	Live-verified Ardougne Mahogany Homes ladder at 2617 3315; missing edge sent upstairs routes into the neighbouring house.
+transports.tsv		2616 3315 1	2616 3315 0	Climb-down Ladder 16679							2					UPSERT	Preserve the return edge for the live-verified Ardougne Mahogany Homes ladder.
 transports.tsv		3012 3204 0	3011 3204 0	Open Door 2069												UPSERT	Preserve Microbot's Port Sarim back-room door transport.
 transports.tsv		3011 3204 0	3012 3204 0	Open Door 2069												UPSERT	Preserve Microbot's Port Sarim back-room door transport.
 transports.tsv		2310 2919 0	2167 9308 0	Enter Cave 40736												APPEND	Preserve the Isle of Souls dungeon entrance required by the route corpus.

@@ -79,7 +79,7 @@ class KourendLibraryTutorialOverlay extends OverlayPanel
 		}
 
 		WorldPoint playerLoc = Rs2Player.getWorldLocation();
-		if (playerLoc.getRegionID() != KourendLibraryPlugin.REGION)
+		if (playerLoc == null || playerLoc.getRegionID() != KourendLibraryPlugin.REGION)
 		{
 			return null;
 		}

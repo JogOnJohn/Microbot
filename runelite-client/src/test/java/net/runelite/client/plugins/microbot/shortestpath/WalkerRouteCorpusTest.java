@@ -118,6 +118,82 @@ public class WalkerRouteCorpusTest {
 
     private static final WorldPoint LUMBRIDGE = new WorldPoint(3222, 3218, 0);
 
+    @Test
+    public void leelaHosidius_upstairsUsesOwnLadder() {
+        WorldPoint upstairs = new WorldPoint(1787, 3592, 1);
+        WorldPoint downstairs = new WorldPoint(1787, 3592, 0);
+        assertTrue("ascent must use Leela's ground-floor ladder ID",
+                allTransports.get(downstairs).stream()
+                        .anyMatch(t -> upstairs.equals(t.getDestination()) && t.getObjectId() == 11794));
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(1786, 3593, 0), upstairs);
+        assertTrue("Leela's upstairs work floor must be reachable", arrives(path, upstairs, 0));
+        assertTrue("route must use Leela's ladder", visits(path, downstairs, 0));
+        assertFalse("route must not enter Mariah's upstairs",
+                visits(path, new WorldPoint(1766, 3620, 1), 0));
+    }
+
+    @Test
+    public void leelaHosidius_downstairsUsesOwnLadder() {
+        WorldPoint upstairs = new WorldPoint(1787, 3592, 1);
+        WorldPoint downstairs = new WorldPoint(1787, 3592, 0);
+        assertTrue("descent must use Leela's upstairs ladder ID",
+                allTransports.get(upstairs).stream()
+                        .anyMatch(t -> downstairs.equals(t.getDestination()) && t.getObjectId() == 11802));
+        WorldPoint homeowner = new WorldPoint(1784, 3590, 0);
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted), upstairs, homeowner);
+        assertTrue("Leela must remain reachable downstairs", arrives(path, homeowner, 0));
+        assertTrue("return route must descend at Leela's ladder", visits(path, downstairs, 0));
+    }
+
+    @Test
+    public void mariahHosidius_upstairsUsesHouseLadderNotBoat() {
+        WorldPoint upstairs = new WorldPoint(1766, 3620, 1);
+        assertTrue("ascent must use the live ground-floor ladder ID",
+                allTransports.get(new WorldPoint(1766, 3620, 0)).stream()
+                        .anyMatch(t -> upstairs.equals(t.getDestination()) && t.getObjectId() == 11794));
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(1764, 3622, 0), upstairs);
+        assertTrue("Mariah's upstairs work floor must be reachable", arrives(path, upstairs, 0));
+        assertTrue("route must use Mariah's ladder", visits(path, new WorldPoint(1766, 3620, 0), 0));
+        assertFalse("house route must not board the nearby boat",
+                visits(path, new WorldPoint(1811, 3679, 1), 0));
+    }
+
+    @Test
+    public void mariahHosidius_downstairsUsesHouseLadder() {
+        WorldPoint downstairs = new WorldPoint(1767, 3622, 0);
+        assertTrue("descent must use the live upstairs ladder ID",
+                allTransports.get(new WorldPoint(1766, 3620, 1)).stream()
+                        .anyMatch(t -> new WorldPoint(1766, 3620, 0).equals(t.getDestination())
+                                && t.getObjectId() == 11802));
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(1766, 3620, 1), downstairs);
+        assertTrue("Mariah's homeowner must remain reachable downstairs", arrives(path, downstairs, 0));
+        assertTrue("return route must descend at Mariah's ladder",
+                visits(path, new WorldPoint(1766, 3620, 0), 0));
+    }
+
+    @Test
+    public void ardougneMahoganyHomes_upstairsUsesItsOwnLadder() {
+        WorldPoint upstairs = new WorldPoint(2616, 3315, 1);
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(2614, 3318, 0), upstairs);
+        assertTrue("Mahogany Homes upstairs must be reachable", arrives(path, upstairs, 0));
+        assertTrue("route must use the assigned house ladder",
+                visits(path, new WorldPoint(2616, 3315, 0), 0));
+        assertFalse("route must not use the neighbouring house ladder",
+                visits(path, new WorldPoint(2616, 3323, 1), 0));
+    }
+
+    @Test
+    public void ardougneMahoganyHomes_downstairsUsesItsOwnLadder() {
+        WorldPoint downstairs = new WorldPoint(2614, 3318, 0);
+        List<WorldPoint> path = route(configWith(WalkerRouteCorpusTest::unrestricted),
+                new WorldPoint(2616, 3315, 1), downstairs);
+        assertTrue("Mahogany Homes downstairs must be reachable", arrives(path, downstairs, 0));
+    }
+
     // ---- baseline ----------------------------------------------------------------------------------
 
     @Test

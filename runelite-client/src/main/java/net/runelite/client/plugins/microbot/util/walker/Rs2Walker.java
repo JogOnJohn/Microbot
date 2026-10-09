@@ -60,6 +60,8 @@ import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.leaguetransport.LeaguesRegion;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.walker.banking.TransportWithdrawalConfirmation;
+import net.runelite.client.plugins.microbot.util.walker.banking.WithdrawNoteModePolicy;
 import net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorClassifier;
 import net.runelite.client.plugins.microbot.util.walker.door.DoorProbeContext;
 import net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorDetection;
@@ -1658,6 +1660,19 @@ public class Rs2Walker {
         return endpoint != null && endpoint.distanceTo(target) <= Math.max(0, distance);
     }
 
+    static boolean rejectsLocalFloorChangePartial(WorldPoint player, WorldPoint target, WorldPoint endpoint) {
+        return player != null && target != null && endpoint != null
+                && player.getPlane() != target.getPlane()
+                && player.distanceTo2D(target) <= NORMAL_MINIMAP_REACH_EUCLIDEAN
+                && endpoint.distanceTo2D(target) >= player.distanceTo2D(target);
+    }
+
+    static boolean shouldPrefetchPartialContinuation(int distanceToEndpoint, int remainingSteps,
+            int arrivalDistance) {
+        return distanceToEndpoint > Math.max(1, arrivalDistance) && remainingSteps > 1
+                && (distanceToEndpoint <= 12 || remainingSteps <= 10);
+    }
+
     /**
      * Core walk method contains all the logic to successfully walk to the destination
      * this contains doors, game objects, teleports, spells etc...
@@ -1819,6 +1834,12 @@ public class Rs2Walker {
                 if (path != null && path.size() > 1) {
                     WebWalkLog.partialSegment(dst, dst.distanceTo(target), target, path.size());
                     partialPath = true;
+                    if (rejectsLocalFloorChangePartial(walkLoop.playerLoc, target, dst)) {
+                        Telemetry.recordUnreachable("local-floor-change-partial-detour", walkLoop.playerLoc,
+                                target, dst, path.size(), distance, pathfinder);
+                        setTarget(null, "rs2walker:processWalk:local-floor-change-partial-detour");
+                        return WalkerState.UNREACHABLE;
+                    }
                 } else {
                     Telemetry.recordUnreachable("no-walkable-path", walkLoop.playerLoc,
                             target, dst, path == null ? 0 : path.size(), distance, pathfinder);
@@ -1840,10 +1861,10 @@ public class Rs2Walker {
                     int distToGoal = playerPt.distanceTo2D(target);
                     int closestEarly = walkLoop.closestTileIndex(path);
                     int remainingSteps = closestEarly >= 0 ? (path.size() - 1 - closestEarly) : Integer.MAX_VALUE;
-                    final int nearSegmentEndTiles = 12;
-                    final int nearSegmentEndSteps = 10;
-                    boolean approachingSegmentEnd = distToDstSeg <= nearSegmentEndTiles
-                            || (remainingSteps != Integer.MAX_VALUE && remainingSteps <= nearSegmentEndSteps);
+                    // At the endpoint, let the bounded partial-retry branch run instead of
+                    // restarting pathfinding forever before the retry budget is charged.
+                    boolean approachingSegmentEnd = shouldPrefetchPartialContinuation(
+                            distToDstSeg, remainingSteps, distance);
                     if (approachingSegmentEnd && distToGoal > distance) {
                         long now = System.currentTimeMillis();
                         if (now - routeState.lastPartialTransRecalcMs >= PARTIAL_TRANS_RECAL_COOLDOWN_MS) {
@@ -2845,7 +2866,7 @@ public class Rs2Walker {
                                 }
 								final WorldPoint posBeforeWait = playerLoc;
 								sleepUntil(() ->
-												interimFinal.distanceTo2D(Rs2Player.getWorldLocation()) <= interimPreclickTiles()
+												isPlayerWithin2D(interimFinal, interimPreclickTiles())
 														|| !Rs2Player.isMoving(),
 										INTERIM_MOVING_POLL_MS);
                                 WorldPoint posAfterWait = Rs2Player.getWorldLocation();
@@ -3097,7 +3118,7 @@ public class Rs2Walker {
                     // Keep stuck-detection honest: observed movement resets the movement timer.
                     // Without this, isStuckTooLong() fires after long successful walks because
                     // routeState.lastMovedTimeMs is only refreshed at processWalk entry (not during the loop).
-                    if (posBefore.distanceTo2D(Rs2Player.getWorldLocation()) > 0) {
+                    if (hasPlayerMovedFrom2D(posBefore)) {
                         routeState.lastMovedTimeMs = System.currentTimeMillis();
                         routeState.stuckCount = 0;
                     }
@@ -3186,11 +3207,11 @@ public class Rs2Walker {
                         }
                     }
 
-                    if (Rs2Tile.isTileReachable(finalTile) && Rs2Player.getWorldLocation().distanceTo(finalTile) >= finishTh) {
+                    WorldPoint finalPlayerLoc = Rs2Player.getWorldLocation();
+                    if (finalPlayerLoc != null && Rs2Tile.isTileReachable(finalTile) && finalPlayerLoc.distanceTo(finalTile) >= finishTh) {
                         final WorldPoint canvasClickWp = finalTile;
-                        WorldPoint finalPlayerLoc = Rs2Player.getWorldLocation();
                         boolean finalClick;
-                        if (rawPath != null && !rawPath.isEmpty() && finalPlayerLoc != null) {
+                        if (rawPath != null && !rawPath.isEmpty()) {
                             int rawAnchorIndex = rawAnchorIndexForPathPosition(rawPath, path, finalPlayerLoc);
                             finalClick = clickRouteBackedShortWalk(rawPath, canvasClickWp, finalPlayerLoc,
                                     NORMAL_MINIMAP_REACH_EUCLIDEAN - 1, rawAnchorIndex);
@@ -3214,9 +3235,10 @@ public class Rs2Walker {
                     && Rs2Player.isMoving()) {
                 exitReason = "route-move-in-flight";
             }
-            WorldPoint pathLastForFinish = path.get(path.size() - 1);
-            int finishThreshold = tightFinishThreshold(target, pathLastForFinish, distance);
-            int finalDist = Rs2Player.getWorldLocation().distanceTo(target);
+            int finishThreshold = tightFinishThreshold(target, path.get(path.size() - 1), distance);
+            WorldPoint finishPlayerLoc = Rs2Player.getWorldLocation();
+            if (finishPlayerLoc == null) { return WalkerState.MOVING; }
+            int finalDist = finishPlayerLoc.distanceTo(target);
             if (finalDist <= finishThreshold) {
                 if (tryHandleArrivalSceneTransition(target)) {
                     setTarget(null, "rs2walker:processWalk:arrival-scene-transition");
@@ -3328,7 +3350,7 @@ public class Rs2Walker {
                 walkerDiag("continue outer tail nextIdx=%d exitReason=%s finalDist=%d partialPath=%s",
                         processWalkTail + 1,
                         exitReason,
-                        Rs2Player.getWorldLocation().distanceTo(target),
+                        finalDist,
                         partialPath);
                 continue;
             }
@@ -3690,7 +3712,7 @@ public class Rs2Walker {
 
     private static void manageRunEnergy(int pathRemaining) {
         try {
-            if (isAutoRunEnabled() && !Rs2Player.isRunEnabled() && Rs2Player.getRunEnergy() > 10) {
+            if (isAutoRunEnabled()) {
                 Rs2Player.toggleRunEnergy(true);
             }
             if (pathRemaining < STAMINA_MIN_PATH_TILES) return;
@@ -7899,7 +7921,7 @@ public class Rs2Walker {
 			if (w == null) continue;
 			scannedWalls++;
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(w);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -7925,7 +7947,7 @@ public class Rs2Walker {
 			if (g == null) continue;
 			scannedGames++;
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(g);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -7990,7 +8012,7 @@ public class Rs2Walker {
 			if (!Rs2GameObject.hasLineOfSight(playerLoc, w)) continue;
 
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(w);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8027,7 +8049,7 @@ public class Rs2Walker {
 			if (!Rs2GameObject.hasLineOfSight(playerLoc, g)) continue;
 
 			ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(g);
-			if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+			if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 			if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 			String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8123,7 +8145,7 @@ public class Rs2Walker {
 				}
 
 				ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(w);
-				if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+				if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 				if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 				String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8162,7 +8184,7 @@ public class Rs2Walker {
 				}
 
 				ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(g);
-				if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+				if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 				if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 				String action = Rs2DoorClassifier.pickWalkDoorAction(comp);
@@ -8612,7 +8634,7 @@ public class Rs2Walker {
 				if (object == null) continue;
 
 				ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
-				if (comp == null || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
+				if (comp == null || Rs2DoorClassifier.isTrapdoorName(comp.getName()) || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())) continue;
 				if (Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) continue;
 
 				// Gate by "door-like" name or by having a known door-like action.
@@ -9330,6 +9352,9 @@ public class Rs2Walker {
                             // re-attempting the dead teleport forever.
                             PohTeleports.blockFailedTeleport(((PohTransport) transport).getTeleport(), "execute failed");
                             ShortestPathPlugin.getPathfinderConfig().invalidateTransportRefreshCache();
+                            // Invalidating assembly alone leaves this cached path's failed edge live.
+                            recalculatePath();
+                            return true;
                         }
                         if (pohResult) {
                             // Shares ship/NPC/boat 10s landing budget — intentional single timeout constant.
@@ -9481,12 +9506,18 @@ public class Rs2Walker {
 
                     if (transport.getType() == TransportType.TELEPORTATION_SPELL) {
                         if (attemptObserved(transport, () -> handleTeleportSpell(transport))) {
+                            boolean landed;
                             if (isLumbridgeHomeTeleport(transport)) {
-                                sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET), 600, 35000);
+                                landed = sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET), 600, 35000);
                             } else {
                                 sleepUntil(() -> !Rs2Player.isAnimating());
-                                sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),
+                                landed = sleepUntilTrue(() -> isPlayerWithinChebyshevOf(transport.getDestination(), OFFSET),
                                         TRANSPORT_LANDING_WAIT_POLL_MS, TRANSPORT_LANDING_WAIT_TIMEOUT_MS);
+                            }
+                            if (!landed) {
+                                WebWalkLog.spWarn("spell landing not confirmed spell={} destination={} player={}",
+                                        transport.getDisplayInfo(), transport.getDestination(), Rs2Player.getWorldLocation());
+                                return false;
                             }
                             Rs2Tab.switchTo(InterfaceTab.INVENTORY);
                             return finishHandledTransport(transport);
@@ -10754,9 +10785,7 @@ public class Rs2Walker {
         if (Rs2Pvp.isInWilderness() && (Rs2Pvp.getWildernessLevelFrom(Rs2Player.getWorldLocation()) > (transport.getMaxWildernessLevel() + 1))) return false;
         boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
 
-        String spellName = hasMultipleDestination
-                ? transport.getDisplayInfo().split(":")[0].trim().toLowerCase()
-                : transport.getDisplayInfo().toLowerCase();
+        String spellName = transport.getSpellName().toLowerCase(java.util.Locale.ROOT);
 
         String option = hasMultipleDestination
                 ? transport.getDisplayInfo().split(":")[1].trim().toLowerCase()
@@ -10768,6 +10797,10 @@ public class Rs2Walker {
 
         MagicAction magicSpell = Arrays.stream(MagicAction.values()).filter(x -> x.getName().toLowerCase().contains(spellName)).findFirst().orElse(null);
         if (magicSpell != null) {
+            if (magicSpell == MagicAction.TELEPORT_TO_HOUSE) {
+                String houseOption = transport.getHouseTeleportOption();
+                return Rs2Magic.cast(magicSpell, houseOption == null ? "Outside" : houseOption, 1);
+            }
             if (magicSpell == MagicAction.LUMBRIDGE_HOME_TELEPORT) {
                 return Rs2Magic.quickCast(magicSpell);
             }
@@ -11004,6 +11037,16 @@ public class Rs2Walker {
     public static boolean isNear(WorldPoint target) {
         WorldPoint pl = Rs2Player.getWorldLocation();
         return pl != null && pl.equals(target);
+    }
+
+    private static boolean isPlayerWithin2D(WorldPoint from, int tiles) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        return playerLoc != null && from.distanceTo2D(playerLoc) <= tiles;
+    }
+
+    private static boolean hasPlayerMovedFrom2D(WorldPoint from) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        return playerLoc != null && from.distanceTo2D(playerLoc) > 0;
     }
 
     public static boolean isNearPath() {
@@ -13005,30 +13048,54 @@ public class Rs2Walker {
             // Step 3: Withdraw missing transport items
             if (!missingItemsWithQuantities.isEmpty()) {
                 log.debug("Withdrawing transport items with quantities: " + missingItemsWithQuantities);
+                boolean restoreNoted = WithdrawNoteModePolicy.shouldSwitchToItemMode(
+                        WithdrawNoteModePolicy.requiresItemMode(
+                                missingItemsWithQuantities.keySet(), itemId -> {
+                                    Rs2ItemModel row = Rs2Bank.getBankItemForSavedId(itemId);
+                                    return row != null && row.isStackable();
+                                }), Rs2Bank.hasWithdrawAsNote());
+                try {
+                    if (restoreNoted && !Rs2Bank.setWithdrawAsItem()) {
+                        return WalkerState.EXIT;
+                    }
+                    for (Map.Entry<Integer, Integer> entry : missingItemsWithQuantities.entrySet()) {
+                        int itemId = entry.getKey();
+                        int amountNeeded = entry.getValue();
+                        int amountToWithdraw = Math.max(0, amountNeeded );
 
-                // Withdraw the correct amount of each unique item
-                for (Map.Entry<Integer, Integer> entry : missingItemsWithQuantities.entrySet()) {
-                    int itemId = entry.getKey();
-                    int amountNeeded = entry.getValue();
-                    int currentCount = Rs2Inventory.count(itemId);
-                    int amountToWithdraw = Math.max(0, amountNeeded );
-
-                    if (amountToWithdraw > 0) {
-                        if (Rs2Bank.hasBankItem(itemId, amountToWithdraw)) {
-                            log.debug("Withdrawing {} x {} (item ID: {})", amountToWithdraw, itemId, itemId);
-                            Rs2Bank.withdrawX(itemId, amountToWithdraw);
-                            sleepUntil(() -> Rs2Inventory.count(itemId) >= currentCount + amountToWithdraw, 3000);
+                        if (amountToWithdraw > 0) {
+                            if (Rs2Bank.hasBankItem(itemId, amountToWithdraw)) {
+                                log.debug("Withdrawing {} x {} (item ID: {})", amountToWithdraw, itemId, itemId);
+                                Rs2ItemModel row = Rs2Bank.getBankItemForSavedId(itemId);
+                                TransportWithdrawalConfirmation confirmation =
+                                        TransportWithdrawalConfirmation.start(
+                                                itemId, row == null ? -1 : row.getId(), amountToWithdraw, Rs2Inventory::itemQuantity);
+                                if (!Rs2Bank.withdrawX(itemId, amountToWithdraw)) {
+                                    return WalkerState.EXIT;
+                                }
+                                sleepUntil(() -> confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
+                                                != TransportWithdrawalConfirmation.State.PENDING,
+                                        TransportWithdrawalConfirmation.TIMEOUT_MS);
+                                if (confirmation.evaluate(Rs2Inventory::itemQuantity, Rs2Bank.isOpen())
+                                        != TransportWithdrawalConfirmation.State.CONFIRMED) {
+                                    log.warn("Required transport withdrawal was not observed for {}", itemId);
+                                    return WalkerState.EXIT;
+                                }
+                            } else {
+                                log.warn("Required transport item {} not found in bank (need {} but bank has less)",
+                                        itemId, amountToWithdraw);
+                                return WalkerState.EXIT;
+                            }
                         } else {
-                            log.warn("Required transport item {} not found in bank (need {} but bank has less)",
-                                    itemId, amountToWithdraw);
+                            log.debug("No withdrawal needed for item {}", itemId);
                         }
-                    } else {
-                        log.debug("Already have enough of item {}: {} (need {})", itemId, currentCount, amountNeeded);
+                    }
+
+                } finally {
+                    if (restoreNoted && !Rs2Bank.setWithdrawAsNote()) {
+                        log.warn("Failed to restore bank noted withdrawal mode");
                     }
                 }
-
-                // Wait a bit for all withdrawals to complete
-                sleepTickJitter(1);
             }
 
             // Step 4: Close bank

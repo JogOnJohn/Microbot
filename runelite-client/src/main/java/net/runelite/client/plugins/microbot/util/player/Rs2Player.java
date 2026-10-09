@@ -411,24 +411,60 @@ public class Rs2Player {
         return false;
     }
 
+    private static final java.util.concurrent.locks.ReentrantLock RUN_TOGGLE_LOCK =
+            new java.util.concurrent.locks.ReentrantLock();
+    private static final long RUN_TOGGLE_RETRY_NANOS = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(1200);
+    private static long lastRunToggleAttempt;
+    private static boolean runToggleAttempted;
+
     /**
-     * Toggles the player's run energy on or off.
+     * Requests the desired run state. Enabling requires energy strictly above
+     * {@link Microbot#runEnergyThreshold} (hundredths of a percent; default 1000 = 10%).
+     * Disabling and an already satisfied state do not require energy.
      *
-     * @param toggle {@code true} to enable running, {@code false} to disable it.
-     * @return {@code true} if the toggle action was performed successfully or was already in the desired state,
-     *         {@code false} if the run energy toggle widget was not found.
+     * @return true only when the desired state is observed; false includes a pending click,
+     *         insufficient energy, unavailable orb, retry cooldown, or a client-thread request
+     *         that would require a mouse gesture. Call again from the normal script loop.
      */
     public static boolean toggleRunEnergy(boolean toggle) {
-        if (Microbot.getVarbitPlayerValue(173) == 0 && !toggle) return true;
-        if (Microbot.getVarbitPlayerValue(173) == 1 && toggle) return true;
-
-        Widget widget = Rs2Widget.getWidget(WidgetInfo.MINIMAP_TOGGLE_RUN_ORB.getId());
-        if (widget == null) return false;
-
-        Microbot.getMouse().click(widget.getCanvasLocation());
-        sleep(150, 300);
-
-        return true;
+        if (Thread.currentThread().isInterrupted() || !RUN_TOGGLE_LOCK.tryLock()) return false;
+        try {
+            Boolean satisfied = Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    Microbot.getClient().getGameState() == GameState.LOGGED_IN
+                            && (Microbot.getClient().getVarpValue(173) == 1) == toggle).orElse(false);
+            if (satisfied) return true;
+            if (Microbot.getClientThread().isClientThread()) return false;
+            if (runToggleAttempted && System.nanoTime() - lastRunToggleAttempt < RUN_TOGGLE_RETRY_NANOS) {
+                return false;
+            }
+            net.runelite.api.Point target = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                Client client = Microbot.getClient();
+                if (client.getGameState() != GameState.LOGGED_IN
+                        || (client.getVarpValue(173) == 1) == toggle
+                        || (toggle && client.getEnergy() <= Math.max(0, Microbot.runEnergyThreshold))) return null;
+                Widget widget = Rs2Widget.getWidget(WidgetInfo.MINIMAP_TOGGLE_RUN_ORB.getId());
+                if (widget == null || widget.isHidden()) return null;
+                Rectangle bounds = widget.getBounds();
+                if (bounds == null || bounds.width < 3 || bounds.height < 3
+                        || !new Rectangle(0, 0, client.getCanvasWidth(), client.getCanvasHeight()).contains(bounds)) return null;
+                int x = bounds.x + bounds.width / 2;
+                int y = bounds.y + bounds.height / 2;
+                if (x < 0 || y < 0 || x >= client.getCanvasWidth() || y >= client.getCanvasHeight()) return null;
+                return new net.runelite.api.Point(x, y);
+            }).orElse(null);
+            if (target == null) return false;
+            try {
+                Microbot.getMouse().click(target);
+            } finally {
+                lastRunToggleAttempt = System.nanoTime();
+                runToggleAttempted = true;
+            }
+            return Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    Microbot.getClient().getGameState() == GameState.LOGGED_IN
+                            && (Microbot.getClient().getVarpValue(173) == 1) == toggle).orElse(false);
+        } finally {
+            RUN_TOGGLE_LOCK.unlock();
+        }
     }
 
     /**
@@ -882,9 +918,10 @@ public class Rs2Player {
      * @return The combat level of the local player.
      */
     public static int getCombatLevel() {
-        return Microbot.getClientThread().runOnClientThreadOptional(() ->
-                Microbot.getClient().getLocalPlayer().getCombatLevel()
-        ).orElse(0);
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Player localPlayer = Microbot.getClient().getLocalPlayer();
+            return localPlayer == null ? null : localPlayer.getCombatLevel();
+        }).orElse(0);
     }
 
     /**
@@ -905,7 +942,10 @@ public class Rs2Player {
      * @return The local player wrapped in an {@link Rs2PlayerModel}.
      */
     public static Rs2PlayerModel getLocalPlayer() {
-        return getPlayers(player -> player.getId() == Microbot.getClient().getLocalPlayer().getId(), true).findFirst().orElse(null);
+        return getPlayers(player -> {
+            Player localPlayer = Microbot.getClient().getLocalPlayer();
+            return localPlayer != null && player.getId() == localPlayer.getId();
+        }, true).findFirst().orElse(null);
     }
 
     /**
@@ -1136,7 +1176,8 @@ public class Rs2Player {
      * @return The {@link LocalPoint} representing the player's current position.
      */
     public static LocalPoint getLocalLocation() {
-        return Microbot.getClient().getLocalPlayer().getLocalLocation();
+        Player localPlayer = Microbot.getClient().getLocalPlayer();
+        return localPlayer == null ? null : localPlayer.getLocalLocation();
     }
 
     /**
@@ -1499,9 +1540,10 @@ public class Rs2Player {
      * @return The pose animation ID of the player.
      */
     public static int getPoseAnimation() {
-        return Microbot.getClientThread().runOnClientThreadOptional(() ->
-                Microbot.getClient().getLocalPlayer().getPoseAnimation()
-        ).orElse(-1);
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Player localPlayer = Microbot.getClient().getLocalPlayer();
+            return localPlayer == null ? null : localPlayer.getPoseAnimation();
+        }).orElse(-1);
     }
 
     /**
@@ -1698,7 +1740,8 @@ public class Rs2Player {
      * @return The graphic ID of the local player.
      */
     public static int getGraphicId() {
-        return Microbot.getClient().getLocalPlayer().getGraphic();
+        Player localPlayer = Microbot.getClient().getLocalPlayer();
+        return localPlayer == null ? -1 : localPlayer.getGraphic();
     }
 
     /**
@@ -1711,7 +1754,8 @@ public class Rs2Player {
      * @return {@code true} if the local player has the specified spot animation, {@code false} otherwise.
      */
     public static boolean hasSpotAnimation(int graphicId) {
-        return Microbot.getClient().getLocalPlayer().hasSpotAnim(graphicId);
+        Player localPlayer = Microbot.getClient().getLocalPlayer();
+        return localPlayer != null && localPlayer.hasSpotAnim(graphicId);
     }
 
     /**
