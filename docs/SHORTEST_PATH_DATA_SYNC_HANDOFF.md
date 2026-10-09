@@ -1,5 +1,9 @@
 # Shortest-Path Data Sync — Handoff
 
+Current adoption: [2026-10-10 upstream review](shortest-path-upstream-review-20261010.md)
+records the official pins, four-flag collision format, retained overrides,
+selected transport/loader fixes and deferred planner changes.
+
 Written 2026-07-12 by Claude after reviewing, amending, and extending Codex's foundation work.
 Read alongside [SHORTEST_PATH_DATA_SYNC_PLAN.md](SHORTEST_PATH_DATA_SYNC_PLAN.md) (the
 authoritative plan) and [TRANSPORT_SCHEMA.md](TRANSPORT_SCHEMA.md) (the contract inventory).

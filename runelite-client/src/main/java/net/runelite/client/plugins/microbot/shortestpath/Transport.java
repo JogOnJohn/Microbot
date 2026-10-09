@@ -644,7 +644,7 @@ public class Transport {
             headerLine = headerLine.startsWith(PREFIX_COMMENT) ? headerLine.replace(PREFIX_COMMENT, "") : headerLine;
             String[] headers = headerLine.split(DELIM_COLUMN);
 
-            Set<Transport> newTransports = new HashSet<>();
+            Set<Transport> newTransports = new LinkedHashSet<>();
 
             int lineNumber = 1;
             while (scanner.hasNextLine()) {
@@ -693,8 +693,8 @@ public class Transport {
              * by specifying a radius threshold to ignore almost identical coordinates.
              * Example: fairy ring AIQ -> AIQ
              */
-            Set<Transport> transportOrigins = new HashSet<>();
-            Set<Transport> transportDestinations = new HashSet<>();
+            Set<Transport> transportOrigins = new LinkedHashSet<>();
+            Set<Transport> transportDestinations = new LinkedHashSet<>();
             for (Transport transport : newTransports) {
                 WorldPoint origin = transport.getOrigin();
                 WorldPoint destination = transport.getDestination();
@@ -712,13 +712,13 @@ public class Transport {
                 if (!LOCATION_PERMUTATION.equals(origin)
                         && destination != null && !LOCATION_PERMUTATION.equals(destination)
                         && (origin == null || !origin.equals(destination))) {
-                    transports.computeIfAbsent(origin, k -> new HashSet<>()).add(transport);
+                    transports.computeIfAbsent(origin, k -> new LinkedHashSet<>()).add(transport);
                 }
             }
             for (Transport origin : transportOrigins) {
                 for (Transport destination : transportDestinations) {
                     if (origin.getOrigin().distanceTo2D(destination.getDestination()) > radiusThreshold) {
-                        transports.computeIfAbsent(origin.getOrigin(), k -> new HashSet<>())
+                        transports.computeIfAbsent(origin.getOrigin(), k -> new LinkedHashSet<>())
                                 .add(new Transport(origin, destination));
                     }
                 }

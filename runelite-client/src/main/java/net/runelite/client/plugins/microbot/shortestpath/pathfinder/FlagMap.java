@@ -8,7 +8,8 @@ import java.util.Locale;
 import static net.runelite.api.Constants.REGION_SIZE;
 
 public class FlagMap {
-    private static final byte FLAG_COUNT = 2;
+    // Upstream map format: north/east movement, then north/east wall boundaries.
+    private static final byte FLAG_COUNT = 4;
     private final BitSet flags;
     @Getter
     private final byte planeCount;

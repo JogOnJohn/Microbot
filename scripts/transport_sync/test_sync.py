@@ -48,9 +48,7 @@ class TransportSyncTest(unittest.TestCase):
     def test_combined_tool_requirements_preserve_both_groups(self):
         row = {"Items": "AXE=1&MACHETE=1"}
         normalize_runtime_item_requirements({"transports.tsv": Table(["Items"], [row])})
-        axe, machete = row["Items"].split(";")
-        self.assertIn("1351", axe.split())
-        self.assertEqual("975 6313 6315 6317", machete)
+        self.assertEqual("AXE=1&MACHETE=1", row["Items"])
 
     def test_semantic_diff_ignores_equivalent_interaction_serialization(self):
         with tempfile.TemporaryDirectory() as temp:

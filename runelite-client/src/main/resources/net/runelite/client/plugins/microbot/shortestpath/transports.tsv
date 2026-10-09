@@ -290,9 +290,9 @@
 1761 4964 0	1631 4957 0	Walk-down Stairs 24428
 1761 4965 0	1631 4957 0	Walk-down Stairs 24428
 1761 5362 0	2531 3446 0	Ride Aged log 25216						2
-1768 5366 1	1772 5366 0	Climb-down Stairs 25338
 1766 3620 0	1766 3620 1	Climb-up Ladder 11794						2
 1766 3620 1	1766 3620 0	Climb-down Ladder 11802						2
+1768 5366 1	1772 5366 0	Climb-down Stairs 25338
 1787 3592 0	1787 3592 1	Climb-up Ladder 11794						2
 1787 3592 1	1787 3592 0	Climb-down Ladder 11802						2
 1795 3106 0	1799 9506 0	Enter Colosseum entrance 50749
@@ -1518,10 +1518,10 @@
 2615 3868 0	2615 3867 1	Climb-up Staircase 16671						1
 2616 3207 0	2618 3208 1	Climb-up Staircase 16671						1
 2616 3210 0	2618 3208 1	Climb-up Staircase 16671						1
-2616 3323 0	2616 3323 1	Climb-up Ladder 16683						2
-2616 3323 1	2616 3323 0	Climb-down Ladder 16679						2
 2616 3315 0	2616 3315 1	Climb-up Ladder 16683						2
 2616 3315 1	2616 3315 0	Climb-down Ladder 16679						2
+2616 3323 0	2616 3323 1	Climb-up Ladder 16683						2
+2616 3323 1	2616 3323 0	Climb-down Ladder 16679						2
 2617 10265 0	2620 3864 0	Climb-up Exit 15193
 2617 3207 0	2618 3208 1	Climb-up Staircase 16671						1
 2617 3210 0	2618 3208 1	Climb-up Staircase 16671						1
@@ -2156,7 +2156,7 @@
 2800 5160 0	2166 4409 2	Climb-down Ladder 20278						2
 2802 10187 0	2822 3745 0	Enter Tunnel 5011						1
 2803 10187 0	2822 3745 0	Enter Tunnel 5011						1
-2803 2727 2	2806 2727 0	Jump off End of bridge 4745						4
+2803 2727 2	2806 2724 0	Jump off End of bridge 4745						4
 2803 2733 2	2803 2735 0	Climb-down Bamboo Ladder 4744						1
 2803 2735 0	2803 2733 2	Climb-up Bamboo Ladder 4743						1
 2804 10187 0	2822 3745 0	Enter Tunnel 5011						1
