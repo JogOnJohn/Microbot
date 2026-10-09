@@ -239,8 +239,6 @@ public class Rs2Walker {
      */
     private static final long DOOR_SUPPRESS_NUDGE_HOLDOFF_MS = 6_000L;
 	private static final long POST_TRANSPORT_PATH_TMARK_WINDOW_MS = 15_000L;
-	/** Floor for the post-plane-change settle sleep, so an unbounded Gaussian draw cannot go negative. */
-	private static final int MIN_PLANE_CHANGE_SETTLE_MS = 60;
 	private static final int ROUTE_PROGRESS_FORWARD_SEARCH_TILES = 40;
 
 	/**
@@ -709,8 +707,6 @@ public class Rs2Walker {
     /** Max wait after scene canvas / recovery clicks until movement stops (avoids minimap churn while in-flight). */
     private static final int POST_SCENE_WALK_IDLE_WAIT_MS_MAX = 10_000;
 
-    /** If phase 1 exits on arrival distance while still moving, wait briefly for idle-only (reduces tail churn). */
-    private static final int POST_SCENE_WALK_IDLE_SECOND_PHASE_MS_MAX = 4_000;
     private static final int POST_RECOVERY_MOVEMENT_START_WAIT_MS = 1_200;
 
     private static void waitUntilIdleAfterSceneWalk(WorldPoint cancelGoal, int timeoutMs) {
@@ -722,11 +718,10 @@ public class Rs2Walker {
      * {@code arrivalGoal} (same plane; see {@link WorldPoint#distanceTo2D(WorldPoint)}) — avoids burning full
      * timeout when {@code Rs2Player#isMoving()} lies during animations. Arrival uses an <em>inclusive</em> bound:
      * {@code distanceTo2D(arrivalGoal) <= arrivalMaxChebyshev} (unlike {@link #OFFSET}-style guards that use
-     * {@code distanceTo2D &lt; OFFSET}). If arrival distance triggers while still
-     * moving, runs a short second phase idle-only wait. Phase 2 does not run when phase 1 ends only due to the
-     * outer timeout while still far from {@code arrivalGoal} (by design).
+     * {@code distanceTo2D &lt; OFFSET}). Confirmed ordinary arrival does not wait for the walking pose
+     * to clear. Transport completion is checked by its own landing handler.
      */
-    private static void waitUntilIdleAfterSceneWalk(WorldPoint cancelGoal, int timeoutMs,
+    static void waitUntilIdleAfterSceneWalk(WorldPoint cancelGoal, int timeoutMs,
             WorldPoint arrivalGoal, int arrivalMaxChebyshev) {
         assert cancelGoal != null;
         assert timeoutMs > 0;
@@ -742,15 +737,6 @@ public class Rs2Walker {
             }
             return !Rs2Player.isMoving();
         }, timeoutMs);
-        // Sample player once after phase 1 — rare tick skew vs isMoving(); phase 2 only refines idle after arrival exit.
-        WorldPoint plAfter = Rs2Player.getWorldLocation();
-        boolean withinArrival = arrivalGoal != null && arrivalMaxChebyshev >= 0 && plAfter != null
-                && arrivalGoal.getPlane() == plAfter.getPlane()
-                && plAfter.distanceTo2D(arrivalGoal) <= arrivalMaxChebyshev;
-        if (withinArrival && Rs2Player.isMoving()) {
-            sleepUntil(() -> isWalkCancelled(cancelGoal) || !Rs2Player.isMoving(),
-                    POST_SCENE_WALK_IDLE_SECOND_PHASE_MS_MAX);
-        }
     }
 
     /**
@@ -1304,6 +1290,52 @@ public class Rs2Walker {
             } else {
                 walkCompletionContext.set(previous);
             }
+        }
+    }
+
+    /**
+     * Bank-aware opt-in interaction handoff. The read-only condition runs on the owning script
+     * thread; dispatch the interaction only after this method returns and releases the walker lock.
+     * A different active target is never cancelled. Recheck the entity before clicking it.
+     */
+    public static WalkerState walkWithBankedTransportsUntil(WorldPoint target, int distance,
+                                                            BooleanSupplier completionCondition) {
+        return walkWithBankedTransportsUntil(target, distance, new AtomicReference<>(target), completionCondition);
+    }
+
+    /** The caller retains this ownership holder across calls, including intermediate bank legs. */
+    public static WalkerState walkWithBankedTransportsUntil(WorldPoint target, int distance,
+            AtomicReference<WorldPoint> ownedActiveTarget, BooleanSupplier completionCondition) {
+        Objects.requireNonNull(completionCondition, "completionCondition");
+        Objects.requireNonNull(ownedActiveTarget, "ownedActiveTarget");
+        if (target == null || isClientThread() || Thread.currentThread().isInterrupted()
+                || InputArbiter.isHuman()) return WalkerState.EXIT;
+        if (!walkerLock.tryLock()) return WalkerState.MOVING;
+        WalkCompletionContext previous = walkCompletionContext.get();
+        WalkCompletionContext context = new WalkCompletionContext(target, completionCondition);
+        try {
+            if (currentTarget != null && !currentTarget.equals(ownedActiveTarget.get())) return WalkerState.EXIT;
+            walkCompletionContext.set(context);
+            if ((currentTarget == null || currentTarget.equals(target)) && evaluateWalkCompletion(context)) {
+                clearWalkingRoute("rs2walker:banked-interaction-ready");
+                ownedActiveTarget.set(null);
+                return WalkerState.ARRIVED;
+            }
+            WalkerState result = walkWithBankedTransportsAndStateLocked(target, distance, false);
+            if (context.met) {
+                clearWalkingRoute("rs2walker:banked-interaction-handoff");
+                ownedActiveTarget.set(null);
+                WebWalkLog.spInfo("interaction_handoff | goal={} at={}", target, Rs2Player.getWorldLocation());
+                return WalkerState.ARRIVED;
+            }
+            if (result == WalkerState.MOVING || result == WalkerState.ARRIVED) {
+                ownedActiveTarget.set(currentTarget);
+            }
+            return result;
+        } finally {
+            if (previous == null) walkCompletionContext.remove();
+            else walkCompletionContext.set(previous);
+            walkerLock.unlock();
         }
     }
 
@@ -6567,7 +6599,7 @@ public class Rs2Walker {
                                     compactWorldPoint(probe), compactWorldPoint(fromWp), compactWorldPoint(toWp));
                             return false;
                         }
-                        markDoorInteractionSettling(toWp);
+                        markDoorInteractionSettling(fromWp, toWp);
                         waitForDoorInteractionProgress(fromWp, toWp);
                         WorldPoint posAfter = Rs2Player.getWorldLocation();
                         boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, probe, fromWp, toWp);
@@ -6698,7 +6730,7 @@ public class Rs2Walker {
                     compactWorldPoint(probe), compactWorldPoint(fromWp), compactWorldPoint(toWp));
             return false;
         }
-        markDoorInteractionSettling(toWp);
+        markDoorInteractionSettling(fromWp, toWp);
         waitForDoorInteractionProgress(fromWp, toWp);
         WorldPoint posAfter = Rs2Player.getWorldLocation();
         boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, probe, fromWp, toWp);
@@ -7213,16 +7245,15 @@ public class Rs2Walker {
         if (now >= routeState.doorInteractionSettleUntilMs) {
             return false;
         }
-        // Early exit: the interaction's purpose was opening the door — once its far side is reachable,
-        // the edge is open and there is nothing left to settle (previously this was a flat 900ms freeze
-        // after every door). One-tick floor for object-state flux; the window is cleared on success so
-        // repeated checks this tick don't re-run the reachability probe.
+        // Positive evidence for this exact edge needs no settling floor. Broader reachability
+        // remains a conservative fallback when live edge evidence is unavailable.
         WorldPoint farSide = routeState.doorSettleFarSideWp;
-        if (farSide != null
-                && now - routeState.doorInteractionSettleStartedAtMs >= POST_INTERACT_SETTLE_MIN_MS
-                && Rs2Tile.isTileReachable(farSide)) {
+        if (farSide != null && (Rs2WalkerAwaits.isDoorCrossingPassable(routeState.doorSettleNearSideWp, farSide)
+                || (now - routeState.doorInteractionSettleStartedAtMs >= POST_INTERACT_SETTLE_MIN_MS
+                && Rs2Tile.isTileReachable(farSide)))) {
             routeState.doorInteractionSettleUntilMs = 0L;
             routeState.doorSettleFarSideWp = null;
+            routeState.doorSettleNearSideWp = null;
             return false;
         }
         return true;
@@ -7233,6 +7264,9 @@ public class Rs2Walker {
         if (handledAt <= 0L) {
             return false;
         }
+        if (routeState.lastTransportLandingConfirmed
+                && PendingPlaneTransition.atLanding(Rs2Player.getWorldLocation(),
+                routeState.lastTransportDestinationLocation)) return false;
         return transportSettlePending(System.currentTimeMillis() - handledAt,
                 Rs2Player.getWorldLocation(),
                 routeState.lastTransportDestinationLocation,
@@ -7275,11 +7309,12 @@ public class Rs2Walker {
     }
 
     /** Starts the door settle window, remembering the far-side tile so it can end when the edge opens. */
-    private static void markDoorInteractionSettling(WorldPoint farSideWp) {
+    private static void markDoorInteractionSettling(WorldPoint nearSideWp, WorldPoint farSideWp) {
         long now = System.currentTimeMillis();
         routeState.doorInteractionSettleStartedAtMs = now;
         routeState.doorInteractionSettleUntilMs = now + DOOR_POST_INTERACT_SETTLE_MS;
         routeState.doorSettleFarSideWp = farSideWp;
+        routeState.doorSettleNearSideWp = nearSideWp;
     }
 
     private static void markGlobalDoorInteractionCooldown() {
@@ -8288,7 +8323,7 @@ public class Rs2Walker {
             }
 			return false;
 		}
-        markDoorInteractionSettling(bestTo);
+        markDoorInteractionSettling(bestFrom, bestTo);
 		waitForDoorInteractionProgress(bestFrom, bestTo);
 		WorldPoint posAfter = Rs2Player.getWorldLocation();
 		boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, bestLoc, bestFrom, bestTo);
@@ -9682,7 +9717,11 @@ public class Rs2Walker {
                         }
                         if (landedAfterObject) {
                             markAdjacentSamePlaneTransportHandled(transport, object);
-                            return finishHandledTransport(transport);
+                            boolean floorTransition = transport.getOrigin() != null
+                                    && transport.getOrigin().getPlane() != destWait.getPlane();
+                            return finishHandledTransport(transport, floorTransition
+                                    && PendingPlaneTransition.atLanding(Rs2Player.getWorldLocation(), destWait)
+                                    && landingSceneReady(Rs2Player.getWorldLocation()));
                         }
                         return false;
                     }
@@ -9918,14 +9957,15 @@ public class Rs2Walker {
     private static boolean handleObject(Transport transport, TileObject tileObject, String action) {
         ensureRequiredItemBeforeTransport(transport);
         WorldPoint before = Rs2Player.getWorldLocation();
-        Rs2GameObject.interact(tileObject, action);
+        if (before == null) return false;
+        if (!Rs2GameObject.interact(tileObject, action)) return false;
         if (handleObjectExceptions(transport, tileObject)) return true;
         WorldPoint tdObj = transport.getDestination();
         WorldPoint plObj = Rs2Player.getWorldLocation();
         if (tdObj == null || plObj == null) {
             return false;
         }
-        if (tdObj.getPlane() == plObj.getPlane()) {
+        if (tdObj.getPlane() == before.getPlane()) {
             if (transport.getType() == TransportType.AGILITY_SHORTCUT) {
                 Rs2Player.waitForAnimation();
                 sleepUntil(() -> {
@@ -9970,46 +10010,19 @@ public class Rs2Walker {
             }
             return true;
         } else {
-            WorldPoint plZ = Rs2Player.getWorldLocation();
-            if (plZ == null) {
-                return false;
-            }
-            int z = plZ.getPlane();
-            // Instrumentation: the FIRST plane-change transport of a walk consistently costs ~9.5s
-            // while the same kind mid-route costs ~2.2s (measured across two Falador castle runs).
-            // The waits below bound at 1800 + 5000 + jitter, and a failed start returns false and is
-            // retried, so two attempts would explain it — but that is inference. These timings say
-            // which of start-detection, plane-detection or retry actually burns the seconds.
-            long planeChangeStartedAt = System.currentTimeMillis();
-            boolean started = sleepUntil(() -> {
-                WorldPoint p = Rs2Player.getWorldLocation();
-                return p != null && (p.getPlane() != z || Rs2Player.isMoving() || Rs2Player.isAnimating());
-            }, 1800);
-            long startWaitMs = System.currentTimeMillis() - planeChangeStartedAt;
-            if (!started) {
-                WebWalkLog.spInfo("transport_plane_change | no_start startWaitMs={} obj={} action={} — returning for retry",
-                        startWaitMs, tileObject.getId(), transport.getAction());
-                return false;
-            }
-            WorldPoint plAfterStart = Rs2Player.getWorldLocation();
-            boolean planeChanged = plAfterStart != null && plAfterStart.getPlane() != z
-                    || sleepUntil(() -> {
-                        WorldPoint p = Rs2Player.getWorldLocation();
-                        return p != null && p.getPlane() != z;
-                    }, 5000);
-            long planeWaitMs = System.currentTimeMillis() - planeChangeStartedAt - startWaitMs;
-            if (planeChanged) {
-                // gaussRand is an unbounded Box-Muller draw, so mean 300 / dev 120 goes negative past
-                // ~2.5 sigma (about one call in 160) and Thread.sleep throws IllegalArgumentException,
-                // killing the whole walk. Seen live: "timeout value is negative" here aborted a
-                // Falador castle run into ShortestPathScript auto-retry 1/3. Clamping only removes the
-                // impossible tail — the jitter this sleep exists to provide is untouched.
-                sleep(Math.max(MIN_PLANE_CHANGE_SETTLE_MS, (int) Rs2Random.gaussRand(300.0, 120.0)));
-            }
-            WebWalkLog.spInfo("transport_plane_change | changed={} startWaitMs={} planeWaitMs={} totalMs={} obj={}",
-                    planeChanged, startWaitMs, planeWaitMs,
-                    System.currentTimeMillis() - planeChangeStartedAt, tileObject.getId());
-            return planeChanged;
+            long startedAt = System.currentTimeMillis();
+            WorldPoint ownedGoal = currentTarget;
+            PendingPlaneTransition pending = new PendingPlaneTransition(before, tdObj, startedAt, 6800);
+            boolean completed = sleepUntil(() -> {
+                WorldPoint now = Rs2Player.getWorldLocation();
+                return pending.observe(now, Rs2Player.isMoving(), Rs2Player.isAnimating(),
+                        PendingPlaneTransition.atLanding(now, tdObj) && landingSceneReady(now),
+                        Thread.currentThread().isInterrupted() || InputArbiter.isHuman()
+                                || !Objects.equals(ownedGoal, currentTarget), System.currentTimeMillis());
+            }, 6800);
+            WebWalkLog.spInfo("transport_plane_change | phase={} totalMs={} obj={} destination={}",
+                    pending.phase(), System.currentTimeMillis() - startedAt, tileObject.getId(), tdObj);
+            return completed && pending.landed();
         }
     }
 
@@ -10019,6 +10032,24 @@ public class Rs2Walker {
                 && transport.getDestination() != null
                 && transport.getOrigin().getPlane() == transport.getDestination().getPlane()
                 && transport.getOrigin().distanceTo(transport.getDestination()) <= 1;
+    }
+
+    private static boolean landingSceneReady(WorldPoint player) {
+        if (player == null || Microbot.getClientThread() == null) return false;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Client client = Microbot.getClient();
+            WorldView view = client == null ? null : client.getTopLevelWorldView();
+            if (view == null || view.getPlane() != player.getPlane()) return false;
+            LocalPoint local = LocalPoint.fromWorld(view, player);
+            if (local == null || view.getCollisionMaps() == null
+                    || player.getPlane() >= view.getCollisionMaps().length
+                    || view.getCollisionMaps()[player.getPlane()] == null) return false;
+            int[][] flags = view.getCollisionMaps()[player.getPlane()].getFlags();
+            int x = local.getSceneX(), y = local.getSceneY();
+            return flags != null && x >= 0 && x < flags.length && flags[x] != null
+                    && y >= 0 && y < flags[x].length
+                    && (flags[x][y] & (net.runelite.api.CollisionDataFlag.BLOCK_MOVEMENT_FULL | 0x1000000)) == 0;
+        }).orElse(false);
     }
 
     /** Dedupe for {@link #logPathTeleportsOnce} — processWalk re-reads the path every loop iteration. */
@@ -10396,7 +10427,12 @@ public class Rs2Walker {
     }
 
     private static boolean finishHandledTransport(Transport transport) {
+        return finishHandledTransport(transport, false);
+    }
+
+    private static boolean finishHandledTransport(Transport transport, boolean landingConfirmed) {
         long handoffStartedAt = System.currentTimeMillis();
+        routeState.lastTransportLandingConfirmed = landingConfirmed;
         routeState.lastTransportHandledAtMs = handoffStartedAt;
         routeState.lastTransportHandledAtLocation = Rs2Player.getWorldLocation();
         routeState.lastTransportOriginLocation = transport != null ? transport.getOrigin() : null;

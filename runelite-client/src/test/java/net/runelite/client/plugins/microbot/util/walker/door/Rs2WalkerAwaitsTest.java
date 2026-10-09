@@ -7,6 +7,29 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class Rs2WalkerAwaitsTest {
+    @Test
+    public void liveEdgeRequiresBothSidesAndIgnoresUnrelatedDoors() {
+        int[][] flags = new int[4][4];
+        flags[2][1] = net.runelite.api.CollisionDataFlag.BLOCK_MOVEMENT_WEST;
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(flags, 1, 1, 2, 1));
+        flags[2][1] = 0;
+        flags[1][1] = net.runelite.api.CollisionDataFlag.BLOCK_MOVEMENT_EAST;
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(flags, 1, 1, 2, 1));
+        flags[1][1] = net.runelite.api.CollisionDataFlag.BLOCK_MOVEMENT_NORTH;
+        assertTrue(Rs2WalkerAwaits.cardinalEdgePassable(flags, 1, 1, 2, 1));
+        flags[2][1] = net.runelite.api.CollisionDataFlag.BLOCK_MOVEMENT_OBJECT;
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(flags, 1, 1, 2, 1));
+        flags[2][1] = 0x1000000;
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(flags, 1, 1, 2, 1));
+    }
+
+    @Test
+    public void missingDiagonalAndOutOfSceneEdgesCannotFastComplete() {
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(null, 1, 1, 2, 1));
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(new int[4][4], 1, 1, 2, 2));
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(new int[4][4], 3, 1, 4, 1));
+        assertFalse(Rs2WalkerAwaits.cardinalEdgePassable(new int[4][4], 1, 1, 1, 1));
+    }
     private static WorldPoint wp(int x, int y) {
         return new WorldPoint(x, y, 0);
     }

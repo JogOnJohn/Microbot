@@ -28,6 +28,8 @@ public final class WalkerRouteState {
     public volatile WorldPoint lastTransportOriginLocation = null;
     /** Destination tile of the last handled transport. */
     public volatile WorldPoint lastTransportDestinationLocation = null;
+    /** A floor-transition handler already observed its landing and loaded collision map. */
+    public volatile boolean lastTransportLandingConfirmed = false;
 
     // ---- route progress: tracks how far along the current route the player has advanced, used to detect
     // real forward progress (vs thrashing) and to decide when to reset on a new/changed route. ----
@@ -102,6 +104,7 @@ public final class WalkerRouteState {
     /** When the current door settle window started, and the door's far-side tile — the early-exit signal. */
     public volatile long doorInteractionSettleStartedAtMs = 0L;
     public volatile WorldPoint doorSettleFarSideWp = null;
+    public volatile WorldPoint doorSettleNearSideWp = null;
     /** Wall-clock ms a door-edge pass was last skipped (per-edge cooldown diagnostics). */
     public volatile long lastDoorEdgePassSkipAtMs = 0L;
     /** Cooldown for the expensive path-adjacent door scan on unreachable tiles. */

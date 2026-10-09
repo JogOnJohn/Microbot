@@ -1,6 +1,11 @@
 package net.runelite.client.plugins.microbot.util.walker.door;
 
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.coords.LocalPoint;
+import net.runelite.api.CollisionData;
+import net.runelite.api.CollisionDataFlag;
+import net.runelite.api.WorldView;
+import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
@@ -72,6 +77,10 @@ public final class Rs2WalkerAwaits {
             if (now == null) {
                 return false;
             }
+            if (isDoorCrossingPassable(fromWp, toWp)) {
+                releasedBy[0] = "live-edge-passable";
+                return true;
+            }
             boolean edgeResolved = isDoorEdgeResolved(fromWp, toWp);
             if (edgeResolved) {
                 long nowMs = System.currentTimeMillis();
@@ -104,7 +113,8 @@ public final class Rs2WalkerAwaits {
         }, DOOR_TRAVERSAL_PROGRESS_WAIT_MS);
         long traversalWaitMs = System.currentTimeMillis() - traversalPhaseAt;
 
-        if (startWaitMs + traversalWaitMs >= DOOR_AWAIT_SLOW_LOG_MS) {
+        if (startWaitMs + traversalWaitMs >= DOOR_AWAIT_SLOW_LOG_MS
+                || "live-edge-passable".equals(releasedBy[0])) {
             WebWalkLog.spInfo("door_await | releasedBy={} startWaitMs={} traversalWaitMs={} from={} to={}",
                     releasedBy[0], startWaitMs, traversalWaitMs, fromWp, toWp);
         }
@@ -156,6 +166,9 @@ public final class Rs2WalkerAwaits {
         if (hasReachedDoorFarSide(player, fromWp, toWp)) {
             return true;
         }
+        if (isDoorCrossingPassable(fromWp, toWp)) {
+            return true;
+        }
         int toDist = player.distanceTo2D(toWp);
         try {
             if (!Rs2Player.isMoving() && toDist <= 4 && Rs2Tile.isTileReachable(toWp)) {
@@ -179,6 +192,42 @@ public final class Rs2WalkerAwaits {
             return false;
         }
         return player.distanceTo2D(toWp) < player.distanceTo2D(fromWp);
+    }
+
+    /** Only positive live collision evidence bypasses the conservative reachability/idle fallback. */
+    public static boolean isDoorCrossingPassable(WorldPoint from, WorldPoint to) {
+        if (from == null || to == null || from.getPlane() != to.getPlane()
+                || Math.abs(from.getX() - to.getX()) + Math.abs(from.getY() - to.getY()) != 1
+                || Microbot.getClient() == null || Microbot.getClientThread() == null) {
+            return false;
+        }
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            WorldView view = Microbot.getClient().getTopLevelWorldView();
+            if (view == null || view.getPlane() != from.getPlane()) return false;
+            LocalPoint a = LocalPoint.fromWorld(view, from);
+            LocalPoint b = LocalPoint.fromWorld(view, to);
+            CollisionData[] maps = view.getCollisionMaps();
+            if (a == null || b == null || maps == null || from.getPlane() >= maps.length
+                    || maps[from.getPlane()] == null) return false;
+            return cardinalEdgePassable(maps[from.getPlane()].getFlags(),
+                    a.getSceneX(), a.getSceneY(), b.getSceneX(), b.getSceneY());
+        }).orElse(false);
+    }
+
+    static boolean cardinalEdgePassable(int[][] flags, int ax, int ay, int bx, int by) {
+        int dx = bx - ax, dy = by - ay;
+        if (Math.abs(dx) + Math.abs(dy) != 1 || flags == null || ax < 0 || bx < 0
+                || ax >= flags.length || bx >= flags.length || flags[ax] == null || flags[bx] == null
+                || ay < 0 || by < 0 || ay >= flags[ax].length || by >= flags[bx].length) return false;
+        // The unloaded flag is not included in RuneLite's BLOCK_MOVEMENT_FULL mask.
+        int full = CollisionDataFlag.BLOCK_MOVEMENT_FULL | 0x1000000;
+        int outgoing = dx == 1 ? CollisionDataFlag.BLOCK_MOVEMENT_EAST
+                : dx == -1 ? CollisionDataFlag.BLOCK_MOVEMENT_WEST
+                : dy == 1 ? CollisionDataFlag.BLOCK_MOVEMENT_NORTH : CollisionDataFlag.BLOCK_MOVEMENT_SOUTH;
+        int incoming = dx == 1 ? CollisionDataFlag.BLOCK_MOVEMENT_WEST
+                : dx == -1 ? CollisionDataFlag.BLOCK_MOVEMENT_EAST
+                : dy == 1 ? CollisionDataFlag.BLOCK_MOVEMENT_SOUTH : CollisionDataFlag.BLOCK_MOVEMENT_NORTH;
+        return (flags[ax][ay] & (full | outgoing)) == 0 && (flags[bx][by] & (full | incoming)) == 0;
     }
 
     static boolean resolvedDoorReadyForFollowup(boolean edgeResolved, boolean moving,
