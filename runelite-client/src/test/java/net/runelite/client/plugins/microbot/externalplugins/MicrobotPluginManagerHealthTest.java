@@ -11,7 +11,7 @@ import net.runelite.client.events.ExternalPluginsChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
-import net.runelite.client.plugins.PluginModuleFactory;
+import net.runelite.client.plugins.PluginLoaderTestSupport;
 import net.runelite.client.plugins.microbot.MicrobotApi;
 import okhttp3.OkHttpClient;
 import org.junit.Before;
@@ -75,7 +75,7 @@ public class MicrobotPluginManagerHealthTest {
     @Before
     public void setUp() throws Exception {
         pluginManager = mock(PluginManager.class);
-        PluginManager loader = new PluginManager(false, null, null, null, null, new PluginModuleFactory());
+        PluginManager loader = PluginLoaderTestSupport.createLoader();
         when(pluginManager.instantiatePlugin(any(), any())).thenAnswer(invocation ->
                 loader.instantiatePlugin(invocation.getArgument(0), invocation.getArgument(1)));
         configManager = mock(ConfigManager.class);
