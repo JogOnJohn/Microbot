@@ -515,7 +515,15 @@ public class MicrobotPluginManager {
     }
 
     private Plugin instantiate(Collection<Plugin> scannedPlugins, Class<Plugin> clazz) throws PluginInstantiationException {
-        return pluginManager.instantiatePlugin(scannedPlugins, clazz);
+        try {
+            return pluginManager.instantiatePlugin(scannedPlugins, clazz);
+        } catch (ThreadDeath e) {
+            throw e;
+        } catch (PluginInstantiationException ex) {
+            throw ex;
+        } catch (Throwable ex) {
+            throw new PluginInstantiationException(ex);
+        }
     }
 
     /**
