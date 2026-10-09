@@ -6,6 +6,8 @@ import net.runelite.api.QuestState;
 import org.junit.Test;
 
 import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,6 +17,40 @@ import static org.junit.Assert.assertNotNull;
 
 public class TransportResourceLoadTest
 {
+	@Test
+	public void resourceLoaderPreservesRowOrderAcrossReloads()
+	{
+		Map<WorldPoint, Set<Transport>> first = Transport.loadAllFromResources();
+		Map<WorldPoint, Set<Transport>> second = Transport.loadAllFromResources();
+		for (WorldPoint origin : first.keySet())
+		{
+			assertTrue(first.get(origin) instanceof LinkedHashSet);
+			assertEquals(first.get(origin).stream().map(TransportResourceLoadTest::routeIdentity).collect(Collectors.toList()),
+				second.get(origin).stream().map(TransportResourceLoadTest::routeIdentity).collect(Collectors.toList()));
+		}
+	}
+
+	@Test
+	public void seaCrossingsLandOnCorrectGroundWithOriginalRequirements()
+	{
+		Map<WorldPoint, Set<Transport>> catalog = Transport.loadAllFromResources();
+		Transport north = catalog.get(new WorldPoint(3810, 3048, 0)).stream()
+			.filter(t -> t.getObjectId() == 62410).findFirst().orElse(null);
+		Transport south = catalog.get(new WorldPoint(3811, 3056, 0)).stream()
+			.filter(t -> t.getObjectId() == 62411).findFirst().orElse(null);
+		assertNotNull(north);
+		assertNotNull(south);
+		assertEquals(new WorldPoint(3811, 3056, 0), north.getDestination());
+		assertEquals(new WorldPoint(3810, 3048, 0), south.getDestination());
+		assertEquals(QuestState.FINISHED, north.getQuests().get(Quest.CABIN_FEVER));
+		assertEquals(QuestState.FINISHED, south.getQuests().get(Quest.CABIN_FEVER));
+		Transport bridge = catalog.get(new WorldPoint(2803, 2727, 2)).stream()
+			.filter(t -> t.getObjectId() == 4745).findFirst().orElse(null);
+		assertNotNull(bridge);
+		assertEquals(new WorldPoint(2806, 2724, 0), bridge.getDestination());
+		assertEquals(4, bridge.getDuration());
+	}
+
 	@Test
 	public void loadsUpstreamTransportResources()
 	{
@@ -56,5 +92,11 @@ public class TransportResourceLoadTest
 		return transportsByOrigin.values().stream()
 			.flatMap(Collection::stream)
 			.anyMatch(transport -> displayInfo.equals(transport.getDisplayInfo()));
+	}
+
+	private static String routeIdentity(Transport transport)
+	{
+		return transport.getDestination() + ":" + transport.getType() + ":" + transport.getObjectId()
+			+ ":" + transport.getAction() + ":" + transport.getDisplayInfo() + ":" + transport.getDuration();
 	}
 }
