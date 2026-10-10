@@ -146,6 +146,7 @@ public final class InGameWalkRewriter
 	 */
 	Result rewrite(List<PathStep> path, int[] legBounds)
 	{
+		ExactCancellation.check();
 		List<PathStep> rewritten = new ArrayList<>(path);
 		List<Integer> clicks = new ArrayList<>();
 		List<Integer> kept = new ArrayList<>();
@@ -166,6 +167,7 @@ public final class InGameWalkRewriter
 		int current = from;
 		while (current < to)
 		{
+			ExactCancellation.check();
 			int source = path.get(current).getPackedPosition();
 			int sx = WorldPointUtil.unpackWorldX(source), sy = WorldPointUtil.unpackWorldY(source);
 			int plane = WorldPointUtil.unpackWorldPlane(source);
@@ -261,6 +263,7 @@ public final class InGameWalkRewriter
 		queue[tail++] = start;
 		while (head < tail)
 		{
+			if ((head & 255) == 0) ExactCancellation.check();
 			int at = queue[head++];
 			if (distance[at] >= depth) break;
 			int x = at % WINDOW, y = at / WINDOW;

@@ -312,7 +312,7 @@ public final class ExactForwardSearch
 	{
 		int node = space.node(tile);
 		if (node >= 0 && space.stepAllowed(from / 2, node))
-			relaxState(space, from, stateForNode(node, banked), cost, 1, null, best, previous, transportWins, queue, counters,
+			relaxState(space, from, stateForNode(node, banked), cost, space.restrictions.walkingCost(tile), null, best, previous, transportWins, queue, counters,
 				restrictedHeuristic, globalBounds, optimized, heuristic, heuristicWeight, bestBankCost, PUSH_WALKING);
 	}
 

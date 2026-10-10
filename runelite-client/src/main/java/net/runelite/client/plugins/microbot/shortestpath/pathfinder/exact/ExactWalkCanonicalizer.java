@@ -318,6 +318,7 @@ public final class ExactWalkCanonicalizer
 	 */
 	Walk walk(int start, int ticks, WalkGoal goal)
 	{
+		ExactCancellation.check();
 		if (ticks > MAX_LEG_TICKS) return new Walk(Outcome.TOO_LONG, null, 0, 0);
 		int sx = WorldPointUtil.unpackWorldX(start), sy = WorldPointUtil.unpackWorldY(start);
 		int plane = WorldPointUtil.unpackWorldPlane(start);
@@ -337,6 +338,7 @@ public final class ExactWalkCanonicalizer
 		int expansions = 0;
 		while (!heap.isEmpty())
 		{
+			ExactCancellation.check();
 			int state = heap.pop();
 			if (states.closed[state]) continue;
 			states.closed[state] = true;

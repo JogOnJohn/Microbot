@@ -1,5 +1,24 @@
 # Exact backend test spike - 2026-10-10
 
+## Follow-up review - 2026-10-11
+
+Reviewed the adapter, frozen collision/cache identity, transport execution bridge,
+per-edge costs, cancellation and post-processing. Fixed two gaps before the next
+trial: walking onto a blocked transport interaction site now pays the same hazard
+penalty as ordinary walking; canonicalization and in-game walking rewrite loops
+now observe cancellation while expanding. The `exact_done` log now separates
+preparationMs from totalMs (previously preparationMs included search and rewrite).
+
+Validation: the expanded 656-test suite had one failure in the new test fixture
+and one skipped test; all other tests passed. Corrected the fixture's missing
+transport type and blocked-origin attachment, then reran all six compatibility
+tests successfully, plus generated transport resource validation. Production code
+was unchanged between the broad run and the successful focused rerun. Logs:
+`build/exact-review-tests.log` and `build/exact-review-focused.log`.
+
+The cold-build cost and live gameplay validation gap below remain. Stage the new
+versioned JAR separately in Bizza; this preparation does not launch a client.
+
 ## Scope and provenance
 
 Branch: `spike/shortest-path-data-sync`. Refreshed from playable with merge

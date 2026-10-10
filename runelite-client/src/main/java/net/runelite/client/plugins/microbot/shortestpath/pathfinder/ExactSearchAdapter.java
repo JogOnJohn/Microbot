@@ -76,6 +76,7 @@ final class ExactSearchAdapter {
                     key -> PathfinderConfig.isBlockedTransportStep((int) (key >> 32), (int) key, blockedEdges),
                     tile -> avoidHazards && config.isDangerousAdjacentTile(tile) && !goals.contains(tile) ? 100 : 0);
             ExactCancellation.check();
+            long preparationMs = (System.nanoTime() - preparation) / 1_000_000;
             long[] deadline = {System.nanoTime() + cutoffMillis * 1_000_000L};
             boolean[] timedOut = {false};
             ExactForwardSearch.Result result = target.search(start, () -> {
@@ -97,8 +98,8 @@ final class ExactSearchAdapter {
                 }
             }
             String reason = result.reached() ? "reached-goal" : timedOut[0] ? "time-cutoff" : "unreachable";
-            WebWalkLog.pf("exact_done reason={} cost={} preparationMs={} nodes={} transports={}", reason,
-                    result.cost(), (System.nanoTime() - preparation) / 1_000_000,
+            WebWalkLog.pf("exact_done reason={} cost={} preparationMs={} totalMs={} nodes={} transports={}", reason,
+                    result.cost(), preparationMs, (System.nanoTime() - preparation) / 1_000_000,
                     result.counters().statesPopped(), result.counters().transportCandidates());
             return new Outcome(steps, result.counters(), reason);
         } finally {
