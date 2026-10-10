@@ -2912,7 +2912,7 @@
 2962 3143 1	2964 3143 2	Climb-up Ship's ladder 245						2
 2962 3520 0	2962 3523 0	Cross Wilderness Ditch 23271						4
 2962 3523 0	2962 3520 0	Cross Wilderness Ditch 23271						4
-2962 9650 0	3018 3233 0	Climb-up Ladder 10309						2
+2962 9650 0	3018 3233 0	Climb-up Ladder 10309						2					Y
 2963 3520 0	2963 3523 0	Cross Wilderness Ditch 23271						4
 2963 3523 0	2963 3520 0	Cross Wilderness Ditch 23271						4
 2963 9478 1	2664 3160 0	Climb Anchor 12475						4	Port Khazard
@@ -3066,7 +3066,7 @@
 3017 3960 2	3017 3958 1	Climb-down Ship's ladder 246						2
 3017 9739 0	3017 3339 0	Climb-up Ladder 17386						2
 3018 10249 0	3070 3856 0	Climb-up Ladder 18990						2
-3018 3231 0	2962 9650 0	Climb-down Manhole 10321
+3018 3231 0	2962 9650 0	Climb-down Manhole 10321											Y
 3018 3450 0	3018 9850 0	Climb-down Trapdoor 11867						1
 3018 3958 0	3018 3958 1	Climb-up Ship's ladder 272						2
 3018 3958 1	3018 3958 0	Climb-down Ship's ladder 273						2

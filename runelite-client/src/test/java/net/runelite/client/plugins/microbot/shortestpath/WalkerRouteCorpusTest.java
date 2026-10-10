@@ -323,4 +323,13 @@ public class WalkerRouteCorpusTest {
         assertFalse("a player without Fishing Contest must not be routed through the tunnel",
                 visits(surface, TUNNEL_EAST_UNDER, 5));
     }
+
+    @Test
+    public void portSarimToDraynorOnFreeWorldStaysOnTheSurface() {
+        WorldPoint bank = new WorldPoint(3092, 3245, 0);
+        List<WorldPoint> path = route(configWith(t -> unrestricted(t) && !t.isMembers()),
+                new WorldPoint(3018, 3229, 0), bank);
+        assertTrue(arrives(path, bank, 2));
+        assertFalse(path.stream().anyMatch(point -> point.getY() > 9000));
+    }
 }
