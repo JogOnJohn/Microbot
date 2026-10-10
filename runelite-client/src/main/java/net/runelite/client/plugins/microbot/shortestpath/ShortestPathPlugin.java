@@ -465,6 +465,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     }
 
     private static final Set<String> PATH_REFRESH_CONFIG_KEYS = Set.of(
+            "pathfinderBackend",
             "avoidWilderness",
             "distanceBeforeUsingTeleports",
             "recalculateDistance",

@@ -58,6 +58,19 @@ public final class LiveCollisionRegion {
         return planeCount;
     }
 
+    @Override
+    public boolean equals(Object other) {
+        if (!(other instanceof LiveCollisionRegion)) return false;
+        LiveCollisionRegion r = (LiveCollisionRegion) other;
+        return planeCount == r.planeCount && northKnown.equals(r.northKnown)
+                && northValue.equals(r.northValue) && eastKnown.equals(r.eastKnown) && eastValue.equals(r.eastValue);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(planeCount, northKnown, northValue, eastKnown, eastValue);
+    }
+
     // ---- persistence accessors (raw BitSet words), used by LiveCollisionPersistence ----
 
     long[] northKnownWords() {

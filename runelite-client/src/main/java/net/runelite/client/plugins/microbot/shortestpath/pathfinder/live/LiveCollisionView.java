@@ -37,4 +37,28 @@ public final class LiveCollisionView implements LiveEdgeSource {
     public int regionCount() {
         return regions.size();
     }
+
+    public int planeCount(int regionX, int regionY) {
+        LiveCollisionRegion r = regions.get((regionX & 0xffff) | ((regionY & 0xffff) << 16));
+        return r == null ? 0 : r.getPlaneCount();
+    }
+
+    public net.runelite.client.plugins.microbot.shortestpath.pathfinder.SplitFlagMap.RegionExtent
+            extend(net.runelite.client.plugins.microbot.shortestpath.pathfinder.SplitFlagMap.RegionExtent extent) {
+        int minX = extent.minX, minY = extent.minY, maxX = extent.maxX, maxY = extent.maxY;
+        for (int id : regions.keySet()) {
+            int x = id & 0xffff, y = (id >>> 16) & 0xffff;
+            minX = Math.min(minX, x); minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+        }
+        return new net.runelite.client.plugins.microbot.shortestpath.pathfinder.SplitFlagMap.RegionExtent(minX, minY, maxX, maxY);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof LiveCollisionView && regions.equals(((LiveCollisionView) other).regions);
+    }
+
+    @Override
+    public int hashCode() { return regions.hashCode(); }
 }

@@ -7,6 +7,11 @@ import java.awt.*;
 @ConfigGroup(ShortestPathPlugin.CONFIG_GROUP)
 @ConfigInformation("Press 'CTRL + X' to stop the webwalker automatically.")
 public interface ShortestPathConfig extends Config {
+    @ConfigItem(keyName = "pathfinderBackend", name = "Pathfinder backend",
+            description = "Experimental exact routing is available on the data-sync test branch.", position = 0)
+    default net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderBackend pathfinderBackend() {
+        return net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderBackend.LEGACY;
+    }
     /* ------------------------------------------------------------------
      * Hotkeys — stored as config values but bound/displayed inline on
      * each side-panel category card (see ShortestPathPanel). Marked

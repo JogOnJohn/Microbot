@@ -326,6 +326,26 @@ public class PathfinderConfig {
         return map.get();
     }
 
+    public PathfinderBackend getBackend() {
+        return config == null || config.pathfinderBackend() == null ? PathfinderBackend.LEGACY : config.pathfinderBackend();
+    }
+
+    public TransportAvailability exactAvailability() {
+        Map<Integer, Set<Transport>> local = new HashMap<>();
+        transports.forEach((origin, edges) -> local.put(WorldPointUtil.packWorldPoint(origin), new LinkedHashSet<>(edges)));
+        return new TransportAvailability(local, ignoreTeleportAndItems
+                ? Collections.emptySet() : new LinkedHashSet<>(usableTeleports));
+    }
+
+    public void publishExactTransport(int origin, Transport selected) {
+        WorldPoint point = WorldPointUtil.unpackWorldPoint(origin);
+        Set<Transport> ordered = new LinkedHashSet<>();
+        ordered.add(selected);
+        ordered.addAll(transports.getOrDefault(point, Collections.emptySet()));
+        transports.put(point, ordered);
+        transportsPacked.put(origin, ordered);
+    }
+
     /**
      * Diagnostics for the live-collision overlay at one tile, for the agent server's
      * {@code /live-collision} endpoint. Reads only immutable data (the static map and the pinned

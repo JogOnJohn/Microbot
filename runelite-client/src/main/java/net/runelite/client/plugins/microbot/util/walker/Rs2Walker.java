@@ -9175,6 +9175,10 @@ public class Rs2Walker {
             return false;
         }
         Set<Transport> transports = Rs2PathApi.getTransports().get(path.get(indexOfStartPoint));
+        if (indexOfStartPoint + 1 < path.size() && Rs2PathApi.getPathfinder() != null) {
+            Transport selected = Rs2PathApi.getPathfinder().getTransportForStep(path.get(indexOfStartPoint), path.get(indexOfStartPoint + 1));
+            if (selected != null) transports = Collections.singleton(selected);
+        }
         if (transports == null || transports.isEmpty()) {
             return false;
         }

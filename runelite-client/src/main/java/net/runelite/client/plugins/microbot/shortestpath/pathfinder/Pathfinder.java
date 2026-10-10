@@ -57,6 +57,10 @@ public class Pathfinder implements Runnable {
     private static final int MAX_BLOCKED_TARGET_ACCEPT_RADIUS = 3;
 
     private final PathfinderConfig config;
+    private final PathfinderBackend backend;
+    private volatile List<PathStep> exactSteps = Collections.emptyList();
+    @Getter
+    private volatile String terminationReason;
     private CollisionMap map;
     private final boolean targetInWilderness;
 
@@ -68,13 +72,9 @@ public class Pathfinder implements Runnable {
     //
     // Comparator chain is (fCost, gCost, tiebreaker):
     //   1. fCost — standard A* primary ordering.
-    //   2. gCost — required for correctness under early-discovery. addNeighbors() marks
-    //      a neighbor visited at insert time (not at pop), so a node only ever enters
-    //      the PQ once. If two equal-fCost nodes have different gCost, popping the
-    //      higher-gCost one first would fix their shared neighbor's gCost to a
-    //      suboptimal value (because visited is already set when the lower-g node later
-    //      tries to discover the same neighbor). Preferring lower gCost on ties keeps
-    //      early-discovery optimal.
+    //   2. gCost - prefer cheaper arrivals on equal f. Discovery is tentative:
+    //      better g costs replace the recorded node and stale queue entries are skipped.
+    //      VisitedTiles is retained only as a map-bounds guard, not enqueue-time closure.
     //   3. tiebreaker — per-node random. Among nodes with identical (f, g) — common in
     //      open-grid regions where many tiles share the same distance-from-start and
     //      distance-to-goal — this rotates the exploration order each run so paths
@@ -85,6 +85,7 @@ public class Pathfinder implements Runnable {
     private final Queue<Node> boundaryBackward = new PriorityQueue<>(4096, NODE_ORDER);
     private final Queue<Node> pendingBackward = new PriorityQueue<>(256);
     private VisitedTiles visited;
+    private final Map<Integer, Node> bestForward = new HashMap<>();
 
     private volatile List<WorldPoint> path = Collections.emptyList();
     private volatile List<WorldPoint> smoothedPath = Collections.emptyList();
@@ -108,6 +109,7 @@ public class Pathfinder implements Runnable {
     public Pathfinder(PathfinderConfig config, int start, Set<Integer> targets) {
         stats = new PathfinderStats();
         this.config = config;
+        this.backend = config.getBackend();
         this.start = start;
         this.targets = targets;
         this.targetsPacked = new int[targets.size()];
@@ -215,8 +217,20 @@ public class Pathfinder implements Runnable {
         return targets.stream().map(WorldPointUtil::unpackWorldPoint).collect(Collectors.toSet());
     }
 
-    public void cancel() {
+    public synchronized void cancel() {
         cancelled = true;
+        if (backend == PathfinderBackend.EXACT) terminationReason = "cancelled";
+    }
+
+    public Transport getTransportForStep(WorldPoint origin, WorldPoint destination) {
+        List<PathStep> steps = exactSteps;
+        int from = WorldPointUtil.packWorldPoint(origin), to = WorldPointUtil.packWorldPoint(destination);
+        for (int i = 1; i < steps.size(); i++) {
+            if (steps.get(i - 1).getPackedPosition() == from && steps.get(i).getPackedPosition() == to) {
+                return steps.get(i).getTransport();
+            }
+        }
+        return null;
     }
 
     public PathfinderStats getStats() {
@@ -296,7 +310,9 @@ public class Pathfinder implements Runnable {
                 continue;
             }
 
-            visited.set(neighbor.packedPosition);
+            Node prior = bestForward.get(neighbor.packedPosition);
+            if (prior != null && prior.cost <= neighbor.cost) continue;
+            bestForward.put(neighbor.packedPosition, neighbor);
             if (neighbor instanceof TransportNode) {
                 pending.add(neighbor);
                 ++stats.transportsChecked;
@@ -574,7 +590,8 @@ public class Pathfinder implements Runnable {
                 continue;
             }
 
-            visited.set(neighbor.packedPosition);
+            Node prior = forwardAt.get(neighbor.packedPosition);
+            if (prior != null && prior.cost <= neighbor.cost) continue;
             if (neighbor instanceof TransportNode) {
                 pending.add(neighbor);
                 ++stats.transportsChecked;
@@ -585,7 +602,7 @@ public class Pathfinder implements Runnable {
                 boundary.add(neighbor);
                 ++stats.nodesChecked;
             }
-            forwardAt.putIfAbsent(neighbor.packedPosition, neighbor);
+            forwardAt.put(neighbor.packedPosition, neighbor);
             Node b = backwardAt.get(neighbor.packedPosition);
             if (b != null) {
                 maybeImproveMeeting(neighbor, b, bestMeetingCost, meetF, meetB);
@@ -603,7 +620,8 @@ public class Pathfinder implements Runnable {
                 continue;
             }
 
-            visitedB.set(pred.packedPosition);
+            Node prior = backwardAt.get(pred.packedPosition);
+            if (prior != null && prior.cost <= pred.cost) continue;
             if (pred instanceof TransportNode) {
                 pendingBackward.add(pred);
                 ++stats.transportsChecked;
@@ -612,7 +630,7 @@ public class Pathfinder implements Runnable {
                 boundaryBackward.add(pred);
                 ++stats.nodesChecked;
             }
-            backwardAt.putIfAbsent(pred.packedPosition, pred);
+            backwardAt.put(pred.packedPosition, pred);
             Node f = forwardAt.get(pred.packedPosition);
             if (f != null) {
                 maybeImproveMeeting(f, pred, bestMeetingCost, meetF, meetB);
@@ -622,6 +640,7 @@ public class Pathfinder implements Runnable {
 
     private void runUnidirectional() {
         Node startNode = new Node(start, null);
+        bestForward.put(start, startNode);
         startNode.heuristic = heuristicToNearestTarget(start);
         boundary.add(startNode);
 
@@ -637,7 +656,7 @@ public class Pathfinder implements Runnable {
             Node b = boundary.peek();
             Node p = pending.peek();
             Node node;
-            boolean expandingTransport = p != null && (b == null || p.cost < b.cost);
+            boolean expandingTransport = p != null && (b == null || p.cost <= b.cost);
             if (expandingTransport) {
                 node = pending.poll();
                 logFocusedTeleportQueue("expanded", node.previous, node, b == null ? null : b.cost);
@@ -645,6 +664,7 @@ public class Pathfinder implements Runnable {
                 node = boundary.poll();
             }
 
+            if (bestForward.get(node.packedPosition) != node) continue;
             if (wildernessLevel > 0) {
                 boolean update = false;
 
@@ -781,7 +801,7 @@ public class Pathfinder implements Runnable {
                 Node b = boundary.peek();
                 Node p = pending.peek();
                 Node node;
-                boolean expandingTransport = p != null && (b == null || p.cost < b.cost);
+                boolean expandingTransport = p != null && (b == null || p.cost <= b.cost);
                 if (expandingTransport) {
                     node = pending.poll();
                     logFocusedTeleportQueue("expanded", node.previous, node, b == null ? null : b.cost);
@@ -789,6 +809,7 @@ public class Pathfinder implements Runnable {
                     node = boundary.poll();
                 }
 
+                if (forwardAt.get(node.packedPosition) != node) continue;
                 if (wildernessLevel > 0) {
                     boolean update = false;
                     if (wildernessLevel > 30 && !config.isInLevel30Wilderness(node.packedPosition)) {
@@ -842,12 +863,13 @@ public class Pathfinder implements Runnable {
                 Node b = boundaryBackward.peek();
                 Node p = pendingBackward.peek();
                 Node node;
-                if (p != null && (b == null || p.cost < b.cost)) {
+                if (p != null && (b == null || p.cost <= b.cost)) {
                     node = pendingBackward.poll();
                 } else {
                     node = boundaryBackward.poll();
                 }
 
+                if (backwardAt.get(node.packedPosition) != node) continue;
                 if (node.packedPosition == start) {
                     joinedPath = combineBidirectionalPath(forwardAt.get(start), node);
                     pathNeedsUpdate = false;
@@ -911,13 +933,17 @@ public class Pathfinder implements Runnable {
         // shortest-path executor. Resolve both ThreadLocal-backed objects here so the collision map,
         // visited state and pinned live snapshot all belong to the search thread for this run.
         map = config.getMap();
+        map.beginSearch();
         for (int i = 0; i < targetsPacked.length; i++) {
             targetAcceptRadius[i] = computeTargetAcceptRadius(targetsPacked[i]);
+        }
+        if (backend == PathfinderBackend.EXACT) {
+            runExact();
+            return;
         }
         visited = new VisitedTiles(map);
         // Pin the live-collision snapshot for this whole search so a mid-search swap on the client
         // thread cannot mix two scenes into one path. No-op when live collision is disabled.
-        map.beginSearch();
         try {
             stats.start();
             computeNetworkLandmarks();
@@ -947,11 +973,56 @@ public class Pathfinder implements Runnable {
             boundaryBackward.clear();
             pendingBackward.clear();
             visited.clear();
+            bestForward.clear();
 
             stats.end();
 
             WebWalkLog.pf("run_done done={} cancelled={} stats={}",
                     done, cancelled, getStats() != null ? getStats().toString() : "null");
+        }
+    }
+
+    private void runExact() {
+        stats.start();
+        try {
+            Set<Integer> goals = new HashSet<>();
+            for (int i = 0; i < targetsPacked.length; i++) {
+                int target = targetsPacked[i], radius = targetAcceptRadius[i];
+                goals.add(target);
+                if (radius > 0) for (int dx = -radius; dx <= radius; dx++) {
+                    for (int dy = -radius; dy <= radius; dy++) {
+                        int tile = WorldPointUtil.dxdy(target, dx, dy);
+                        if (!map.isBlocked(WorldPointUtil.unpackWorldX(tile), WorldPointUtil.unpackWorldY(tile), WorldPointUtil.unpackWorldPlane(tile))) goals.add(tile);
+                    }
+                }
+            }
+            ExactSearchAdapter.Outcome outcome = ExactSearchAdapter.search(config, map, start, goals, targetInWilderness, () -> cancelled);
+            synchronized (this) {
+                if (!cancelled) {
+                    exactSteps = outcome.steps;
+                    // Global teleports may now occur at any eligible intermediate tile. Expose those
+                    // edges to existing transport execution and hint consumers without replacing their API.
+                    for (int i = 1; i < outcome.steps.size(); i++) {
+                        Transport transport = outcome.steps.get(i).getTransport();
+                        if (transport != null) config.publishExactTransport(outcome.steps.get(i - 1).getPackedPosition(), transport);
+                    }
+                    stats.nodesChecked = outcome.counters.statesPopped();
+                    stats.transportsChecked = outcome.counters.transportCandidates();
+                    terminationReason = outcome.reason;
+                    joinedPath = outcome.steps.stream().map(step -> WorldPointUtil.unpackWorldPoint(step.getPackedPosition())).collect(Collectors.toList());
+                }
+            }
+        } catch (java.util.concurrent.CancellationException e) {
+            cancelled = true;
+            terminationReason = "cancelled";
+        } catch (Exception | OutOfMemoryError | LinkageError e) {
+            terminationReason = "backend-failure";
+            joinedPath = Collections.emptyList();
+            log.error("[Pathfinder] Exact backend failed; no legacy fallback", e);
+        } finally {
+            done = !cancelled;
+            stats.end();
+            WebWalkLog.pf("run_done backend=EXACT done={} cancelled={} reason={} stats={}", done, cancelled, terminationReason, stats);
         }
     }
 

@@ -171,6 +171,8 @@ tasks.register<Test>("runTests") {
 }
 
 tasks.register<Test>("runUnitTests") {
+    // The exact world-graph smoke test runs alongside the existing real-map corpus.
+    maxHeapSize = providers.gradleProperty("microbotTestHeap").getOrElse("2g")
     providers.environmentVariable("MBOT_PREP_PLUGIN_DIR").orNull?.let { stagedDir ->
         inputs.property("stagedHubPluginDir", stagedDir)
         inputs.dir(stagedDir).withPathSensitivity(PathSensitivity.RELATIVE)

@@ -34,9 +34,84 @@ public class CollisionMap {
      * mix two states into a single path. Refreshed via {@link #beginSearch()}.
      */
     private LiveEdgeSource pinnedLive;
+    private SplitFlagMap.RegionExtent exactExtent;
 
     public byte[] getPlanes() {
         return collisionData.getRegionMapPlaneCounts();
+    }
+
+    public SplitFlagMap.RegionExtent regionExtent() {
+        if (exactExtent != null) return exactExtent;
+        SplitFlagMap.RegionExtent extent = SplitFlagMap.getRegionExtents();
+        exactExtent = pinnedLive instanceof net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionView
+                ? ((net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionView) pinnedLive).extend(extent) : extent;
+        return exactExtent;
+    }
+
+    public byte getRegionPlaneCounts(int index) {
+        SplitFlagMap.RegionExtent extent = regionExtent();
+        int x = extent.minX + index % (extent.getWidth() + 1);
+        int y = extent.minY + index / (extent.getWidth() + 1);
+        SplitFlagMap.RegionExtent base = SplitFlagMap.getRegionExtents();
+        int count = 0;
+        if (x >= base.minX && x <= base.maxX && y >= base.minY && y <= base.maxY) {
+            count = Byte.toUnsignedInt(getPlanes()[x - base.minX + (y - base.minY) * (base.getWidth() + 1)]);
+        }
+        if (pinnedLive instanceof net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionView) {
+            count = Math.max(count, ((net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionView) pinnedLive).planeCount(x, y));
+        }
+        return (byte) count;
+    }
+
+    public Object exactSnapshotKey() {
+        return Arrays.asList(collisionData, pinnedLive);
+    }
+
+    public CollisionMap frozenCopy() {
+        CollisionMap copy = new CollisionMap(collisionData);
+        copy.pinnedLive = pinnedLive;
+        copy.exactExtent = regionExtent();
+        return copy;
+    }
+
+    public byte ordinaryWalkingMask(int packedPoint) {
+        int x = WorldPointUtil.unpackWorldX(packedPoint);
+        int y = WorldPointUtil.unpackWorldY(packedPoint);
+        int z = WorldPointUtil.unpackWorldPlane(packedPoint);
+        if (isBlocked(x, y, z)) return 0;
+        int mask = 0;
+        if (n(x, y, z)) mask |= 1;
+        if (ne(x, y, z)) mask |= 2;
+        if (e(x, y, z)) mask |= 4;
+        if (se(x, y, z)) mask |= 8;
+        if (s(x, y, z)) mask |= 16;
+        if (sw(x, y, z)) mask |= 32;
+        if (w(x, y, z)) mask |= 64;
+        if (nw(x, y, z)) mask |= 128;
+        return (byte) mask;
+    }
+
+    public int[] ordinaryWalkingNeighbors(int packedPoint) {
+        int x = WorldPointUtil.unpackWorldX(packedPoint), y = WorldPointUtil.unpackWorldY(packedPoint), z = WorldPointUtil.unpackWorldPlane(packedPoint);
+        if (isBlocked(x, y, z)) {
+            int[] adjacent = new int[8];
+            int count = 0;
+            for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++) {
+                if ((dx == 0 && dy == 0) || isBlocked(x + dx, y + dy, z)) continue;
+                if (dx == 0 || dy == 0 || (!isBlocked(x + dx, y, z) && !isBlocked(x, y + dy, z)))
+                    adjacent[count++] = WorldPointUtil.packWorldPoint(x + dx, y + dy, z);
+            }
+            return Arrays.copyOf(adjacent, count);
+        }
+        int mask = Byte.toUnsignedInt(ordinaryWalkingMask(packedPoint));
+        int[] result = new int[Integer.bitCount(mask)];
+        int[] dx = {0, 1, 1, 1, 0, -1, -1, -1};
+        int[] dy = {1, 1, 0, -1, -1, -1, 0, 1};
+        int at = 0;
+        for (int bit = 0; bit < 8; bit++) {
+            if ((mask & (1 << bit)) != 0) result[at++] = WorldPointUtil.dxdy(packedPoint, dx[bit], dy[bit]);
+        }
+        return result;
     }
 
     public CollisionMap(SplitFlagMap collisionData) {
@@ -55,6 +130,7 @@ public class CollisionMap {
      */
     public void beginSearch() {
         pinnedLive = overlay.current();
+        exactExtent = null;
     }
 
     private boolean get(int x, int y, int z, int flag) {
