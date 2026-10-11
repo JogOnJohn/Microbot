@@ -9,6 +9,7 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -25,6 +26,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
+import java.util.stream.Stream;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
@@ -139,11 +142,23 @@ public enum World330HostedHouse implements PohTeleport {
     }
 
     public boolean canReachAdvertisementBoard(boolean includeBankItems) {
-        boolean nearAdvertisement = isNearHouseAdvertisement();
-        boolean inventoryTablet = Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE);
-        boolean bankTablet = includeBankItems && Rs2Bank.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE);
-        boolean spellCastable = Rs2Magic.canCast(Rs2Spells.TELEPORT_TO_HOUSE);
-        return hasAdvertisementAccess(nearAdvertisement, inventoryTablet, bankTablet, spellCastable);
+        return hasAdvertisementAccess(isNearHouseAdvertisement(),
+                () -> Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE),
+                includeBankItems, () -> hasHouseTablet(Rs2Bank.getAll()),
+                () -> Rs2Magic.canCast(Rs2Spells.TELEPORT_TO_HOUSE));
+    }
+
+    static boolean hasAdvertisementAccess(boolean nearAdvertisement, BooleanSupplier inventoryTablet,
+            boolean includeBankItems, BooleanSupplier bankTablet, BooleanSupplier spellCastable) {
+        return nearAdvertisement || inventoryTablet.getAsBoolean()
+                || (includeBankItems && bankTablet.getAsBoolean()) || spellCastable.getAsBoolean();
+    }
+
+    static boolean hasHouseTablet(Stream<Rs2ItemModel> bankItems) {
+        // This fixed, unnoted tablet id needs no fuzzy-name/linked-note fallback. A missing id
+        // through Rs2Bank.hasItem would load every cold bank item's metadata on the client thread.
+        return bankItems.anyMatch(item -> item.getId() == ItemID.POH_TABLET_TELEPORTTOHOUSE
+                && item.getQuantity() > 0);
     }
 
     static boolean hasAdvertisementAccess(boolean nearAdvertisement, boolean inventoryTablet,
