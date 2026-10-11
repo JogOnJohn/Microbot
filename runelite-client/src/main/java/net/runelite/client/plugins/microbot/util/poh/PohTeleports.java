@@ -148,24 +148,23 @@ public class PohTeleports {
             log.info("[POH] ornate pool skipped; used {}ms ago", elapsed);
             return true;
         }
-        GameObject pool = findNearestReachablePool();
-        if (pool == null) {
+        PoolTarget target = findNearestReachablePool();
+        if (target == null) {
             log.info("[POH] ornate pool not found in loaded scene at {}", Rs2Player.getWorldLocation());
             return false;
         }
-        log.info("[POH] clicking ornate pool id={} loc={} player={}",
-                pool.getId(), pool.getWorldLocation(), Rs2Player.getWorldLocation());
-        Scene scene = Microbot.getClient().getTopLevelWorldView().getScene();
-        int plane = Microbot.getClientThread().runOnClientThreadOptional(
-                () -> Microbot.getClient().getTopLevelWorldView().getPlane()).orElse(-1);
-        boolean clicked = Rs2GameObject.interact(pool, "Drink");
+        if (!observePool(target).sameHouse || Thread.currentThread().isInterrupted()) return false;
+        log.info("[POH] selected ornate pool id={} sceneMin={} sceneMax={} plane={} distance={} candidates={}",
+                target.id, target.min, target.max,
+                target.plane, target.distance, target.candidates);
+        boolean clicked = Rs2GameObject.interact(target.pool, "Drink");
         if (!clicked) {
             log.info("[POH] ornate pool click returned false");
             return false;
         }
         boolean[] observedDrink = {false};
         sleepUntil(() -> {
-            PoolObservation state = observePool(pool, scene, plane);
+            PoolObservation state = observePool(target);
             observedDrink[0] = PohPoolInteraction.isDrinking(state.animation, state.distance, state.sameHouse);
             return observedDrink[0] || !state.sameHouse || Thread.currentThread().isInterrupted();
         }, 5000);
@@ -176,7 +175,7 @@ public class PohTeleports {
         }
         boolean[] observedFinish = {false};
         sleepUntil(() -> {
-            PoolObservation state = observePool(pool, scene, plane);
+            PoolObservation state = observePool(target);
             observedFinish[0] = PohPoolInteraction.isFinished(state.animation, state.distance, state.sameHouse, state.moving);
             return observedFinish[0] || !state.sameHouse || Thread.currentThread().isInterrupted();
         }, 8000);
@@ -188,7 +187,7 @@ public class PohTeleports {
         return finished;
     }
 
-    private static GameObject findNearestReachablePool() {
+    private static PoolTarget findNearestReachablePool() {
         return Microbot.getClientThread().runOnClientThreadOptional(() -> {
             net.runelite.api.Client client = Microbot.getClient();
             if (client == null || client.getLocalPlayer() == null) return null;
@@ -205,8 +204,10 @@ public class PohTeleports {
                     }
                 }
             }
-            return PohPoolInteraction.nearest(pools, client.getLocalPlayer().getLocalLocation(),
+            GameObject pool = PohPoolInteraction.nearest(pools, client.getLocalPlayer().getLocalLocation(),
                     PohTeleports::poolReachable);
+            return pool == null ? null : new PoolTarget(pool, scene, plane,
+                    PohPoolInteraction.distance(pool, client.getLocalPlayer().getLocalLocation()), pools.size());
         }).orElse(null);
     }
 
@@ -215,7 +216,20 @@ public class PohTeleports {
         return Rs2Tile.isSceneAreaReachable(min.getX(), min.getY(), max.getX(), max.getY());
     }
 
-    private static final class PoolObservation {
+    static final class PoolTarget {
+        final GameObject pool;
+        final Scene scene;
+        final Point min, max;
+        final int id;
+        final int plane, distance, candidates;
+        PoolTarget(GameObject pool, Scene scene, int plane, int distance, int candidates) {
+            this.pool = pool; this.scene = scene; this.plane = plane;
+            this.id = pool.getId(); this.min = pool.getSceneMinLocation(); this.max = pool.getSceneMaxLocation();
+            this.distance = distance; this.candidates = candidates;
+        }
+    }
+
+    static final class PoolObservation {
         final boolean sameHouse, moving;
         final int animation, distance;
         PoolObservation(boolean sameHouse, boolean moving, int animation, int distance) {
@@ -224,19 +238,29 @@ public class PohTeleports {
         }
     }
 
-    private static PoolObservation observePool(GameObject pool, Scene scene, int plane) {
-        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            net.runelite.api.Client client = Microbot.getClient();
-            if (client == null || client.getLocalPlayer() == null) return new PoolObservation(false, false, -1, 999);
-            Point min = pool.getSceneMinLocation();
-            if (plane < 0 || plane >= scene.getTiles().length) return new PoolObservation(false, false, -1, 999);
-            net.runelite.api.Tile tile = scene.getTiles()[plane][min.getX()][min.getY()];
-            boolean same = client.getTopLevelWorldView().getScene() == scene
-                    && client.getTopLevelWorldView().getPlane() == plane
-                    && tile != null && Arrays.stream(tile.getGameObjects()).anyMatch(object -> object == pool);
-            return new PoolObservation(same, Rs2Player.isMoving(), client.getLocalPlayer().getAnimation(),
-                    PohPoolInteraction.distance(pool, client.getLocalPlayer().getLocalLocation()));
-        }).orElse(new PoolObservation(false, false, -1, 999));
+    private static PoolObservation observePool(PoolTarget target) {
+        return Microbot.getClientThread().runOnClientThreadOptional(
+                () -> observePoolOnClient(Microbot.getClient(), target))
+                .orElse(new PoolObservation(false, false, -1, 999));
+    }
+
+    static PoolObservation observePoolOnClient(net.runelite.api.Client client, PoolTarget target) {
+        if (client == null || client.getLocalPlayer() == null || client.getLocalPlayer().getLocalLocation() == null
+                || client.getTopLevelWorldView().getScene() != target.scene
+                || client.getTopLevelWorldView().getPlane() != target.plane) {
+            return new PoolObservation(false, false, -1, 999);
+        }
+        Point min = target.pool.getSceneMinLocation();
+        net.runelite.api.Tile[][][] tiles = target.scene.getTiles();
+        if (target.plane < 0 || target.plane >= tiles.length || min == null
+                || min.getX() < 0 || min.getX() >= tiles[target.plane].length
+                || min.getY() < 0 || min.getY() >= tiles[target.plane][min.getX()].length) {
+            return new PoolObservation(false, false, -1, 999);
+        }
+        net.runelite.api.Tile tile = tiles[target.plane][min.getX()][min.getY()];
+        boolean same = tile != null && Arrays.stream(tile.getGameObjects()).anyMatch(object -> object == target.pool);
+        return new PoolObservation(same, Rs2Player.isMoving(), client.getLocalPlayer().getAnimation(),
+                PohPoolInteraction.distance(target.pool, client.getLocalPlayer().getLocalLocation()));
     }
 
     public static boolean hasLoadedOrnateRejuvenationPool() {

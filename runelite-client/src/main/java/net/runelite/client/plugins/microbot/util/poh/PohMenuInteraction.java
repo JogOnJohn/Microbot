@@ -24,6 +24,7 @@ public final class PohMenuInteraction {
     private PohMenuInteraction() { }
 
     public static void resetResult() { lastResult.set(Result.TRANSIENT_FAILURE); }
+    public static void markCancelled() { lastResult.set(Result.CANCELLED); }
     public static Result lastResult() { return lastResult.get(); }
 
     public static boolean select(String destination, BooleanSupplier openMenu, Supplier<Widget[]> roots) {
