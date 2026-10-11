@@ -23,7 +23,7 @@ import java.awt.*;
 @PluginDescriptor(
         name = PluginDescriptor.Mocrosoft + "AutoLogin",
         description = "Microbot autologin plugin",
-        version = "1.0.4",
+        version = "1.0.5",
         tags = {"account", "microbot", "login"},
         enabledByDefault = false
 )
