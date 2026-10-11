@@ -194,6 +194,7 @@ public class PluginManagerTest
 		manager.loadCorePlugins();
 		assertEquals("Core plugins must load before Hub dependencies", pluginClasses.size(), manager.getPlugins().size());
 		when(client.isClientThread()).thenReturn(true);
+		assertTrue("Staged plugins use a client-thread test context", client.isClientThread());
 		File[] jars = new File(directory).listFiles((dir, name) -> name.endsWith(".jar") && !name.startsWith("Microbot-Hub"));
 		assertTrue("Staged plugin artifacts required", jars != null && jars.length > 0);
 		for (File jar : jars)
