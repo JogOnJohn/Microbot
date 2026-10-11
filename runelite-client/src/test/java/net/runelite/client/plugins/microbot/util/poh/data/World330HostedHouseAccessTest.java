@@ -12,6 +12,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class World330HostedHouseAccessTest {
+    @org.junit.Test
+    public void advertisementMustBeNearbyAndOnTheSamePlane() {
+        net.runelite.api.coords.WorldPoint board = new net.runelite.api.coords.WorldPoint(2953, 3224, 0);
+        org.junit.Assert.assertTrue(World330HostedHouse.isWithinAdvertisementApproach(
+                new net.runelite.api.coords.WorldPoint(2953, 3221, 0), board));
+        org.junit.Assert.assertFalse(World330HostedHouse.isWithinAdvertisementApproach(
+                new net.runelite.api.coords.WorldPoint(2953, 3211, 0), board));
+        org.junit.Assert.assertFalse(World330HostedHouse.isWithinAdvertisementApproach(
+                new net.runelite.api.coords.WorldPoint(2953, 3224, 1), board));
+        org.junit.Assert.assertFalse(World330HostedHouse.isWithinAdvertisementApproach(board, null));
+    }
+
 
     @Test
     public void unsuitableHostIsSkippedAcrossSelectionsButCooldownExpires() {
