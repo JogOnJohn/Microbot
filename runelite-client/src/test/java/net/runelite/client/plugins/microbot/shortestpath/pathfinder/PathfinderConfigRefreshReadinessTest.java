@@ -42,14 +42,14 @@ public class PathfinderConfigRefreshReadinessTest {
         Client client = mock(Client.class);
         when(client.isClientThread()).thenReturn(true);
         PathfinderConfig config = new PathfinderConfig(null, Collections.emptyMap(),
-                Collections.emptyList(), client, null, false);
+                Collections.emptyList(), client, null);
         WorldPoint origin = new WorldPoint(1877, 7052, 1);
         WorldPoint target = new WorldPoint(2964, 3378, 0);
         Transport retained = new Transport(origin, target, "Retained hosted exit",
                 TransportType.TELEPORTATION_PORTAL, true, 4);
         config.getTransports().put(origin, Collections.singleton(retained));
         config.getUsableTeleports().add(retained);
-        config.publishExactTransport(WorldPointUtil.packWorldPoint(origin), retained);
+        config.getTransportsPacked().put(WorldPointUtil.packWorldPoint(origin), Collections.singleton(retained));
         try (MockedStatic<Rs2Walker> walker = mockStatic(Rs2Walker.class)) {
             for (GameState state : new GameState[]{GameState.LOADING, GameState.LOGGED_IN}) {
                 when(client.getGameState()).thenReturn(state);
@@ -76,7 +76,7 @@ public class PathfinderConfigRefreshReadinessTest {
         when(client.getLocalPlayer()).thenReturn(mock(Player.class));
         when(client.getItemContainer(InventoryID.INV)).thenReturn(mock(ItemContainer.class));
         PathfinderConfig config = new PathfinderConfig(null, Collections.emptyMap(),
-                Collections.emptyList(), client, null, false);
+                Collections.emptyList(), client, null);
         java.lang.reflect.Method snapshot = PathfinderConfig.class.getDeclaredMethod("hasTransportRefreshSnapshot");
         snapshot.setAccessible(true);
         assertTrue((boolean) snapshot.invoke(config));
