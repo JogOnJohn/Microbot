@@ -1486,6 +1486,7 @@ public class Rs2Walker {
             log.warn("Please do not call the walker from the main thread");
             return WalkerState.EXIT;
         }
+        if (!awaitWalkerScene(target, false)) return WalkerState.EXIT;
         WorldPoint playerLocWalk = Rs2Player.getWorldLocation();
         if (playerLocWalk == null) {
             return WalkerState.MOVING;
@@ -1715,6 +1716,25 @@ public class Rs2Walker {
      * @param target
      * @param distance
      */
+    private static boolean awaitWalkerScene(WorldPoint target, boolean requireOwnership) {
+        Client client = Microbot.getClient();
+        if (client != null && client.getGameState() == GameState.LOGGED_IN
+                && Rs2Player.getWorldLocation() != null) return true;
+        long started = System.nanoTime();
+        WebWalkLog.spInfo("scene_readiness | phase=wait state={} playerPresent={} goal={}",
+                client == null ? null : client.getGameState(), Rs2Player.getWorldLocation() != null, target);
+        WalkerSceneReadiness.Result result = WalkerSceneReadiness.await(
+                () -> Microbot.getClient() == null ? null : Microbot.getClient().getGameState(),
+                () -> Rs2Player.getWorldLocation() != null,
+                () -> Thread.currentThread().isInterrupted() || (requireOwnership && isWalkCancelled(target)),
+                System::nanoTime, ms -> sleep((int) ms), 8000L);
+        WebWalkLog.spInfo("scene_readiness | phase=done result={} elapsedMs={} state={} goal={}",
+                result, (System.nanoTime() - started) / 1_000_000L,
+                Microbot.getClient() == null ? null : Microbot.getClient().getGameState(), target);
+        if (result == WalkerSceneReadiness.Result.READY) routeState.lastMovedTimeMs = System.currentTimeMillis();
+        return result == WalkerSceneReadiness.Result.READY;
+    }
+
     private static WalkerState processWalk(WorldPoint target, int distance) {
         // Solve the Draynor basement lever puzzle first if walking to a basement tile, so the
         // door-transports are unlocked before pathfinding. No-op outside the basement. The
@@ -1772,9 +1792,9 @@ public class Rs2Walker {
                     currentTarget,
                     routeState.interimTargetWp,
                     partialRetriesWorking);
-            if (!Microbot.isLoggedIn()) {
-                traceProcessWalkExit("not-logged-in", target, processWalkTail);
-                setTarget(null, "rs2walker:processWalk:not-logged-in");
+            if (!awaitWalkerScene(target, true)) {
+                traceProcessWalkExit("scene-unavailable", target, processWalkTail);
+                if (target.equals(currentTarget)) setTarget(null, "rs2walker:processWalk:scene-unavailable");
                 return WalkerState.EXIT;
             }
             if (walkCancelledDiag(target, "processWalk:entry", processWalkTail)) {
