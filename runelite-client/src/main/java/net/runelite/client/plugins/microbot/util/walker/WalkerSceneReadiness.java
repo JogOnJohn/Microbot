@@ -5,11 +5,31 @@ import java.util.function.LongConsumer;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 import net.runelite.api.GameState;
+import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import static net.runelite.client.plugins.microbot.util.Global.sleep;
 
 final class WalkerSceneReadiness {
     enum Result { READY, LOGGED_OUT, TIMED_OUT, CANCELLED }
 
     private WalkerSceneReadiness() { }
+
+    static GameState gameState() {
+        if (Microbot.getClient() == null || Microbot.getClientThread() == null) return null;
+        return Microbot.getClientThread().runOnClientThreadOptional(
+                () -> Microbot.getClient().getGameState()).orElse(null);
+    }
+
+    static boolean hasPlayer() { return Rs2Player.getWorldLocation() != null; }
+
+    static void pause(long ms) { sleep((int) ms); }
+
+    static boolean inInstance() {
+        if (Microbot.getClient() == null || Microbot.getClientThread() == null) return true;
+        return Microbot.getClientThread().runOnClientThreadOptional(() ->
+                Microbot.getClient().getTopLevelWorldView() == null
+                || Microbot.getClient().getTopLevelWorldView().isInstance()).orElse(true);
+    }
 
     static Result await(Supplier<GameState> state, BooleanSupplier hasPlayer,
                         BooleanSupplier cancelled, LongSupplier nanoTime,

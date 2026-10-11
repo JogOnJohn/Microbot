@@ -1719,20 +1719,22 @@ public class Rs2Walker {
      * @param distance
      */
     private static boolean awaitWalkerScene(WorldPoint target, boolean requireOwnership) {
-        Client client = Microbot.getClient();
-        if (client != null && client.getGameState() == GameState.LOGGED_IN
-                && Rs2Player.getWorldLocation() != null) return true;
+        if (Microbot.isLoggedIn() && WalkerSceneReadiness.hasPlayer()) return true;
+        GameState state = WalkerSceneReadiness.gameState();
+        if (state == GameState.LOGGED_IN && WalkerSceneReadiness.hasPlayer()) return true;
         long started = System.nanoTime();
         WebWalkLog.spInfo("scene_readiness | phase=wait state={} playerPresent={} goal={}",
-                client == null ? null : client.getGameState(), Rs2Player.getWorldLocation() != null, target);
+                state, WalkerSceneReadiness.hasPlayer(), target);
         WalkerSceneReadiness.Result result = WalkerSceneReadiness.await(
-                () -> Microbot.getClient() == null ? null : Microbot.getClient().getGameState(),
-                () -> Rs2Player.getWorldLocation() != null,
-                () -> Thread.currentThread().isInterrupted() || (requireOwnership && isWalkCancelled(target)),
-                System::nanoTime, ms -> sleep((int) ms), 8000L);
+                WalkerSceneReadiness::gameState, WalkerSceneReadiness::hasPlayer,
+                new BooleanSupplier() {
+                    public boolean getAsBoolean() {
+                        return Thread.currentThread().isInterrupted() || (requireOwnership && isWalkCancelled(target));
+                    }
+                }, System::nanoTime, WalkerSceneReadiness::pause, 8000L);
         WebWalkLog.spInfo("scene_readiness | phase=done result={} elapsedMs={} state={} goal={}",
                 result, (System.nanoTime() - started) / 1_000_000L,
-                Microbot.getClient() == null ? null : Microbot.getClient().getGameState(), target);
+                WalkerSceneReadiness.gameState(), target);
         if (result == WalkerSceneReadiness.Result.READY) routeState.lastMovedTimeMs = System.currentTimeMillis();
         return result == WalkerSceneReadiness.Result.READY;
     }
@@ -2070,6 +2072,23 @@ public class Rs2Walker {
                     && tryIssueRouteContinuationClick(rawPath, path, target, distance)) {
                 walkerDiag("tail exempt exitReason=interim-close-route-click tailBefore=%d", processWalkTail);
                 processWalkTail--;
+                continue;
+            }
+
+            // A settled player already on the planned ladder origin needs dispatch, not another
+            // energy/widget pass or the recovery-click grace period. Keep this exact-origin only.
+            Boolean readyTransportHandled = tryDispatchReadyRouteTransport(rawPath, target);
+            if (readyTransportHandled != null) {
+                if (walkCancelledDiag(target, "processWalk:ready-transport", processWalkTail)) {
+                    return WalkerState.EXIT;
+                }
+                if (!readyTransportHandled) {
+                    sleepUntil(new BooleanSupplier() {
+                        public boolean getAsBoolean() {
+                            return isWalkCancelled(target) || Rs2Player.isMoving() || Rs2Player.isAnimating();
+                        }
+                    }, 200);
+                }
                 continue;
             }
 
@@ -7313,6 +7332,62 @@ public class Rs2Walker {
             return false;
         }
         return matchesDirectedTransportCatalogEdge(path.get(index), path.get(index + 1));
+    }
+
+    /** Null leaves normal scanning in charge; either Boolean outcome consumes this pass. */
+    private static Boolean tryDispatchReadyRouteTransport(List<WorldPoint> rawPath, WorldPoint target) {
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+        if (rawPath == null || rawPath.size() < 2 || playerLoc == null) {
+            return null;
+        }
+        int rawIdx = getClosestTileIndex(rawPath, playerLoc);
+        if (rawIdx < 0 || rawIdx >= rawPath.size() - 1) {
+            return null;
+        }
+        WorldPoint origin = rawPath.get(rawIdx);
+        WorldPoint destination = rawPath.get(rawIdx + 1);
+        if (!Objects.equals(origin, playerLoc) || !isObjectInteractionTransportStep(rawPath, rawIdx)) {
+            return null;
+        }
+        boolean inInstance = WalkerSceneReadiness.inInstance();
+        if (!shouldScheduleReadyRouteTransport(origin, playerLoc,
+                true,
+                Rs2Player.isMoving() || Rs2Player.isAnimating() || Rs2Player.isInteracting(),
+                routeState.interimTargetWp != null,
+                isDoorInteractionSettling() || isTransportInteractionSettling(),
+                inInstance, isWalkCancelled(target))) {
+            return null;
+        }
+        // Retain unresolved-door ownership and collision-aware door probing before any dispatch.
+        // Standing on the exact origin cannot authorize reaching past a nearer route obstacle.
+        if (shouldUseFocusedRawDoorIndex(rawPath, rawIdx)
+                || hasUnresolvedDoorLikeObjectNearRawPath(rawPath, rawIdx, playerLoc,
+                2, 1, HANDLER_RANGE)) {
+            return null;
+        }
+        if (isWalkCancelled(target)) {
+            return false;
+        }
+        // Own this pass even on failure/cooldown: the broad scan must not retry the same
+        // edge immediately. The outer tail budget and cancellation checks still apply.
+        if (shouldThrottleCurrentTileTransportAttempt(origin, destination)) {
+            return false;
+        }
+        markCurrentTileTransportAttempt(origin, destination);
+        long started = System.nanoTime();
+        WebWalkLog.spInfo("ready_transport_dispatch | phase=start origin={} destination={}", origin, destination);
+        boolean handled = dispatchTransports(rawPath, rawIdx);
+        WebWalkLog.spInfo("ready_transport_dispatch | phase=done handled={} elapsedMs={} origin={} destination={}",
+                handled, (System.nanoTime() - started) / 1_000_000L, origin, destination);
+        return handled;
+    }
+
+    static boolean shouldScheduleReadyRouteTransport(WorldPoint origin, WorldPoint playerLoc,
+                                                     boolean plannedObjectTransport, boolean busy,
+                                                     boolean interimActive, boolean settling,
+                                                     boolean inInstance, boolean cancelled) {
+        return origin != null && origin.equals(playerLoc) && plannedObjectTransport
+                && !busy && !interimActive && !settling && !inInstance && !cancelled;
     }
 
     /**
