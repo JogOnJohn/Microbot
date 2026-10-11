@@ -383,12 +383,36 @@ public class PathfinderConfig {
         while (refreshDirty.get() && runs < MAX_COALESCED_REFRESH_RUNS && refreshLock.tryLock()) {
             runs++;
             try {
+                if (!isTransportRefreshReady()) {
+                    WebWalkLog.cfg("refresh deferred: player/inventory scene snapshot unavailable");
+                    break;
+                }
                 refreshDirty.set(false);
                 doRefresh(pendingRefreshTarget);
             } finally {
                 refreshLock.unlock();
             }
         }
+    }
+
+    private boolean isTransportRefreshReady() {
+        if (client == null) return false;
+        if (client.isClientThread()) return hasTransportRefreshSnapshot();
+        return Microbot.getClientThread().runOnClientThreadOptional(this::hasTransportRefreshSnapshot)
+                .orElse(false);
+    }
+
+    private boolean hasTransportRefreshSnapshot() {
+        GameState state = client.getGameState();
+        return !shouldDeferTransportRefresh(state, client.getLocalPlayer() != null,
+                client.getItemContainer(net.runelite.api.gameval.InventoryID.INV) != null);
+    }
+
+    static boolean shouldDeferTransportRefresh(GameState state, boolean playerPresent, boolean inventoryPresent) {
+        // A null container is unknown, not an empty inventory. Keep the pending target and
+        // previous maps/cache until a later refresh can observe a usable scene snapshot.
+        return state == GameState.LOADING
+                || (state == GameState.LOGGED_IN && (!playerPresent || !inventoryPresent));
     }
 
     static WorldPoint selectRefreshTarget(WorldPoint requestedTarget, WorldPoint liveWalkerTarget,
@@ -1145,15 +1169,20 @@ public class PathfinderConfig {
 
 
     private Map<WorldPoint, Set<Transport>> createMergedList(WorldPoint target) {
+        long stageStart = System.nanoTime();
         boolean useWorld330 = shouldUseWorld330MaxHouse(target);
+        logTransportMergeStage("w330_eligibility", stageStart);
         if (!usePoh && !useWorld330) return allTransports;
+        stageStart = System.nanoTime();
         Map<WorldPoint, Set<Transport>> mergedTransports = new HashMap<>();
 
         // Start with putting all the TSV imported persistent transports
         for (var entry : allTransports.entrySet()) {
             mergedTransports.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
+        logTransportMergeStage("persistent_copy", stageStart);
 
+        stageStart = System.nanoTime();
         boolean inWorld330HostedHouse = isInWorld330HostedHouse();
         if (useWorld330) {
             Map<WorldPoint, Set<Transport>> world330Transports = PohPanel.getWorld330MaxHouseTransports(allTransports);
@@ -1165,17 +1194,20 @@ public class PathfinderConfig {
                     Rs2Player.getWorldLocation());
             mergeWorld330Transports(mergedTransports, world330Transports, inWorld330HostedHouse);
         }
+        logTransportMergeStage("w330_generation", stageStart);
 
         if (!usePoh || prefersHostedHouse()) {
             return mergedTransports;
         }
 
         // Add transports from PoH to somewhere in the world
+        stageStart = System.nanoTime();
         for (var entry : PohPanel.getAvailableTransports(allTransports, usePortalNexus).entrySet()) {
             mergedTransports
                     .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
                     .addAll(entry.getValue());
         }
+        logTransportMergeStage("personal_poh_generation", stageStart);
 
         // If we're already in Poh there's no reason to add teleports to Poh
         if (PohTeleports.isInHouse() || isInWorld330HostedHouse()) {
@@ -1185,12 +1217,22 @@ public class PathfinderConfig {
             return mergedTransports;
         }
         // Add transports from the world to PoH
+        stageStart = System.nanoTime();
         for (var entry : PohPanel.getTransportsToPoh().entrySet()) {
             mergedTransports
                     .computeIfAbsent(entry.getKey(), k -> new HashSet<>())
                     .addAll(entry.getValue());
         }
+        logTransportMergeStage("personal_poh_entry", stageStart);
         return mergedTransports;
+    }
+
+    private void logTransportMergeStage(String stage, long startedNanos) {
+        long elapsedMs = (System.nanoTime() - startedNanos) / 1_000_000;
+        if (elapsedMs >= SLOW_REFRESH_LOG_THRESHOLD_MS) {
+            WebWalkLog.cfgSlow("slow transport_merge stage={} elapsedMs={} bankItems={}",
+                    stage, elapsedMs, useBankItems);
+        }
     }
 
     static void mergeWorld330Transports(Map<WorldPoint, Set<Transport>> mergedTransports,

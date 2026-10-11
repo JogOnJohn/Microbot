@@ -1,6 +1,11 @@
 package net.runelite.client.plugins.microbot.util.poh.data;
 
 import org.junit.Test;
+import net.runelite.api.gameval.ItemID;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+
+import java.util.function.BooleanSupplier;
+import java.util.stream.Stream;
 
 import static net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse.HouseTeleportAction.NONE;
 import static net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse.HouseTeleportAction.SPELL_DEFAULT;
@@ -10,6 +15,10 @@ import static net.runelite.client.plugins.microbot.util.poh.data.World330HostedH
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 public class World330HostedHouseAccessTest {
     @org.junit.Test
@@ -56,6 +65,49 @@ public class World330HostedHouseAccessTest {
         assertTrue(World330HostedHouse.hasAdvertisementAccess(true, false, false, false));
         assertTrue(World330HostedHouse.hasAdvertisementAccess(false, false, true, false));
         assertFalse(World330HostedHouse.hasAdvertisementAccess(false, false, false, false));
+    }
+
+    @Test
+    public void advertisementAccessStopsOnceAnAccessMethodIsSatisfied() {
+        BooleanSupplier unexpected = () -> { throw new AssertionError("Unnecessary eligibility lookup"); };
+        assertTrue(World330HostedHouse.hasAdvertisementAccess(true, unexpected, true, unexpected, unexpected));
+        assertTrue(World330HostedHouse.hasAdvertisementAccess(false, () -> true, true, unexpected, unexpected));
+        assertTrue(World330HostedHouse.hasAdvertisementAccess(false, () -> false, true, () -> true, unexpected));
+        assertTrue(World330HostedHouse.hasAdvertisementAccess(false, () -> false, false, unexpected, () -> true));
+        assertFalse(World330HostedHouse.hasAdvertisementAccess(false, () -> false, false, unexpected, () -> false));
+    }
+
+    @Test
+    public void lazyAdvertisementAccessPreservesAllEligibilityCombinations() {
+        for (int flags = 0; flags < 32; flags++) {
+            boolean near = (flags & 1) != 0;
+            boolean inventory = (flags & 2) != 0;
+            boolean includeBank = (flags & 4) != 0;
+            boolean bank = (flags & 8) != 0;
+            boolean spell = (flags & 16) != 0;
+            assertEquals(World330HostedHouse.hasAdvertisementAccess(near, inventory, includeBank && bank, spell),
+                    World330HostedHouse.hasAdvertisementAccess(near, () -> inventory, includeBank, () -> bank, () -> spell));
+        }
+    }
+
+    @Test
+    public void missingBankTabletDoesNotReadAnyItemMetadata() {
+        Rs2ItemModel other = mock(Rs2ItemModel.class);
+        when(other.getId()).thenReturn(ItemID.COINS);
+        assertFalse(World330HostedHouse.hasHouseTablet(Stream.of(other)));
+        verify(other).getId();
+        verifyNoMoreInteractions(other);
+        assertFalse(World330HostedHouse.hasHouseTablet(Stream.empty()));
+    }
+
+    @Test
+    public void bankTabletRequiresPositiveQuantityWithoutLoadingMetadata() {
+        assertTrue(World330HostedHouse.hasHouseTablet(Stream.of(
+                Rs2ItemModel.createFromCache(ItemID.POH_TABLET_TELEPORTTOHOUSE, 1, 0))));
+        assertFalse(World330HostedHouse.hasHouseTablet(Stream.of(
+                Rs2ItemModel.createFromCache(ItemID.POH_TABLET_TELEPORTTOHOUSE, 0, 0))));
+        assertFalse(World330HostedHouse.hasHouseTablet(Stream.of(
+                Rs2ItemModel.createFromCache(ItemID.POH_TABLET_TELEPORTTOHOUSE, -1, 0))));
     }
 
     @Test
