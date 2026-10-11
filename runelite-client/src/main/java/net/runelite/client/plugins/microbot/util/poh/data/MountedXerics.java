@@ -45,7 +45,8 @@ public enum MountedXerics implements PohTeleport {
         }
         return PohMenuInteraction.select(destinationName,
                 () -> Rs2GameObject.interact(talisman, "Teleport menu"),
-                () -> new Widget[]{Rs2Widget.getWidget(InterfaceID.MENU, 0),
+                () -> new Widget[]{Rs2Widget.getWidget(InterfaceID.MENU, 3),
+                        Rs2Widget.getWidget(InterfaceID.MENU, 0),
                         Rs2Widget.getWidget(InterfaceID.MENU_NEW, 1)});
     }
 

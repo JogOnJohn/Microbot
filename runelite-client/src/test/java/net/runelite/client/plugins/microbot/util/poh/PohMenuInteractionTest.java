@@ -2,12 +2,50 @@ package net.runelite.client.plugins.microbot.util.poh;
 
 import net.runelite.api.widgets.Widget;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import net.runelite.api.DecorativeObject;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.client.plugins.microbot.util.poh.data.MountedXerics;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import java.util.function.Supplier;
+import java.util.function.BooleanSupplier;
 import java.awt.Rectangle;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class PohMenuInteractionTest {
+    @Test public void mountedXericSearchesObservedOptionsSiblingAndReusesOpenMenu() {
+        Widget background = mock(Widget.class), options = mock(Widget.class);
+        Widget glade = option("2: Xeric's Glade");
+        Widget lookout = option("1: Xeric's Lookout");
+        when(options.getDynamicChildren()).thenReturn(new Widget[]{lookout, glade});
+        DecorativeObject talisman = mock(DecorativeObject.class);
+        when(talisman.getId()).thenReturn(33414);
+        try (MockedStatic<Rs2Widget> widgets = mockStatic(Rs2Widget.class);
+             MockedStatic<Rs2GameObject> objects = mockStatic(Rs2GameObject.class);
+             MockedStatic<PohMenuInteraction> menus = mockStatic(PohMenuInteraction.class, CALLS_REAL_METHODS)) {
+            widgets.when(() -> Rs2Widget.getWidget(InterfaceID.MENU, 0)).thenReturn(background);
+            widgets.when(() -> Rs2Widget.getWidget(InterfaceID.MENU, 3)).thenReturn(options);
+            objects.when(() -> Rs2GameObject.getDecorativeObject(MountedXerics.IDS)).thenReturn(talisman);
+            menus.when(() -> PohMenuInteraction.select(anyString(), any(BooleanSupplier.class), any(Supplier.class)))
+                    .thenAnswer(call -> {
+                        Supplier<Widget[]> roots = call.getArgument(2);
+                        Widget found = null;
+                        for (Widget root : roots.get()) {
+                            found = PohMenuInteraction.findOption(root, call.getArgument(0));
+                            if (found != null) break;
+                        }
+                        assertSame(glade, found);
+                        return PohMenuInteraction.select(() -> glade,
+                                () -> { fail("Must reuse the visible menu"); return false; },
+                                condition -> false, selected -> selected == glade) == PohMenuInteraction.Result.CLICKED;
+                    });
+            assertTrue(MountedXerics.GLADE.execute());
+        }
+    }
+
     private Widget option(String text) {
         Widget widget = mock(Widget.class);
         when(widget.getText()).thenReturn(text);
