@@ -17,6 +17,8 @@ Ground-item pickup: [propagate dispatch failures](items.md#11-propagate-ground-i
 
 Run-orb energy, geometry, and pending-click semantics: [movement gotcha 21](movement.md#21-apply-the-shared-energy-policy-before-clicking-the-run-orb).
 
+Arriving beside stairs does not request another climb: [movement gotcha 18](movement.md#18-do-not-infer-a-floor-transition-from-proximity-to-stairs).
+
 ## Format
 
 Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use

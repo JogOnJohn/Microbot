@@ -3274,10 +3274,6 @@ public class Rs2Walker {
             if (finishPlayerLoc == null) { return WalkerState.MOVING; }
             int finalDist = finishPlayerLoc.distanceTo(target);
             if (finalDist <= finishThreshold) {
-                if (tryHandleArrivalSceneTransition(target)) {
-                    setTarget(null, "rs2walker:processWalk:arrival-scene-transition");
-                    return WalkerState.MOVING;
-                }
                 setTarget(null, "rs2walker:processWalk:arrived-within-distance");
                 return WalkerState.ARRIVED;
             } else if (partialPath) {
@@ -5061,10 +5057,6 @@ public class Rs2Walker {
             // where the reachability BFS is unreliable). Otherwise fall through to the pathfinder,
             // which reports UNREACHABLE instead of us falsely arriving and the caller spam-clicking.
             if (playerLoc.equals(target) || inInstance || Rs2Tile.isTileReachable(target)) {
-                if (tryHandleArrivalSceneTransition(target)) {
-                    setTarget(null, "rs2walker:direct-local-prepath:arrival-scene-transition");
-                    return WalkerState.MOVING;
-                }
                 setTarget(null, "rs2walker:direct-local-prepath:already-within-distance");
                 return WalkerState.ARRIVED;
             }
@@ -5131,10 +5123,6 @@ public class Rs2Walker {
 
         int initialDist = playerLoc.distanceTo(target);
         if (initialDist <= finishTh) {
-            if (tryHandleArrivalSceneTransition(target)) {
-                setTarget(null, "rs2walker:tryDirectShortWalk:arrival-scene-transition");
-                return WalkerState.MOVING;
-            }
             setTarget(null, "rs2walker:tryDirectShortWalk:already-within-distance");
             return WalkerState.ARRIVED;
         }
@@ -5235,91 +5223,6 @@ public class Rs2Walker {
         }
 
         return WalkerState.MOVING;
-    }
-
-    private static boolean tryHandleArrivalSceneTransition(WorldPoint target) {
-        WorldPoint playerLoc = Rs2Player.getWorldLocation();
-        if (target == null || playerLoc == null || playerLoc.getPlane() != target.getPlane()) {
-            return false;
-        }
-        if (Rs2Player.isMoving() || isDoorInteractionSettling() || isTransportInteractionSettling()) {
-            return false;
-        }
-
-        TileObject object = Rs2GameObject.getAll(o -> isArrivalSceneTransitionObject(o, target), target, 3).stream()
-                .min(Comparator.comparingInt(o -> o.getWorldLocation().distanceTo2D(target)))
-                .orElse(null);
-        if (object == null) {
-            return false;
-        }
-
-        ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
-        String action = pickArrivalSceneTransitionAction(comp);
-        if (action == null) {
-            return false;
-        }
-
-        WorldPoint before = playerLoc;
-        if (!Rs2GameObject.interact(object, action)) {
-            return false;
-        }
-
-        WebWalkLog.tmark("arrival_scene_transition", 0, target, before,
-                "object=" + object.getId() + " action=" + action);
-        sleepUntil(() -> {
-            WorldPoint now = Rs2Player.getWorldLocation();
-            return now != null && (!now.equals(before) || now.getPlane() != before.getPlane() || Rs2Player.isMoving());
-        }, 1_500);
-        sleepUntil(() -> !Rs2Player.isMoving() && !Rs2Player.isAnimating(), 5_000);
-        routeState.lastMovedTimeMs = System.currentTimeMillis();
-        routeState.stuckCount = 0;
-        return true;
-    }
-
-    private static boolean isArrivalSceneTransitionObject(TileObject object, WorldPoint target) {
-        if (object == null || object.getWorldLocation() == null || target == null) {
-            return false;
-        }
-        if (object.getWorldLocation().getPlane() != target.getPlane()
-                || object.getWorldLocation().distanceTo2D(target) > 1) {
-            return false;
-        }
-        ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
-        return isArrivalSceneTransitionComposition(comp) && pickArrivalSceneTransitionAction(comp) != null;
-    }
-
-    private static boolean isArrivalSceneTransitionComposition(ObjectComposition comp) {
-        if (comp == null || comp.getName() == null || comp.getActions() == null) {
-            return false;
-        }
-        String name = comp.getName().toLowerCase(Locale.ROOT);
-        return name.contains("stair")
-                || name.contains("ladder")
-                || name.contains("trapdoor")
-                || name.contains("steps")
-                || name.contains("stile");
-    }
-
-    private static String pickArrivalSceneTransitionAction(ObjectComposition comp) {
-        if (comp == null || comp.getActions() == null) {
-            return null;
-        }
-        List<String> preferredActions = List.of(
-                "climb-up", "climb up", "climb",
-                "go-up", "go up",
-                "climb-down", "climb down",
-                "go-down", "go down",
-                "enter");
-        for (String preferredAction : preferredActions) {
-            Optional<String> action = Arrays.stream(comp.getActions())
-                    .filter(Objects::nonNull)
-                    .filter(a -> a.equalsIgnoreCase(preferredAction))
-                    .findFirst();
-            if (action.isPresent()) {
-                return action.get();
-            }
-        }
-        return null;
     }
 
     private static int rawAnchorIndexForPathPosition(List<WorldPoint> rawPath,
@@ -12984,7 +12887,7 @@ public class Rs2Walker {
                 return bootstrapState;
             }
         }
-        int chebyshevToTarget = pl.distanceTo(target);
+        int chebyshevToTarget = pl.distanceTo2D(target);
         if (!forceBanking && chebyshevToTarget <= 100) {
             // Straight-line proximity says nothing about the walkable route: the Shantay gate is
             // ~30 tiles away and ~700 by inventory-only path without a pass. Skipping the compare
@@ -12995,7 +12898,7 @@ public class Rs2Walker {
             List<WorldPoint> directProbePath = getWalkPath(pl, target);
             int directProbeTiles = getTotalTilesFromPath(directProbePath, target);
             int directPathCeiling = shortWalkDirectPathCeiling(chebyshevToTarget);
-            if (directProbeTiles <= directPathCeiling) {
+            if (isShortDirectBankRoute(pl, target, directProbePath)) {
                 WebWalkLog.spInfo("bank_walk | skip_compare_short_distance dist={} directTiles={} goal={}",
                         chebyshevToTarget, directProbeTiles, target);
                 return walkWithStateInternal(target, distance);
@@ -13069,6 +12972,11 @@ public class Rs2Walker {
      */
     static int shortWalkDirectPathCeiling(int chebyshevDistance) {
         return Math.max(60, chebyshevDistance * 3);
+    }
+
+    static boolean isShortDirectBankRoute(WorldPoint start, WorldPoint target, List<WorldPoint> path) {
+        int proximity = start.distanceTo2D(target);
+        return proximity <= 100 && getTotalTilesFromPath(path, target) <= shortWalkDirectPathCeiling(proximity);
     }
 
     /**

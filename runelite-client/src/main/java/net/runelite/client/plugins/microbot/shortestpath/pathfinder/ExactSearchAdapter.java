@@ -12,10 +12,12 @@ import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 /** Adapts the upstream exact engine without changing the walker/QuestHelper search API. */
 final class ExactSearchAdapter {
     private static final ExactRoutingSession SESSION = new ExactRoutingSession();
-    private static Object cachedCollision;
-    private static Set<Long> cachedEdges;
-    private static RoutingStatic cachedStatic;
-    private static CollisionMap cachedMap;
+    private static final ExactStaticCache STATIC = new ExactStaticCache((map, raw, start) -> {
+        RoutingStaticBuilder.Result built = RoutingStaticBuilder.build(map, raw,
+                Collections.emptySet(), RoutingCuts.loadFromResources().pairs(), start);
+        WebWalkLog.pf("exact_static_build {}", built.diagnostics);
+        return built.routingStatic;
+    });
 
     static final class Outcome {
         final List<PathStep> steps;
@@ -49,23 +51,10 @@ final class ExactSearchAdapter {
             config.getAllTransports().forEach((origin, edges) -> raw.put(WorldPointUtil.packWorldPoint(origin), new LinkedHashSet<>(edges)));
             config.getTransports().forEach((origin, edges) -> raw.computeIfAbsent(WorldPointUtil.packWorldPoint(origin), k -> new LinkedHashSet<>()).addAll(edges));
             raw.computeIfAbsent(WorldPointUtil.UNDEFINED, k -> new LinkedHashSet<>()).addAll(Arrays.asList(availability.getUsableTeleports()));
-            Set<Long> endpoints = new HashSet<>();
-            raw.values().forEach(edges -> edges.forEach(t -> endpoints.add(((long) WorldPointUtil.packWorldPoint(t.getOrigin()) << 32)
-                    | (WorldPointUtil.packWorldPoint(t.getDestination()) & 0xffffffffL))));
-            synchronized (SESSION) {
-                Object key = frozen.exactSnapshotKey();
-                if (cachedStatic == null || !Objects.equals(key, cachedCollision)
-                        || !endpoints.equals(cachedEdges) || (cachedStatic.searchIndex(start) < 0 && cachedStatic.siteIndex(start) < 0)) {
-                    RoutingStaticBuilder.Result built = RoutingStaticBuilder.build(frozen, raw,
-                            Collections.emptySet(), RoutingCuts.loadFromResources().pairs(), start);
-                    ExactCancellation.check();
-                    cachedStatic = built.routingStatic;
-                    cachedCollision = key; cachedEdges = endpoints; cachedMap = frozen;
-                    WebWalkLog.pf("exact_static_build {}", built.diagnostics);
-                }
-                stat = cachedStatic;
-                frozen = cachedMap;
-            }
+            ExactStaticCache.Prepared prepared = STATIC.prepare(frozen, raw, start);
+            stat = prepared.stat;
+            frozen = prepared.map;
+            WebWalkLog.pf("exact_static_cache reused={}", prepared.reused);
             ExactCancellation.check();
             SiteGraph graph = SESSION.graph(stat, account).value();
             PreparedTarget target = SESSION.target(graph, frozen, goals.stream().mapToInt(Integer::intValue).toArray()).value();

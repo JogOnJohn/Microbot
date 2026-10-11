@@ -16,6 +16,31 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class ExactTransportRefusalTest {
+    @Test public void retainedStructuralEndpointCannotEnableRemovedCapability() {
+        WorldPoint origin = new WorldPoint(1, 1, 0), landing = new WorldPoint(10, 1, 0);
+        int from = WorldPointUtil.packWorldPoint(origin), to = WorldPointUtil.packWorldPoint(landing);
+        Transport edge = new Transport(origin, landing, "Floor transition", TransportType.TRANSPORT, false, 1);
+        SyntheticCollisionMap collision = spy(new SyntheticCollisionMap(Set.of(from, to), Map.of(), 1));
+        doReturn(collision).when(collision).frozenCopy();
+        doReturn(new Object()).when(collision).exactSnapshotKey();
+        PathfinderConfig config = mock(PathfinderConfig.class);
+        when(config.getBackend()).thenReturn(PathfinderBackend.EXACT);
+        when(config.getMap()).thenReturn(collision);
+        when(config.getAllTransports()).thenReturn(Map.of(origin, Set.of(edge)));
+        when(config.getTransports()).thenReturn(new java.util.concurrent.ConcurrentHashMap<>());
+        when(config.getCalculationCutoffMillis()).thenReturn(5000L);
+        when(config.exactAvailability()).thenReturn(TransportAvailabilityFixture.of(edge));
+        assertSelected(config, from, to, edge, origin, landing);
+        when(config.getAllTransports()).thenReturn(Map.of());
+        when(config.exactAvailability()).thenReturn(TransportAvailabilityFixture.of());
+        Pathfinder unavailable = new Pathfinder(config, from, Set.of(to));
+        unavailable.run();
+        assertEquals("unreachable", unavailable.getTerminationReason());
+        assertNull(unavailable.getTransportForStep(origin, landing));
+        when(config.exactAvailability()).thenReturn(TransportAvailabilityFixture.of(edge));
+        assertSelected(config, from, to, edge, origin, landing);
+    }
+
     @Test public void actualExactFacadeFiltersRefusedTransportEvenBeforeCatalogRefresh() {
         WorldPoint origin = new WorldPoint(1, 1, 0), landing = new WorldPoint(10, 1, 0);
         int from = WorldPointUtil.packWorldPoint(origin), to = WorldPointUtil.packWorldPoint(landing);

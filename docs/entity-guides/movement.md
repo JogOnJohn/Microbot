@@ -365,3 +365,19 @@ despite the teleport blocklist. Do not treat a house switch as arrival at the te
 
 **Defensive check:** `PohTransportRecoveryTest` covers success, bounded retries, failed
 exit/entry and interruption.
+
+## 18. Do not infer a floor transition from proximity to stairs
+
+Reaching a coordinate on the requested plane is ordinary arrival, even beside a ladder.
+Only a route transport with an explicit destination, or a caller-owned interaction,
+can request another climb. Never select a nearby Climb-up/Climb-down action merely
+because the route ends beside its object.
+
+**Why this matters:** Ross's upstairs route landed at `(2617,3316,1)` beside its
+goal `(2616,3315,1)`, then the arrival helper clicked ladder 16679 Climb-down.
+Repeated correct climbs followed by incorrect descents looked like planner failure.
+
+**Where this applies:** `Rs2Walker` arrival and approach helpers.
+
+**Defensive check:** `WalkerFloorArrivalRegressionTest` verifies that arrival beside
+Ross's upstairs goal completes without scanning or interacting with nearby objects.
