@@ -1486,11 +1486,13 @@ public class Rs2Walker {
             log.warn("Please do not call the walker from the main thread");
             return WalkerState.EXIT;
         }
-        if (!awaitWalkerScene(target, false)) return WalkerState.EXIT;
         WorldPoint playerLocWalk = Rs2Player.getWorldLocation();
         if (playerLocWalk == null) {
             return WalkerState.MOVING;
         }
+        if (!awaitWalkerScene(target, false)) return WalkerState.EXIT;
+        playerLocWalk = Rs2Player.getWorldLocation();
+        if (playerLocWalk == null) return WalkerState.MOVING;
         int distToTarget = playerLocWalk.distanceTo(target);
         LocalPoint localTarget = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), target);
         boolean walkableCheck = Rs2Tile.isWalkable(localTarget);
