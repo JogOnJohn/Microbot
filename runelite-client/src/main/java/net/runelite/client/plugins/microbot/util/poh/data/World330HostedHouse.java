@@ -213,11 +213,11 @@ public enum World330HostedHouse implements PohTeleport {
 
     static HouseTeleportAction chooseHouseTeleportAction(boolean inventoryTablet,
             boolean spellCastable, boolean outsideIsDefault) {
-        if (inventoryTablet) {
-            return outsideIsDefault ? HouseTeleportAction.TABLET_DEFAULT : HouseTeleportAction.TABLET_OUTSIDE;
-        }
         if (spellCastable) {
             return outsideIsDefault ? HouseTeleportAction.SPELL_DEFAULT : HouseTeleportAction.SPELL_OUTSIDE;
+        }
+        if (inventoryTablet) {
+            return outsideIsDefault ? HouseTeleportAction.TABLET_DEFAULT : HouseTeleportAction.TABLET_OUTSIDE;
         }
         return HouseTeleportAction.NONE;
     }

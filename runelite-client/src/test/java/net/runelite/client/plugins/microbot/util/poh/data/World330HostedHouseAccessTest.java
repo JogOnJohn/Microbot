@@ -112,16 +112,20 @@ public class World330HostedHouseAccessTest {
 
     @Test
     public void choosesOutsideVariantWhenInsideIsTheDefault() {
-        assertEquals(TABLET_OUTSIDE,
+        assertEquals(SPELL_OUTSIDE,
                 World330HostedHouse.chooseHouseTeleportAction(true, true, false));
+        assertEquals(TABLET_OUTSIDE,
+                World330HostedHouse.chooseHouseTeleportAction(true, false, false));
         assertEquals(SPELL_OUTSIDE,
                 World330HostedHouse.chooseHouseTeleportAction(false, true, false));
     }
 
     @Test
     public void usesDefaultActionWhenOutsideIsAlreadyTheDefault() {
-        assertEquals(TABLET_DEFAULT,
+        assertEquals(SPELL_DEFAULT,
                 World330HostedHouse.chooseHouseTeleportAction(true, true, true));
+        assertEquals(TABLET_DEFAULT,
+                World330HostedHouse.chooseHouseTeleportAction(true, false, true));
         assertEquals(SPELL_DEFAULT,
                 World330HostedHouse.chooseHouseTeleportAction(false, true, true));
         assertEquals(NONE,
