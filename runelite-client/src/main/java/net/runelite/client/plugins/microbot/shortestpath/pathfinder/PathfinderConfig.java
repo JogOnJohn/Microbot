@@ -12,6 +12,7 @@ import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.plugins.itemcharges.ItemChargeConfig;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.shortestpath.*;
+import net.runelite.client.plugins.microbot.shortestpath.transport.TransportRefusalLedger;
 import net.runelite.client.plugins.microbot.shortestpath.transport.requirement.ItemRequirement;
 import net.runelite.client.plugins.microbot.shortestpath.transport.requirement.Unlock;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.live.LiveCollisionOverlay;
@@ -134,6 +135,12 @@ public class PathfinderConfig {
      * they survive. Loaded once in the constructor; grown by {@link #learnBlockedEdge}.
      */
     private final Set<Long> learnedBlockedEdgeKeys = ConcurrentHashMap.newKeySet();
+    @Getter
+    private final TransportRefusalLedger transportRefusals = new TransportRefusalLedger();
+
+    public boolean isWalkScopedTransportBlocked(Transport transport) {
+        return getTransportRefusals().isBlocked(transport);
+    }
     /** Backing file for {@link #learnedBlockedEdgeKeys}; redirectable for tests. */
     private volatile File learnedBlockedEdgesFile;
     /**
@@ -782,6 +789,8 @@ public class PathfinderConfig {
             Set<Transport> usableTransports = new HashSet<>(entry.getValue().size());
             for (Transport transport : entry.getValue()) {
                 totalTransports++;
+                // Do not turn an execution refusal into a blocked ordinary walking edge.
+                if (isWalkScopedTransportBlocked(transport)) continue;
                 updateActionBasedOnQuestState(transport);
 
                 long t0 = System.nanoTime();

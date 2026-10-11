@@ -34,7 +34,7 @@ final class ExactSearchAdapter {
             if (Runtime.getRuntime().maxMemory() < 1024L * 1024 * 1024) {
                 throw new IllegalStateException("Exact backend requires at least -Xmx1g; -Xmx2g is recommended for the test client");
             }
-            TransportAvailability availability = config.exactAvailability();
+            TransportAvailability availability = config.exactAvailability().excluding(config::isWalkScopedTransportBlocked);
             int teleportPenalty = config.getDistanceBeforeUsingTeleport();
             long cutoffMillis = config.getCalculationCutoffMillis();
             boolean avoidHazards = config.isAvoidDangerousNpcs();

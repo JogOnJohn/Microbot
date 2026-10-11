@@ -323,6 +323,7 @@ public class CollisionMap {
         // Transports are pre-filtered by PathfinderConfig.refreshTransports
         // Thus any transports in the list are guaranteed to be valid per the user's settings
         for (Transport transport : transports) {
+            if (config.isWalkScopedTransportBlocked(transport)) continue;
             boolean isMoa = transport.getType() == TransportType.SEASONAL_TRANSPORT
                     && transport.getDisplayInfo() != null
                     && transport.getDisplayInfo().toLowerCase().contains("map of alacrity");
@@ -408,6 +409,7 @@ public class CollisionMap {
                 // Only checks non-teleport transports (includes portals and levers, but not items and spells)
                 Set<Transport> neighborTransports = config.getTransportsPacked().getOrDefault(neighborPacked, Collections.emptySet());
                 for (Transport transport : neighborTransports) {
+                    if (config.isWalkScopedTransportBlocked(transport)) continue;
                     if (transport.getOrigin() == null || visited.get(transport.getOrigin())) {
                         continue;
                     }
@@ -435,6 +437,7 @@ public class CollisionMap {
         if (incomingByDestPacked != null) {
             Set<Transport> incoming = incomingByDestPacked.getOrDefault(node.packedPosition, Collections.emptySet());
             for (Transport transport : incoming) {
+                if (config.isWalkScopedTransportBlocked(transport)) continue;
                 WorldPoint origin = transport.getOrigin();
                 if (origin == null) {
                     continue;
@@ -511,6 +514,7 @@ public class CollisionMap {
                 int wy = WorldPointUtil.unpackWorldY(prevPacked);
                 Set<Transport> ts = config.getTransportsPacked().getOrDefault(prevPacked, Collections.emptySet());
                 for (Transport transport : ts) {
+                    if (config.isWalkScopedTransportBlocked(transport)) continue;
                     if (transport.getOrigin() == null) {
                         continue;
                     }
