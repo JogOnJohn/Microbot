@@ -2510,6 +2510,7 @@ public class Rs2Bank {
      * @return A SimpleEntry containing the path (key) and bank location (value), or null if no accessible bank could be reached
      */
     private static AbstractMap.SimpleEntry<List<WorldPoint>, BankLocation> getPathAndBankToNearestBank(WorldPoint worldPoint, int maxObjectSearchRadius) {
+        if (worldPoint == null) return null;
         Microbot.log("Finding nearest bank...");
 
         Set<BankLocation> allBanks = Arrays.stream(BankLocation.values())
@@ -2677,7 +2678,8 @@ public class Rs2Bank {
         Rs2Player.toggleRunEnergy(toggleRun);
         Microbot.status = "Walking to nearest bank " + bankLocation.toString();
         Rs2Walker.walkTo(bankLocation.getWorldPoint(), 4);
-        return bankLocation.getWorldPoint().distanceTo2D(Rs2Player.getWorldLocation()) <= 4;
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        return playerLocation != null && bankLocation.getWorldPoint().distanceTo2D(playerLocation) <= 4;
     }
 
     /**
@@ -2688,6 +2690,7 @@ public class Rs2Bank {
      */
     public static boolean isNearBank(int distance) {
         WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (playerLocation == null) return false;
         return Arrays.stream(BankLocation.values())
                 .anyMatch(b -> b.getWorldPoint().getPlane() == playerLocation.getPlane()
                         && b.getWorldPoint().distanceTo2D(playerLocation) <= distance);
@@ -2701,8 +2704,9 @@ public class Rs2Bank {
      * @return true if Rs2Player location is less than distance away from the bank location
      */
     public static boolean isNearBank(BankLocation bankLocation, int distance) {
-        int distanceToBank = Rs2Walker.getDistanceBetween(Rs2Player.getWorldLocation(), bankLocation.getWorldPoint());
-        return distanceToBank <= distance;
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (playerLocation == null) return false;
+        return Rs2Walker.getDistanceBetween(playerLocation, bankLocation.getWorldPoint()) <= distance;
     }
 
     /**
