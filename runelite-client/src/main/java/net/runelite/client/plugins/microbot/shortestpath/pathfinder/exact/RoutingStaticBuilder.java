@@ -1,6 +1,8 @@
 package net.runelite.client.plugins.microbot.shortestpath.pathfinder.exact;
 
 import java.io.IOException;
+import java.lang.ref.SoftReference;
+import java.util.Objects;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -47,6 +49,7 @@ public final class RoutingStaticBuilder
 	/** Per-step timings and derivation counts, for the plugin's build diagnostics. */
 	public static final class Diagnostics
 	{
+		public final boolean terrainReused;
 		public final long enumerateWalkableNanos;
 		public final long naturalComponentsNanos;
 		public final long cutValidationNanos;
@@ -80,8 +83,9 @@ public final class RoutingStaticBuilder
 			int walkableTileCount, int naturalComponentCount, int routingComponentCount,
 			int largestRoutingComponentSize, int reachableNaturalComponentCount, int inputCutCount,
 			int duplicateCutCount, int invalidCutCount, int nonSeparatingCutCount, int crossingCount,
-			int searchTileCount, int siteCount, int reachableBankCount)
+			int searchTileCount, int siteCount, int reachableBankCount, boolean terrainReused)
 		{
+			this.terrainReused = terrainReused;
 			this.enumerateWalkableNanos = enumerateWalkableNanos;
 			this.naturalComponentsNanos = naturalComponentsNanos;
 			this.cutValidationNanos = cutValidationNanos;
@@ -111,7 +115,8 @@ public final class RoutingStaticBuilder
 		public String toString()
 		{
 			return "RoutingStaticBuilder.Diagnostics{"
-				+ "totalMs=" + (totalNanos / 1_000_000) + ", enumerateWalkableMs=" + (enumerateWalkableNanos / 1_000_000)
+				+ "totalMs=" + (totalNanos / 1_000_000) + ", terrainReused=" + terrainReused
+				+ ", enumerateWalkableMs=" + (enumerateWalkableNanos / 1_000_000)
 				+ ", naturalComponentsMs=" + (naturalComponentsNanos / 1_000_000)
 				+ ", cutValidationMs=" + (cutValidationNanos / 1_000_000)
 				+ ", routingComponentsMs=" + (routingComponentsNanos / 1_000_000)
@@ -174,8 +179,64 @@ public final class RoutingStaticBuilder
 	public static Result build(CollisionMap collision, Map<Integer, Set<Transport>> rawTransports,
 		Set<Integer> bankTiles, int[] cuts, int seedTile) throws IOException
 	{
-		long totalStarted = System.nanoTime();
+		return build(collision, rawTransports, bankTiles, cuts, seedTile, null);
+	}
 
+	/** One reclaimable terrain snapshot; transport endpoints and account state are not cached here. */
+	public static final class TerrainCache
+	{
+		private Object collisionKey;
+		private int[] cuts;
+		private SoftReference<Terrain> value = new SoftReference<>(null);
+
+		private synchronized TerrainPreparation prepare(CollisionMap collision, int[] requestedCuts)
+		{
+			ExactCancellation.check();
+			Object key = collision.exactSnapshotKey();
+			Terrain terrain = value.get();
+			if (terrain != null && Objects.equals(key, collisionKey) && Arrays.equals(cuts, requestedCuts))
+				return new TerrainPreparation(terrain, true);
+			// Release obsolete multi-million-tile arrays before building the replacement.
+			value.clear();
+			terrain = null;
+			Terrain built = prepareTerrain(collision, requestedCuts);
+			ExactCancellation.check();
+			collisionKey = key;
+			cuts = requestedCuts.clone();
+			value = new SoftReference<>(built);
+			return new TerrainPreparation(built, false);
+		}
+	}
+
+	private static final class TerrainPreparation
+	{
+		final Terrain terrain;
+		final boolean reused;
+		TerrainPreparation(Terrain terrain, boolean reused) { this.terrain = terrain; this.reused = reused; }
+	}
+
+	private static final class Terrain
+	{
+		final WalkableTiles walkable;
+		final int[] naturalId, routingId;
+		final CutSet cutSet;
+		final int naturalComponentCount, maxRoutingComponentId, largestRoutingComponentSize;
+		final long enumerateNanos, naturalNanos, cutNanos, routingNanos;
+
+		Terrain(WalkableTiles walkable, int[] naturalId, int[] routingId, CutSet cutSet,
+			int naturalComponentCount, int maxRoutingComponentId, int largestRoutingComponentSize,
+			long enumerateNanos, long naturalNanos, long cutNanos, long routingNanos)
+		{
+			this.walkable = walkable; this.naturalId = naturalId; this.routingId = routingId; this.cutSet = cutSet;
+			this.naturalComponentCount = naturalComponentCount; this.maxRoutingComponentId = maxRoutingComponentId;
+			this.largestRoutingComponentSize = largestRoutingComponentSize;
+			this.enumerateNanos = enumerateNanos; this.naturalNanos = naturalNanos;
+			this.cutNanos = cutNanos; this.routingNanos = routingNanos;
+		}
+	}
+
+	private static Terrain prepareTerrain(CollisionMap collision, int[] cuts)
+	{
 		long stepStarted = System.nanoTime();
 		WalkableTiles walkable = enumerateWalkableTiles(collision);
 		long enumerateWalkableNanos = System.nanoTime() - stepStarted;
@@ -196,8 +257,32 @@ public final class RoutingStaticBuilder
 		int routingComponentCount = maxRoutingComponentId + 1;
 		int largestRoutingComponentSize = largestGroup(routingId, maxRoutingComponentId);
 		long routingComponentsNanos = System.nanoTime() - stepStarted;
+		return new Terrain(walkable, naturalId, routingId, cutSet, naturalComponentCount,
+			maxRoutingComponentId, largestRoutingComponentSize, enumerateWalkableNanos,
+			naturalComponentsNanos, cutValidationNanos, routingComponentsNanos);
+	}
 
-		stepStarted = System.nanoTime();
+	/** Reuses terrain only for an identical frozen collision snapshot and separator cuts. */
+	public static Result build(CollisionMap collision, Map<Integer, Set<Transport>> rawTransports,
+		Set<Integer> bankTiles, int[] cuts, int seedTile, TerrainCache cache) throws IOException
+	{
+		long totalStarted = System.nanoTime();
+		TerrainPreparation prepared = cache == null
+			? new TerrainPreparation(prepareTerrain(collision, cuts), false) : cache.prepare(collision, cuts);
+		Terrain terrain = prepared.terrain;
+		WalkableTiles walkable = terrain.walkable;
+		int[] naturalId = terrain.naturalId, routingId = terrain.routingId;
+		CutSet cutSet = terrain.cutSet;
+		int naturalComponentCount = terrain.naturalComponentCount;
+		int maxRoutingComponentId = terrain.maxRoutingComponentId;
+		int routingComponentCount = maxRoutingComponentId + 1;
+		int largestRoutingComponentSize = terrain.largestRoutingComponentSize;
+		long enumerateWalkableNanos = prepared.reused ? 0 : terrain.enumerateNanos;
+		long naturalComponentsNanos = prepared.reused ? 0 : terrain.naturalNanos;
+		long cutValidationNanos = prepared.reused ? 0 : terrain.cutNanos;
+		long routingComponentsNanos = prepared.reused ? 0 : terrain.routingNanos;
+
+		long stepStarted = System.nanoTime();
 		boolean[] reachableNatural = structuralReachability(collision, walkable, naturalId, naturalComponentCount,
 			rawTransports, seedTile);
 		int reachableNaturalCount = count(reachableNatural);
@@ -244,7 +329,7 @@ public final class RoutingStaticBuilder
 			validateNanos, totalNanos, walkable.tiles.length, naturalComponentCount, maxRoutingComponentId,
 			largestRoutingComponentSize, reachableNaturalCount, cuts.length / 2, cutSet.duplicateCount,
 			cutSet.invalidCount, nonSeparating, crossings.size(), search.tiles.length, sites.siteTiles.length,
-			sites.reachableBankTiles.length);
+			sites.reachableBankTiles.length, prepared.reused);
 		return new Result(result, diagnostics);
 	}
 

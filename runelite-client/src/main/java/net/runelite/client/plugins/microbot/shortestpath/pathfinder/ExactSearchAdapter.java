@@ -12,9 +12,10 @@ import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 /** Adapts the upstream exact engine without changing the walker/QuestHelper search API. */
 final class ExactSearchAdapter {
     private static final ExactRoutingSession SESSION = new ExactRoutingSession();
+    private static final RoutingStaticBuilder.TerrainCache TERRAIN = new RoutingStaticBuilder.TerrainCache();
     private static final ExactStaticCache STATIC = new ExactStaticCache((map, raw, start) -> {
         RoutingStaticBuilder.Result built = RoutingStaticBuilder.build(map, raw,
-                Collections.emptySet(), RoutingCuts.loadFromResources().pairs(), start);
+                Collections.emptySet(), RoutingCuts.loadFromResources().pairs(), start, TERRAIN);
         WebWalkLog.pf("exact_static_build {}", built.diagnostics);
         return built.routingStatic;
     });
