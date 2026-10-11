@@ -11354,7 +11354,7 @@ public class Rs2Walker {
         if (actor == null) {
             return false;
         }
-        WorldPoint loc = actor.getWorldLocation();
+        WorldPoint loc = Microbot.getClientThread().runOnClientThreadOptional(actor::getWorldLocation).orElse(null);
         if (loc == null) {
             return false;
         }
@@ -11497,6 +11497,7 @@ public class Rs2Walker {
      * @return distance
      */
     public static int getDistanceBetween(WorldPoint startpoint, WorldPoint endpoint) {
+        if (startpoint == null || endpoint == null) return Integer.MAX_VALUE;
         Set<WorldPoint> ends = Set.of(endpoint);
         Pathfinder pathfinder = new Pathfinder(Rs2PathApi.getPathfinderConfig(), startpoint, ends);
         pathfinder.run();
