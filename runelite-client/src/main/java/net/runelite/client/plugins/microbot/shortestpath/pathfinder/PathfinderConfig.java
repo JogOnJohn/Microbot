@@ -1508,6 +1508,8 @@ public class PathfinderConfig {
     }
 
     private boolean useTransport(Transport transport) {
+        // Keep rejection counts and timings at refresh level: per-edge debug output floods
+        // the client console and can exhaust the walker startup budget.
         // The Zanaris shed is a quest/staff portal, not an unrestricted opening door.
         // Keep the generated transport resource unchanged for converter reproducibility.
         if (transport.getObjectId() == 2406
@@ -1521,43 +1523,35 @@ public class PathfinderConfig {
             }
         }
         if (isTransportRuntimeBlocked(transport)) {
-            log.debug("Transport ( O: {} D: {} ) is runtime-blocked after a failed execution", transport.getOrigin(), transport.getDestination());
             return false;
         }
         // Check if the feature flag is disabled
         if (!isFeatureEnabled(transport)) {
-            log.debug("Transport Type {} is disabled by feature flag", transport.getType());
             return false;
         }
         // If the transport requires you to be in a members world (used for more granular member requirements)
         if (transport.isMembers() && !client.getWorldType().contains(WorldType.MEMBERS)) {
-            log.debug("Transport ( O: {} D: {} ) requires members world", transport.getOrigin(), transport.getDestination());
             return false;
         }
         if (transport.getType() == TransportType.SPIRIT_TREE && !isSpiritTreeRouteEnabled(transport)) {
-            log.debug("Transport ( O: {} D: {} ) is a spirit tree route but the tree is disabled", transport.getOrigin(), transport.getDestination());
             return false;
         }
         // If you don't meet level requirements
         if (!hasRequiredLevels(transport)) {
-            log.debug("Transport ( O: {} D: {} ) requires skill levels {}", transport.getOrigin(), transport.getDestination(), Arrays.toString(transport.getSkillLevels()));
             return false;
         }
         // If the transport has quest requirements & the quest haven't been completed
         if (transport.isQuestLocked() && !completedQuests(transport)) {
-            log.debug("Transport ( O: {} D: {} ) requires quests {}", transport.getOrigin(), transport.getDestination(), transport.getQuests());
             return false;
         }
 
         // If the transport has varbit requirements & the varbits do not match
         if (!varbitChecks(transport)) {
-            log.debug("Transport ( O: {} D: {} ) requires varbits {}", transport.getOrigin(), transport.getDestination(), transport.getVarbits());
             return false;
         }
 
         // If the transport has varplayer requirements & the varplayers do not match
         if (!varplayerChecks(transport)) {
-            log.debug("Transport ( O: {} D: {} ) requires varplayers {}", transport.getOrigin(), transport.getDestination(), transport.getVarplayers());
             return false;
         }
 
@@ -1571,12 +1565,10 @@ public class PathfinderConfig {
                     return new int[]{invCount, bankCount};
                 });
                 if ((long) cached[0] + cached[1] < transport.getCurrencyAmount()) {
-                    log.debug("Transport ( O: {} D: {} ) requires {} x {}", transport.getOrigin(), transport.getDestination(), transport.getCurrencyAmount(), transport.getCurrencyName());
                     return false;
                 }
         } else if (!Rs2Inventory.hasItemAmount(transport.getCurrencyName(), transport.getCurrencyAmount())
                     && !(useBankItems && Rs2Bank.count(transport.getCurrencyName()) >= transport.getCurrencyAmount())) {
-                log.debug("Transport ( O: {} D: {} ) requires {} x {}", transport.getOrigin(), transport.getDestination(), transport.getCurrencyAmount(), transport.getCurrencyName());
                 return false;
             }
         }
@@ -1585,33 +1577,23 @@ public class PathfinderConfig {
         if (!(transport instanceof World330HostedHouseTransport)
                 && TransportType.isTeleport(transport.getType(), transport.getOrigin())
                 && Rs2Walker.disableTeleports) {
-            log.debug("Transport ( O: {} D: {} ) is a teleport but teleports are globally disabled", transport.getOrigin(), transport.getDestination());
             return false;
         }
 
         // Check Teleport Item Settings
         if (transport.getType() == TELEPORTATION_ITEM) {
             boolean isUsable = isTeleportationItemUsable(transport);
-            if (!isUsable) {
-                log.debug("Transport ( O: {} D: {} ) is a teleport item but is not usable", transport.getOrigin(), transport.getDestination());
-            }
             return isUsable;
         }
         // Check Teleport Spell Settings
         if (transport.getType() == TELEPORTATION_SPELL) {
             boolean isUsable = isTeleportationSpellUsable(transport);
-            if (!isUsable) {
-                log.debug("Transport ( O: {} D: {} ) is a teleport spell but is not usable", transport.getOrigin(), transport.getDestination());
-            }
             return isUsable;
         }
 
         // Used for Generic Item Requirements
         if (transport.getParsedItemRequirements() != null || !transport.getItemIdRequirements().isEmpty()) {
             boolean hasRequiredItems = hasRequiredItems(transport);
-            if (!hasRequiredItems) {
-                log.debug("Transport ( O: {} D: {} ) requires items {}", transport.getOrigin(), transport.getDestination(), transport.getItemIdRequirements().stream().flatMap(Set::stream).collect(Collectors.toSet()));
-            }
             return hasRequiredItems;
         }
 

@@ -393,6 +393,10 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                         // Keep target-aware W330 transport filtering while the expensive work runs
                         // entirely on the shortest-path worker.
                         pathfinderConfig.refresh(nearestEnd(start, filteredEnds));
+                        // A replacement request can arrive while refresh holds the config lock.
+                        if (!isCurrentPathfinder(pending) || Thread.currentThread().isInterrupted()) {
+                            return;
+                        }
                         pathfinderConfig.filterLocations(filteredEnds, canReviveFiltered);
                         if (!filteredEnds.isEmpty()) {
                             Pathfinder calculated = new Pathfinder(pathfinderConfig, start, filteredEnds);
@@ -406,6 +410,9 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                         }
                     }
                 } catch (RuntimeException failure) {
+                    if (!isCurrentPathfinder(pending) || Thread.currentThread().isInterrupted()) {
+                        return;
+                    }
                     log.warn("[ShortestPath] background refresh failed; using the last planner snapshot", failure);
                     synchronized (pathfinderConfig) {
                         if (isCurrentPathfinder(pending)) {
