@@ -4,7 +4,6 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.shortestpath.ShortestPathConfig;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
-import net.runelite.client.plugins.microbot.util.walker.Rs2TransportPlanningPolicy;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
@@ -42,8 +41,7 @@ public class FarmedSpiritTreeDefaultsTest
 	public void defaultConfigAdmitsOnlyQuestSpiritTrees() throws Exception
 	{
 		PathfinderConfig config = new PathfinderConfig(
-			null, Collections.emptyMap(), Collections.emptyList(), null, null,
-			Rs2TransportPlanningPolicy.INSTANCE);
+            null, Collections.emptyMap(), Collections.emptyList(), null, null);
 		ShortestPathConfig defaults = new ShortestPathConfig() { };
 		set(config, "useSpiritTreeEtceteria", defaults.spiritTreeEtceteria());
 		set(config, "useSpiritTreeBrimhaven", defaults.spiritTreeBrimhaven());
