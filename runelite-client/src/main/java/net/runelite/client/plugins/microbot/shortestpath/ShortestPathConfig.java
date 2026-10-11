@@ -828,6 +828,20 @@ public interface ShortestPathConfig extends Config {
         return 80;
     }
 
+    @ConfigItem(
+            keyName = "bankInteractionOverheadSeconds",
+            name = "Bank interaction overhead (seconds)",
+            description = "Allowance for opening the bank, withdrawing transport items and closing it. "
+                    + "Converted to running-tile equivalents; reduced when the bank is already open. "
+                    + "Does not affect forced banking. Set to zero for the previous comparison policy.",
+            position = 5,
+            section = sectionAdvanced
+    )
+    @Range(min = 0, max = 60)
+    default int bankInteractionOverheadSeconds() {
+        return 7;
+    }
+
         @ConfigItem(
                 keyName = "preferTransportToTarget",
                 name = "Prefer transport to target",

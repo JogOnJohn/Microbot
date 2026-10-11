@@ -62,6 +62,7 @@ import net.runelite.client.plugins.microbot.util.leaguetransport.LeaguesRegion;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.util.walker.banking.TransportWithdrawalConfirmation;
+import net.runelite.client.plugins.microbot.util.walker.banking.BankRouteCost;
 import net.runelite.client.plugins.microbot.util.walker.banking.WithdrawNoteModePolicy;
 import net.runelite.client.plugins.microbot.util.walker.door.Rs2DoorClassifier;
 import net.runelite.client.plugins.microbot.util.walker.door.DoorProbeContext;
@@ -12939,10 +12940,13 @@ public class Rs2Walker {
             // Use config for minimum bank route savings
             int minBankRouteSavings = config != null ? config.minBankRouteSavings() : 0;
             boolean preferTransportToTarget = config != null && config.preferTransportToTarget();
-            int tileSavings = comparison.getTileSavings();
-            boolean tieAndPreferBank = comparison.isTie() && preferTransportToTarget;
-            boolean bankRouteIsBetter = (!comparison.isDirectIsFaster() && tileSavings >= minBankRouteSavings)
-                    || (tieAndPreferBank && tileSavings >= minBankRouteSavings);
+            int overhead = BankRouteCost.interactionOverheadTiles(
+                    config == null ? 7 : config.bankInteractionOverheadSeconds(), Rs2Bank.isOpen());
+            boolean bankRouteIsBetter = BankRouteCost.prefersBank(comparison.getDirectDistance(),
+                    comparison.getBankingRouteDistance(), overhead, minBankRouteSavings, preferTransportToTarget);
+            WebWalkLog.spInfo("bank_walk | scored direct={} bankTravel={} interactionOverhead={} minSaving={} preferBank={} forced={}",
+                    comparison.getDirectDistance(), comparison.getBankingRouteDistance(), overhead,
+                    minBankRouteSavings, bankRouteIsBetter, forceBanking);
             // If forced banking or banking route is more efficient (with min savings), go via bank
             if (forceBanking || bankRouteIsBetter) {
                 if (comparison.getNearestBank() != null) {
