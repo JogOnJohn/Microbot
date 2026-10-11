@@ -45,12 +45,19 @@ public class PohTeleports {
     private static final long FAILED_TELEPORT_BLOCK_MS = 10 * 60_000L;
 
     public static void blockFailedTeleport(net.runelite.client.plugins.microbot.util.poh.data.PohTeleport teleport, String reason) {
-        if (teleport == null) {
+        if (teleport == null || Thread.currentThread().isInterrupted()) {
             return;
         }
-        failedTeleportBlockUntil.put(teleport.displayInfo(), System.currentTimeMillis() + FAILED_TELEPORT_BLOCK_MS);
-        Microbot.log("[W330POH] blocking teleport for " + (FAILED_TELEPORT_BLOCK_MS / 60_000) + "min: "
+        long cooldown = failedTeleportCooldownMs(PohMenuInteraction.lastResult());
+        if (cooldown == 0L) return;
+        failedTeleportBlockUntil.put(teleport.displayInfo(), System.currentTimeMillis() + cooldown);
+        Microbot.log("[W330POH] blocking teleport for " + (cooldown / 1000) + "s: "
                 + teleport.displayInfo() + " (" + reason + ")");
+    }
+
+    static long failedTeleportCooldownMs(PohMenuInteraction.Result result) {
+        if (result == PohMenuInteraction.Result.CANCELLED) return 0L;
+        return result == PohMenuInteraction.Result.UNAVAILABLE ? FAILED_TELEPORT_BLOCK_MS : 15_000L;
     }
 
     public static boolean isTeleportBlocked(net.runelite.client.plugins.microbot.util.poh.data.PohTeleport teleport) {
@@ -220,13 +227,9 @@ public class PohTeleports {
 
         if (!checkIsInHouse()) return false;
 
-        if (getJewelleryBoxInterface() == null) {
-            Rs2GameObject.interact(JewelleryBoxType.getObject(), "Teleport Menu");
-        }
-
-        sleepUntil(() -> getJewelleryBoxInterface() != null);
-
-        return interactWithJewelleryBoxWidget(jewelleryLocationEnum);
+        return PohMenuInteraction.select(jewelleryLocationEnum.getDestination(),
+                () -> Rs2GameObject.interact(JewelleryBoxType.getObject(), "Teleport Menu"),
+                () -> new Widget[]{getJewelleryBoxInterface()});
     }
 
     /**
