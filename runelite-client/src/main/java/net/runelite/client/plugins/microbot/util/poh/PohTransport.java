@@ -37,6 +37,7 @@ public class PohTransport extends Transport {
      * @return true on successful teleportation
      */
     public boolean execute() {
+        PohMenuInteraction.resetResult();
         log.info("[W330POH] PohTransport execute teleport={} origin={} dest={}",
                 teleport.displayInfo(), getOrigin(), getDestination());
         if (teleport instanceof MountedXerics

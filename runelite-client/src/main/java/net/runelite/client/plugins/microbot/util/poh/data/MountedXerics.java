@@ -11,6 +11,7 @@ import net.runelite.api.gameval.ObjectID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.poh.PohMenuInteraction;
 import net.runelite.client.plugins.worldmap.TeleportLocationData;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
@@ -42,15 +43,10 @@ public enum MountedXerics implements PohTeleport {
             //The correct id for the object means it has the right left click option, so we can just use that.
             return Rs2GameObject.interact(talisman, destinationName);
         }
-        Widget widget = getWidget();
-        if (widget == null) {
-            if (Rs2GameObject.interact(talisman, "Teleport menu")) {
-                if (!sleepUntil(() -> getWidget() != null, 10000)) {
-                    return false;
-                }
-            }
-        }
-        return Rs2Widget.clickWidget(destinationName);
+        return PohMenuInteraction.select(destinationName,
+                () -> Rs2GameObject.interact(talisman, "Teleport menu"),
+                () -> new Widget[]{Rs2Widget.getWidget(InterfaceID.MENU, 0),
+                        Rs2Widget.getWidget(InterfaceID.MENU_NEW, 1)});
     }
 
     public static final Integer[] IDS = {ObjectID.POH_AMULET_XERIC, ObjectID.POH_AMULET_XERIC_LOOKOUT, ObjectID.POH_AMULET_XERIC_GLADE, ObjectID.POH_AMULET_XERIC_INFERNO, ObjectID.POH_AMULET_XERIC_HEART, ObjectID.POH_AMULET_XERIC_HONOUR};
@@ -65,10 +61,6 @@ public enum MountedXerics implements PohTeleport {
             if (objId == go.getId()) return true;
         }
         return false;
-    }
-
-    private static Widget getWidget() {
-        return Rs2Widget.getWidget(InterfaceID.MENU, 3);
     }
 
     @Override
