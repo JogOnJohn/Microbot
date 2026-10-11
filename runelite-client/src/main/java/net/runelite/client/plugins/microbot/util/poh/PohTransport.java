@@ -48,6 +48,11 @@ public class PohTransport extends Transport {
             return false;
         }
         boolean poolUsed = PohTeleports.useOrnateRejuvenationPoolIfPresent();
+        if (Thread.currentThread().isInterrupted() || !PohTeleports.isInHouse()) {
+            PohMenuInteraction.markCancelled();
+            log.info("[W330POH] cancelled POH transport after pool: house changed or interrupted");
+            return false;
+        }
         boolean executed = teleport.execute();
         log.info("[W330POH] PohTransport complete teleport={} poolUsed={} executed={}",
                 teleport.displayInfo(), poolUsed, executed);
