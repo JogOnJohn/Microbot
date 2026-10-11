@@ -4,6 +4,7 @@ import net.runelite.api.Actor;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.shortestpath.pathfinder.Pathfinder;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import org.junit.After;
 import org.junit.Before;
@@ -46,14 +47,13 @@ public class Rs2WalkerInteractingActorThreadTest {
         microbot = Mockito.mockStatic(Microbot.class);
         microbot.when(Microbot::getClientThread).thenReturn(clientThread);
 
-        Rs2ActiveRouteStatus status = mock(Rs2ActiveRouteStatus.class);
-        when(status.isPresent()).thenReturn(true);
-        when(status.getWalkablePath()).thenReturn(Arrays.asList(
+        Pathfinder pathfinder = mock(Pathfinder.class);
+        when(pathfinder.getWalkablePath()).thenReturn(Arrays.asList(
                 new WorldPoint(3200, 3200, 0),
                 new WorldPoint(3201, 3200, 0),
                 new WorldPoint(3202, 3200, 0)));
         pathApi = Mockito.mockStatic(Rs2PathApi.class);
-        pathApi.when(Rs2PathApi::getActiveRouteStatus).thenReturn(status);
+        pathApi.when(Rs2PathApi::getPathfinder).thenReturn(pathfinder);
 
         player = Mockito.mockStatic(Rs2Player.class);
     }
