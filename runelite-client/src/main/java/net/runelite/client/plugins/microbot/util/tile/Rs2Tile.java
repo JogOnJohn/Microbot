@@ -503,6 +503,7 @@ public abstract class Rs2Tile implements Tile {
         return runClientReadBoolean(() -> isTileReachableInternal(targetPoint));
     }
 
+
     private static boolean isTileReachableInternal(WorldPoint targetPoint) {
         if (targetPoint == null) return false;
 
@@ -1612,5 +1613,29 @@ public abstract class Rs2Tile implements Tile {
 
         Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
         return true;
+    }
+
+    /** Scene-local reachability avoids ambiguous template coordinates inside instances. */
+    public static boolean isSceneAreaReachable(int minX, int minY, int maxX, int maxY) {
+        return runClientReadBoolean(() -> {
+            int[][] flags = getFlagsInternal();
+            LocalPoint player = Rs2Player.getLocalLocation();
+            return flags != null && player != null && isWithinBounds(minX, minY) && isWithinBounds(maxX, maxY)
+                    && minX <= maxX && minY <= maxY
+                    && hasReachablePerimeter(reachableFrom(flags, player.getSceneX(), player.getSceneY()),
+                            minX, minY, maxX, maxY);
+        });
+    }
+
+    static boolean hasReachablePerimeter(boolean[][] visited, int minX, int minY, int maxX, int maxY) {
+        for (int x = minX; x <= maxX; x++) {
+            if (isWithinBounds(x, minY - 1) && visited[x][minY - 1]
+                    || isWithinBounds(x, maxY + 1) && visited[x][maxY + 1]) return true;
+        }
+        for (int y = minY; y <= maxY; y++) {
+            if (isWithinBounds(minX - 1, y) && visited[minX - 1][y]
+                    || isWithinBounds(maxX + 1, y) && visited[maxX + 1][y]) return true;
+        }
+        return false;
     }
 }
