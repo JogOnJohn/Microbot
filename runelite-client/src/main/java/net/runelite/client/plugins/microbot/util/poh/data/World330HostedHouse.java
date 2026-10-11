@@ -157,6 +157,18 @@ public enum World330HostedHouse implements PohTeleport {
                 .nearest() != null;
     }
 
+    public boolean isWithinAdvertisementApproach() {
+        var board = Microbot.getRs2TileObjectCache().query()
+                .withId(ObjectID.HOUSE_ADVERTISEMENT).nearest();
+        return isWithinAdvertisementApproach(Rs2Player.getWorldLocation(),
+                board == null ? null : board.getWorldLocation());
+    }
+
+    static boolean isWithinAdvertisementApproach(WorldPoint player, WorldPoint board) {
+        return player != null && board != null && player.getPlane() == board.getPlane()
+                && player.distanceTo2D(board) <= 12;
+    }
+
     private boolean teleportOutsideToAdvertisement() {
         boolean inventoryTablet = Rs2Inventory.hasItem(ItemID.POH_TABLET_TELEPORTTOHOUSE);
         boolean spellCastable = Rs2Magic.canCast(Rs2Spells.TELEPORT_TO_HOUSE);

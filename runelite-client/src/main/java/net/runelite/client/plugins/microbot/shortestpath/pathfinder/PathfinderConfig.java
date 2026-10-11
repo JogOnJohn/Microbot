@@ -1274,7 +1274,8 @@ public class PathfinderConfig {
             target = Rs2Walker.getCurrentTarget();
         }
         WorldPoint player = Rs2Player.getWorldLocation();
-        if (shouldSkipWorld330ForLocalTrip(player, target, WORLD330_MIN_TARGET_DISTANCE)) {
+        if (shouldSkipWorld330ForLocalTrip(player, target, WORLD330_MIN_TARGET_DISTANCE,
+                false, World330HostedHouse.ADVERTISED_HOUSE.isWithinAdvertisementApproach())) {
             log.info("[W330POH] skipped hosted house route: targetDist={} min={} player={} target={}",
                     player.distanceTo2D(target), WORLD330_MIN_TARGET_DISTANCE, player, target);
             return false;
@@ -1283,6 +1284,12 @@ public class PathfinderConfig {
     }
 
     static boolean shouldSkipWorld330ForLocalTrip(WorldPoint player, WorldPoint target, int minimumDistance) {
+        return shouldSkipWorld330ForLocalTrip(player, target, minimumDistance, false, false);
+    }
+
+    static boolean shouldSkipWorld330ForLocalTrip(WorldPoint player, WorldPoint target,
+            int minimumDistance, boolean insideHostedHouse, boolean nearAdvertisement) {
+        if (insideHostedHouse || nearAdvertisement) return false;
         return player != null
                 && target != null
                 && player.getPlane() == target.getPlane()

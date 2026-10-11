@@ -17,6 +17,18 @@ import static org.junit.Assert.assertTrue;
 
 public class PathfinderConfigWorld330MergeTest {
     @Test
+    public void localHousePolicyAllowsNearbyBoardAndExistingHostedHouse() {
+        WorldPoint player = new WorldPoint(2953, 3221, 0);
+        for (int distance : new int[]{144, 149, 150}) {
+            WorldPoint goal = new WorldPoint(2953, 3221 + distance, 0);
+            assertFalse(PathfinderConfig.shouldSkipWorld330ForLocalTrip(player, goal, 150, false, true));
+            assertFalse(PathfinderConfig.shouldSkipWorld330ForLocalTrip(player, goal, 150, true, false));
+            assertEquals(distance < 150,
+                    PathfinderConfig.shouldSkipWorld330ForLocalTrip(player, goal, 150, false, false));
+        }
+    }
+
+    @Test
     public void outsideTeleportCannotContinueThroughPersonalHomePortalOnW330() {
         WorldPoint outside = new WorldPoint(2953, 3224, 0);
         WorldPoint inside = new WorldPoint(1858, 7051, 0);
