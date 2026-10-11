@@ -2768,7 +2768,7 @@ public class Rs2Bank {
 
         final String[] DIGIT_INSTRUCTIONS = {"FIRST digit", "SECOND digit", "THIRD digit", "FOURTH digit"};
         if (pin == null || pin.length() != DIGIT_INSTRUCTIONS.length || !pin.matches("\\d+")) {
-            Microbot.log("Unable to enter bankpin with value " + pin);
+            Microbot.log("Unable to enter bankpin: configured pin is not a 4-digit number");
             return false;
         }
 

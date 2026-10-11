@@ -125,7 +125,6 @@ public final class LoginManager {
             log.warn("No active profile available for login");
             return false;
         }
-        System.out.println(getActiveProfile());
         Client client = Microbot.getClient();
         if (client == null) {
             log.warn("Cannot login - client is not initialised");
