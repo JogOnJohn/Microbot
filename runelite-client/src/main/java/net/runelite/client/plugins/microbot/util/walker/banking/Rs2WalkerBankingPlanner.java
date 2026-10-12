@@ -24,6 +24,7 @@ import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 import java.util.ArrayList;
+import java.util.AbstractMap;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -298,12 +299,14 @@ public final class Rs2WalkerBankingPlanner {
             try {
                 try {
                     Rs2PathApi.getPathfinderConfig().setUseBankItems(false);
-                    Rs2PathApi.getPathfinderConfig().refresh(target);
+                    // The direct probe already refreshed this same inventory-only target.
 
                     performanceLog.append("\t-Bank items available: ").append(Rs2Bank.bankItems().size()).append("\n");
 
                     long bankSearchStartTime = System.nanoTime();
-                    nearestBank = Rs2Bank.getNearestBank(startPoint);
+                    AbstractMap.SimpleEntry<List<WorldPoint>, BankLocation> bankSearch =
+                            Rs2Bank.getPathAndBankToNearestBank(startPoint, 20);
+                    nearestBank = bankSearch == null ? null : bankSearch.getValue();
                     long bankSearchEndTime = System.nanoTime();
                     double bankSearchTimeMs = (bankSearchEndTime - bankSearchStartTime) / 1_000_000.0;
 
@@ -313,7 +316,9 @@ public final class Rs2WalkerBankingPlanner {
                         performanceLog.append("\t -> Found: ").append(nearestBank).append(" at ").append(bankLocation).append("\n");
 
                         long pathToBankStartTime = System.nanoTime();
-                        pathToBank = Rs2Walker.getWalkPath(startPoint, bankLocation);
+                        List<WorldPoint> searchedPath = bankSearch.getKey();
+                        boolean reuseBankApproach = reusableBankApproach(searchedPath, startPoint, bankLocation);
+                        pathToBank = reuseBankApproach ? searchedPath : Rs2Walker.getWalkPath(startPoint, bankLocation);
                         long pathToBankEndTime = System.nanoTime();
                         double pathToBankTimeMs = (pathToBankEndTime - pathToBankStartTime) / 1_000_000.0;
                         int distanceToBank = Rs2Walker.getTotalTilesFromPath(pathToBank, bankLocation);
@@ -336,6 +341,7 @@ public final class Rs2WalkerBankingPlanner {
 
                         performanceLog.append("\t-Path to bank calculation: ").append(String.format("%.2f ms", pathToBankTimeMs))
                                 .append(" (").append(pathToBank.size()).append(" waypoints, ").append(distanceToBank).append(" tiles)\n");
+                        performanceLog.append("\t-Bank approach reused: ").append(reuseBankApproach).append("\n");
                         performanceLog.append("\t-Path from bank to target with banked items: ").append(String.format("%.2f ms", pathFromBankTimeMs))
                                 .append(" (").append(pathFromBankToTarget.size()).append(" waypoints, ").append(distanceFromBank).append(" tiles)\n");
                         performanceLog.append("\t-Bank leg transports: total=").append(bankLegTransports.size())
@@ -435,7 +441,19 @@ public final class Rs2WalkerBankingPlanner {
             WebWalkLog.compareDetail(performanceLog.toString());
             WebWalkLog.compareError(totalTimeMs, target, e.getMessage());
             return new TransportRouteAnalysis(new ArrayList<>(), null, null, new ArrayList<>(), new ArrayList<>(), "Error calculating routes: " + e.getMessage());
+        } finally {
+            // The direct probe can throw before the banking-leg finally is entered.
+            if (Rs2PathApi.getPathfinderConfig().isUseBankItems() != originalUseBankItems) {
+                Rs2PathApi.getPathfinderConfig().setUseBankItems(originalUseBankItems);
+                Rs2PathApi.getPathfinderConfig().refresh();
+            }
         }
+    }
+
+    static boolean reusableBankApproach(List<WorldPoint> path, WorldPoint start, WorldPoint bank) {
+        // Object-only lookup returns a singleton bank coordinate, not a route from the player.
+        return start != null && bank != null && path != null && !path.isEmpty()
+                && start.equals(path.get(0)) && bank.equals(path.get(path.size() - 1));
     }
 
     private static Map<Integer, Integer> getSpellRuneRequirements(Transport transport) {

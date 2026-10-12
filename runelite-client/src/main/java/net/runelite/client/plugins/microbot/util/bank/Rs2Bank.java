@@ -2503,13 +2503,15 @@ public class Rs2Bank {
     }
 
     /**
-     * Private helper method that finds both the path and bank location to the nearest accessible bank.
+     * Finds both the path and bank location to the nearest accessible bank.
+     * An object-only match returns a singleton bank coordinate, not a complete approach route.
+     * Callers reusing the path must verify its start and end against their requested leg.
      *
      * @param worldPoint            the starting location for pathfinding
      * @param maxObjectSearchRadius the maximum radius (in tiles) to scan for bank booth objects
      * @return A SimpleEntry containing the path (key) and bank location (value), or null if no accessible bank could be reached
      */
-    private static AbstractMap.SimpleEntry<List<WorldPoint>, BankLocation> getPathAndBankToNearestBank(WorldPoint worldPoint, int maxObjectSearchRadius) {
+    public static AbstractMap.SimpleEntry<List<WorldPoint>, BankLocation> getPathAndBankToNearestBank(WorldPoint worldPoint, int maxObjectSearchRadius) {
         if (worldPoint == null) return null;
         Microbot.log("Finding nearest bank...");
 

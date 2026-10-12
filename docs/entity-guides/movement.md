@@ -404,3 +404,15 @@ shortcut to instances, bank-forced movement or transport dispatch.
 
 **Defensive check:** `LocalApproachStateTest` covers progress, no-progress expiry,
 stopped motion, changed targets/radii/planes, cancellation and the hard deadline.
+
+## 21. Reuse bank-search paths only when both endpoints match
+
+Nearest-bank lookup can already compute a complete route. Reuse it within the same
+inventory-only comparison when its first point equals the start and its last point
+equals the exact bank coordinate. Object lookup instead returns a singleton bank
+coordinate; do not mistake that marker or a partial route for a free bank approach.
+Keep banked supplies restricted to the onward leg and restore the original mode even
+if the direct probe fails. Do not cache bank decisions across changing game state.
+
+**Defensive check:** `BankRouteSupplyBoundaryTest` covers supply boundaries, rejected
+object/partial paths and mode restoration on direct-probe failure.
