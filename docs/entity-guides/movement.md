@@ -381,3 +381,13 @@ Repeated correct climbs followed by incorrect descents looked like planner failu
 
 **Defensive check:** `WalkerFloorArrivalRegressionTest` verifies that arrival beside
 Ross's upstairs goal completes without scanning or interacting with nearby objects.
+
+## 19. Limit recent-door suppression to adjacent same-plane crossings
+
+An opened door near a ladder must not suppress the ladder's explicit cross-plane
+transport. Norman's downstairs door previously delayed his upstairs dispatch until
+the ten-second door suppression expired. Keep unresolved-door and settling guards,
+but apply the recent-door segment suppression only to adjacent same-plane edges.
+
+**Defensive check:** `StationaryDoorTransportSuppressionTest` covers Norman's ladder,
+ordinary door crossings, distant transports and expiry.

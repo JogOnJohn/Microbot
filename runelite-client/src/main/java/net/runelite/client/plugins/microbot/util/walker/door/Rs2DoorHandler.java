@@ -45,7 +45,8 @@ public final class Rs2DoorHandler {
                                                                 long suppressMs,
                                                                 WorldPoint fromWp,
                                                                 WorldPoint toWp) {
-        if (fromWp == null || toWp == null) {
+        if (fromWp == null || toWp == null || fromWp.getPlane() != toWp.getPlane()
+                || fromWp.distanceTo2D(toWp) > 1) {
             return false;
         }
         final int segmentDoorSuppressDist = 2;
