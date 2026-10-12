@@ -278,6 +278,8 @@ public class Rs2Walker {
      * cohesive clusters; first cluster: transport handoff. See {@link WalkerRouteState}.
      */
     private static final WalkerRouteState routeState = new WalkerRouteState();
+    private static final net.runelite.client.plugins.microbot.util.walker.state.LocalApproachState localApproach =
+            new net.runelite.client.plugins.microbot.util.walker.state.LocalApproachState();
     // idle-nudge state migrated to WalkerRouteState (see routeState)
     // route-progress state migrated to WalkerRouteState (see routeState)
     private static final java.util.Deque<WorldPoint> expectedTransportDestinations = new ArrayDeque<>();
@@ -5111,7 +5113,13 @@ public class Rs2Walker {
         }
 
         if (!inInstance && (!Rs2Tile.isWalkable(target) || !Rs2Tile.isTileReachable(target))) {
+            localApproach.clear();
             return null;
+        }
+
+        if (!inInstance && localApproach.advancing(target, distance, playerLoc,
+                Rs2Player.isMoving(), !isWalkCancelled(target), System.currentTimeMillis())) {
+            return WalkerState.MOVING;
         }
 
         long suppressUntil = routeState.suppressTryDirectShortWalkUntilMs;
@@ -5133,6 +5141,7 @@ public class Rs2Walker {
         }
 
         markFirstMovementClick("direct_local_first_click", target, before, "to=" + compactWorldPoint(target));
+        if (!inInstance) localApproach.dispatched(target, distance, before, System.currentTimeMillis());
         sleepUntil(() -> {
             if (isWalkCancelled(target)) {
                 return true;
@@ -9076,6 +9085,7 @@ public class Rs2Walker {
             }
         }
 
+        if (target == null || !Objects.equals(target, currentTarget)) localApproach.clear();
         beginTransportRefusalWalk(target);
         currentTarget = target;
 
@@ -12976,6 +12986,15 @@ public class Rs2Walker {
         final Pathfinder pathfinder = Rs2PathApi.getPathfinder();
         if (pathfinder != null && !pathfinder.isDone())
             return WalkerState.MOVING;
+
+        // Keep a verified local click in flight before repeating the banked route probe.
+        boolean localEligible = wv != null && !WalkerSceneReadiness.inInstance() && !forceBanking
+                && target.equals(currentTarget) && !Thread.currentThread().isInterrupted()
+                && !InputArbiter.isHuman() && !Microbot.pauseAllScripts.get()
+                && pl.getPlane() == target.getPlane() && pl.distanceTo2D(target) <= 13
+                && Rs2Tile.isWalkable(targetLocal) && Rs2Tile.isTileReachable(target);
+        if (localApproach.advancing(target, distance, pl, Rs2Player.isMoving(),
+                localEligible, System.currentTimeMillis())) return WalkerState.MOVING;
 
         boolean bankTripWhenCacheUnavailable = config == null || config.bankTripWhenCacheUnavailable();
         if (!forceBanking && bankTripWhenCacheUnavailable && !Rs2Bank.hasBankMirrorSnapshot()

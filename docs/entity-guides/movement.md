@@ -391,3 +391,16 @@ but apply the recent-door segment suppression only to adjacent same-plane edges.
 
 **Defensive check:** `StationaryDoorTransportSuppressionTest` covers Norman's ladder,
 ordinary door crossings, distant transports and expiry.
+
+## 20. Keep an in-flight local approach instead of clicking every advancement
+
+The direct local shortcut returns MOVING as soon as its click starts movement.
+Banked advancement must retain that click while the same reachable goal is being
+approached, rather than running another direct probe and issuing another minimap
+click on every tick. Track the goal, radius and observed position, not a cached
+collision map. Release on stopped motion, lost reachability, changed plane/goal,
+cancellation, stale position or the bounded approach deadline. Do not apply this
+shortcut to instances, bank-forced movement or transport dispatch.
+
+**Defensive check:** `LocalApproachStateTest` covers progress, no-progress expiry,
+stopped motion, changed targets/radii/planes, cancellation and the hard deadline.
