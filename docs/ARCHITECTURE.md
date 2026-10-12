@@ -31,6 +31,7 @@
 - `BlockingEventManager` uses exponential backoff when no events validate to reduce overhead; events are re-queued if execution fails.
 - Default Gradle `test` tasks are disabled in `runelite-client/build.gradle.kts`; use explicit tasks such as `:client:runUnitTests`, `:client:runTests`, `:client:runDebugTests`, `:client:runIntegrationTest`, or `:client:runClientThreadScanner`.
 - World hopping short-circuits if the player is interacting or already hopping; confirmation widget auto-click handled in `Microbot.hopToWorld`.
+- `Microbot.hopToWorld` paces hops against `HopBudget`, an estimate of Jagex's per-IP hop/login allowance (default 390 tokens, 93 regained per hour, 20 kept in reserve for logins). Every `HOPPING` and `LOGGING_IN` transition spends a token, including manual hops. When the allowance is down to the reserve, script threads wait for the next token; the client thread and Swing thread get `false` instead. The state lives in `~/.runelite/microbot-hop-budget.properties`, keyed by SOCKS proxy host, so it survives restarts and is shared by every client on the same IP. A "Too many login attempts" lockout (login index 33) sets it to zero.
 
 ## References
 - Queryable API guide: `../runelite-client/src/main/java/net/runelite/client/plugins/microbot/api/QUERYABLE_API.md`

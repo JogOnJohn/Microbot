@@ -55,6 +55,7 @@ import net.runelite.client.plugins.microbot.api.player.Rs2PlayerCache;
 import net.runelite.client.plugins.microbot.api.playerstate.Rs2PlayerStateCache;
 import net.runelite.client.plugins.microbot.api.tileitem.Rs2TileItemCache;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
+import net.runelite.client.plugins.microbot.util.security.HopBudget;
 import net.runelite.client.plugins.microbot.util.security.LoginManager;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
@@ -368,6 +369,9 @@ public class Microbot {
             log.error("Can't hop world, already trying to hop");
             return false;
         }
+        if (Microbot.getClient().getWorld() != worldNumber && !awaitHopBudget(worldNumber)) {
+            return false;
+        }
         final net.runelite.api.World[] target = new net.runelite.api.World[1];
         boolean prepared = Microbot.getClientThread().runOnClientThreadOptional(() -> {
             if (Rs2Combat.inCombat()) {
@@ -454,6 +458,35 @@ public class Microbot {
             log.error("Failed to hop to world {}", worldNumber);
         }
         return success;
+    }
+
+    static boolean awaitHopBudget(int worldNumber) {
+        HopBudget budget = HopBudget.getInstance();
+        long waitMs = budget.millisUntilHopAllowed();
+        if (waitMs <= 0) {
+            return true;
+        }
+        if (Microbot.getClient().isClientThread() || SwingUtilities.isEventDispatchThread()) {
+            log.warn("Hop limit reached - not hopping to world {}, next hop allowed in {}s",
+                    worldNumber, TimeUnit.MILLISECONDS.toSeconds(waitMs));
+            return false;
+        }
+        log.info("Hop limit reached - waiting {}s before hopping to world {}",
+                TimeUnit.MILLISECONDS.toSeconds(waitMs), worldNumber);
+        String previousStatus = status;
+        try {
+            while (waitMs > 0) {
+                status = "Hop limit - next hop in " + TimeUnit.MILLISECONDS.toSeconds(waitMs + 999) + "s";
+                Thread.sleep(Math.min(waitMs, 1000L));
+                waitMs = budget.millisUntilHopAllowed();
+            }
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } finally {
+            status = previousStatus;
+        }
     }
 
     static boolean hopViaWorldSwitcher(net.runelite.api.World rsWorld, int loadTimeoutMs) {
