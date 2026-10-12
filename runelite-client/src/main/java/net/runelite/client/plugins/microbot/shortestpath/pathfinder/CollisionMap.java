@@ -78,16 +78,21 @@ public class CollisionMap {
         int x = WorldPointUtil.unpackWorldX(packedPoint);
         int y = WorldPointUtil.unpackWorldY(packedPoint);
         int z = WorldPointUtil.unpackWorldPlane(packedPoint);
-        if (isBlocked(x, y, z)) return 0;
+        // One pinned snapshot supplies all edges. Reuse the cardinal reads instead of
+        // repeating them for the blocked check and each of the four diagonals.
+        boolean north = n(x, y, z);
+        boolean east = e(x, y, z);
+        boolean south = s(x, y, z);
+        boolean west = w(x, y, z);
         int mask = 0;
-        if (n(x, y, z)) mask |= 1;
-        if (ne(x, y, z)) mask |= 2;
-        if (e(x, y, z)) mask |= 4;
-        if (se(x, y, z)) mask |= 8;
-        if (s(x, y, z)) mask |= 16;
-        if (sw(x, y, z)) mask |= 32;
-        if (w(x, y, z)) mask |= 64;
-        if (nw(x, y, z)) mask |= 128;
+        if (north) mask |= 1;
+        if (north && east && e(x, y + 1, z) && n(x + 1, y, z)) mask |= 2;
+        if (east) mask |= 4;
+        if (south && east && e(x, y - 1, z) && s(x + 1, y, z)) mask |= 8;
+        if (south) mask |= 16;
+        if (south && west && w(x, y - 1, z) && s(x - 1, y, z)) mask |= 32;
+        if (west) mask |= 64;
+        if (north && west && w(x, y + 1, z) && n(x - 1, y, z)) mask |= 128;
         return (byte) mask;
     }
 

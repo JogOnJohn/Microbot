@@ -504,8 +504,16 @@ public final class RoutingStaticBuilder
                 if ((head & 4095) == 0) ExactCancellation.check();
 				int position = queue[head++];
 				int tile = walkable.tiles[position];
-				for (int neighbor : ordinaryNeighborsFromMask(tile, walkable.masks[position]))
+				int x = WorldPointUtil.unpackWorldX(tile);
+				int y = WorldPointUtil.unpackWorldY(tile);
+				int plane = WorldPointUtil.unpackWorldPlane(tile);
+				int mask = Byte.toUnsignedInt(walkable.masks[position]);
+				// Preserve clockwise expansion order without allocating an array per tile.
+				while (mask != 0)
 				{
+					int bit = Integer.numberOfTrailingZeros(mask);
+					mask &= mask - 1;
+					int neighbor = WorldPointUtil.packWorldPoint(x + NEIGHBOR_DX[bit], y + NEIGHBOR_DY[bit], plane);
 					int neighborPosition = walkable.index.get(neighbor);
 					if (neighborPosition < 0 || componentOut[neighborPosition] != 0)
 					{
