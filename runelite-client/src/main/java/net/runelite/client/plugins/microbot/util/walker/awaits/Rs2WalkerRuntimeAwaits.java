@@ -8,6 +8,7 @@ import java.util.function.BooleanSupplier;
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntilTrue;
 
 public final class Rs2WalkerRuntimeAwaits {
+    private static final int PATHFINDER_POLL_MS = 25;
     private Rs2WalkerRuntimeAwaits() {
     }
 
@@ -15,7 +16,9 @@ public final class Rs2WalkerRuntimeAwaits {
         if (pathfinder == null) {
             return false;
         }
-        return sleepUntilTrue(pathfinder::isDone, 100, timeoutMs);
+        // Search completion is an in-memory flag, not a game action. A shorter poll
+        // releases the ready route without changing movement or interaction timing.
+        return sleepUntilTrue(pathfinder::isDone, PATHFINDER_POLL_MS, timeoutMs);
     }
 
     public static boolean awaitCondition(BooleanSupplier condition, int pollMs, int timeoutMs) {
