@@ -49,8 +49,8 @@ import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.OverlayMenuEntry;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.ResetResistantAttachment;
 
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
@@ -130,6 +130,8 @@ public class MicrobotPlugin extends Plugin
 	@Inject
 	private EventBus eventBus;
 	private GameChatAppender gameChatAppender;
+	private ResetResistantAttachment gameChatAttachment;
+	private ResetResistantAttachment scriptErrorAttachment;
 
 	@Inject
 	private MicrobotVersionChecker microbotVersionChecker;
@@ -161,18 +163,9 @@ public class MicrobotPlugin extends Plugin
 		gameChatAppender.setPattern(pattern);
 
 		final LoggerContext context = (LoggerContext) LoggerFactory.getILoggerFactory();
-		gameChatAppender.setContext(context);
-		context.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(gameChatAppender);
+		gameChatAttachment = gameChatAppender.install(context, microbotConfig::enableGameChatLogging);
+		scriptErrorAttachment = scriptErrorReporter.install(context);
 
-		scriptErrorReporter.setContext(context);
-		scriptErrorReporter.start();
-		context.getLogger(Logger.ROOT_LOGGER_NAME).addAppender(scriptErrorReporter);
-
-		// Start appender if logging is enabled
-		if (microbotConfig.enableGameChatLogging()) {
-			gameChatAppender.start();
-		}
-		
 		// Initialize the cached configuration in GameChatAppender
 		GameChatAppender.updateConfiguration(
 			microbotConfig.enableGameChatLogging(),
@@ -235,9 +228,8 @@ public class MicrobotPlugin extends Plugin
 		overlayManager.remove(gembagOverlay);
 		overlayManager.remove(pouchOverlay);
 		clientToolbar.removeNavigation(navButton);
-		if (gameChatAppender.isStarted()) gameChatAppender.stop();
-		((LoggerContext) LoggerFactory.getILoggerFactory()).getLogger(Logger.ROOT_LOGGER_NAME).detachAppender(scriptErrorReporter);
-		scriptErrorReporter.stop();
+		gameChatAttachment.remove();
+		scriptErrorAttachment.remove();
 		microbotVersionChecker.shutdown();
 	}
 
