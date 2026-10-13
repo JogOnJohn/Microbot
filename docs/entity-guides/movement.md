@@ -463,3 +463,18 @@ owner cancellation must release without claiming success.
 
 **Defensive check:** `DoorApproachTicketTest` covers distant approach, stationary
 or wrong-way movement, wrong plane and the non-renewable absolute deadline.
+
+## 26. A missing house facility is not an unavailable teleport destination
+
+Keep the selected destination while bounded house recovery confirms departure
+and entry. Log lookup, reachability, dispatch and landing phases separately. A
+missing/unreachable exit portal can use the existing explicit Outside spell or
+tablet policy; never substitute a personal-house default or bypass collision.
+Reject other facilities in the unsuitable house until an observed new house
+generation. Hosts can share template coordinates, so coordinates alone are not
+an identity. Cancelled/exhausted recovery must not blacklist Glade globally or
+clear a new owner's route; an exhausted operation stops instead of teleporting
+from the same rejected house to a distant fallback.
+
+**Defensive check:** `HostedHouseContextTest`, `PohTransportRecoveryTest` and the
+existing house-action tests cover identity, eligibility, ownership and bounded switches.

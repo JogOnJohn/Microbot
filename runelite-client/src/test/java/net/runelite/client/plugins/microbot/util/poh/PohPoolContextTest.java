@@ -6,6 +6,11 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.AnimationID;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.poh.data.PohTeleport;
+import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.callback.ClientThread;
+import java.util.Optional;
+import java.util.concurrent.Callable;
+import static org.mockito.ArgumentMatchers.any;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import static org.junit.Assert.*;
@@ -49,15 +54,36 @@ public class PohPoolContextTest {
     }
 
     @Test public void leavingHouseDuringPoolWorkDoesNotDispatchOrBlockTeleport() {
+        Client client = mock(Client.class);
+        ClientThread thread = mock(ClientThread.class);
+        when(client.getGameState()).thenReturn(GameState.LOGGED_IN);
+        when(client.getLocalPlayer()).thenReturn(mock(Player.class));
+        when(thread.runOnClientThreadOptional(any())).thenAnswer(call ->
+                Optional.ofNullable(((Callable<?>) call.getArgument(0)).call()));
         PohTeleport teleport = mock(PohTeleport.class);
         when(teleport.getDestination()).thenReturn(new WorldPoint(1754, 3564, 0));
         when(teleport.displayInfo()).thenReturn("Glade regression");
         PohTransport transport = new PohTransport(new WorldPoint(2053, 7052, 0), teleport);
-        try (MockedStatic<PohTeleports> pools = mockStatic(PohTeleports.class)) {
+        try (MockedStatic<PohTeleports> pools = mockStatic(PohTeleports.class);
+             MockedStatic<Microbot> microbot = mockStatic(Microbot.class)) {
+            microbot.when(Microbot::getClient).thenReturn(client);
+            microbot.when(Microbot::getClientThread).thenReturn(thread);
             pools.when(PohTeleports::isInHouse).thenReturn(false);
             assertFalse(transport.execute());
             verify(teleport, never()).execute();
             assertEquals(PohMenuInteraction.Result.CANCELLED, PohMenuInteraction.lastResult());
+        }
+    }
+
+    @Test public void loadingSceneRetainsIntentWithoutPoolOrTeleportDispatch() {
+        PohTeleport teleport = mock(PohTeleport.class);
+        when(teleport.getDestination()).thenReturn(new WorldPoint(1754, 3564, 0));
+        PohTransport transport = new PohTransport(new WorldPoint(2053, 7052, 0), teleport);
+        try (MockedStatic<PohTeleports> pools = mockStatic(PohTeleports.class);
+             MockedStatic<Microbot> microbot = mockStatic(Microbot.class)) {
+            assertEquals(PohExecutionResult.SCENE_PENDING, transport.executeDetailed(() -> false));
+            pools.verifyNoInteractions();
+            verify(teleport, never()).execute();
         }
     }
 }

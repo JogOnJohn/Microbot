@@ -55,6 +55,7 @@ import java.util.function.Predicate;
 import org.slf4j.event.Level;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
+import net.runelite.client.plugins.microbot.util.poh.PohExecutionResult;
 import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
 import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
@@ -9416,10 +9417,35 @@ public class Rs2Walker {
                                 i,
                                 path.get(i),
                                 Rs2Player.getWorldLocation());
-                        boolean pohResult = attemptObserved(transport, () -> handlePohTransport(transport));
+                        long pohOwner = transportRefusalGeneration();
+                        WorldPoint pohOwnerTarget = currentTarget;
+                        int pohOwnerWorld = Microbot.getClientThread().runOnClientThreadOptional(
+                                () -> Microbot.getClient().getWorld()).orElse(-1);
+                        final PohExecutionResult[] pohOutcome = {null};
+                        boolean pohResult = attemptObserved(transport, () -> {
+                            if (!(transport instanceof PohTransport)) return handlePohTransport(transport);
+                            pohOutcome[0] = ((PohTransport) transport).executeDetailed(() ->
+                                    pohOwner != transportRefusalGeneration() || !Objects.equals(pohOwnerTarget, currentTarget)
+                                            || InputArbiter.isHuman() || Microbot.pauseAllScripts.get()
+                                            || Microbot.getClientThread().runOnClientThreadOptional(() ->
+                                                Microbot.getClient() == null || Microbot.getClient().getWorld() != pohOwnerWorld)
+                                                .orElse(true));
+                            return pohOutcome[0] == PohExecutionResult.SUCCESS;
+                        });
                         log.info("[W330POH] POH transport result display='{}' result={} player={}",
                                 transport.getDisplayInfo(), pohResult, Rs2Player.getWorldLocation());
                         if (!pohResult && transport instanceof PohTransport) {
+                            if (pohOutcome[0] == PohExecutionResult.SCENE_PENDING) return true;
+                            if (pohOutcome[0] == PohExecutionResult.CANCELLED) {
+                                if (pohOwner == transportRefusalGeneration() && Objects.equals(pohOwnerTarget, currentTarget))
+                                    clearWalkingRoute("rs2walker:poh-cancelled");
+                                return true;
+                            }
+                            if (pohOutcome[0] == PohExecutionResult.HOUSE_RECOVERY_FAILED) {
+                                WebWalkLog.spWarn("POH house recovery exhausted; retaining destination eligibility, stopping owned walk");
+                                clearWalkingRoute("rs2walker:poh-house-recovery-failed");
+                                return true;
+                            }
                             // Execution failed (e.g. a quest-locked jewellery box option the data
                             // layer missed): block this teleport for a cooldown and drop the
                             // transport-refresh memo so the next recalc assembles routes without

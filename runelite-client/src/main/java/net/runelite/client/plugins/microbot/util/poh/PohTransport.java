@@ -37,31 +37,60 @@ public class PohTransport extends Transport {
      * @return true on successful teleportation
      */
     public boolean execute() {
+        return executeDetailed(() -> false) == PohExecutionResult.SUCCESS;
+    }
+
+    public PohExecutionResult executeDetailed(BooleanSupplier cancelled) {
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return PohExecutionResult.CANCELLED;
+        if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
+        long recoveryDeadline = System.currentTimeMillis() + 60_000L;
         PohMenuInteraction.resetResult();
         log.info("[W330POH] PohTransport execute teleport={} origin={} dest={}",
                 teleport.displayInfo(), getOrigin(), getDestination());
         if (teleport instanceof MountedXerics
                 && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()
                 && !ensureFacility(
-                        () -> sleepUntil(() -> MountedXerics.getObject() != null, 3000),
-                        () -> World330HostedHouse.ADVERTISED_HOUSE.switchUnsuitableHouse())) {
-            return false;
+                        () -> {
+                            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
+                                    || System.currentTimeMillis() >= recoveryDeadline) return false;
+                            sleepUntil(() -> cancelled.getAsBoolean() || MountedXerics.getObject() != null, 3000);
+                            boolean present = !cancelled.getAsBoolean() && MountedXerics.getObject() != null;
+                            if (!present) log.info("[W330POH] facility_lookup missing=MountedXerics generation={}",
+                                    World330HostedHouse.ADVERTISED_HOUSE.houseGeneration());
+                            return present;
+                        }, () -> World330HostedHouse.ADVERTISED_HOUSE.switchUnsuitableHouse(cancelled,
+                                recoveryDeadline), cancelled)) {
+            if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
+            if (!cancelled.getAsBoolean() && !Thread.currentThread().isInterrupted())
+                World330HostedHouse.ADVERTISED_HOUSE.rejectCurrentHouse();
+            return cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
+                    ? PohExecutionResult.CANCELLED : PohExecutionResult.HOUSE_RECOVERY_FAILED;
         }
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return PohExecutionResult.CANCELLED;
         boolean poolUsed = PohTeleports.useOrnateRejuvenationPoolIfPresent();
-        if (Thread.currentThread().isInterrupted() || !PohTeleports.isInHouse()) {
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted() || !PohTeleports.isInHouse()) {
             PohMenuInteraction.markCancelled();
             log.info("[W330POH] cancelled POH transport after pool: house changed or interrupted");
-            return false;
+            return PohExecutionResult.CANCELLED;
         }
         boolean executed = teleport.execute();
         log.info("[W330POH] PohTransport complete teleport={} poolUsed={} executed={}",
                 teleport.displayInfo(), poolUsed, executed);
-        return executed;
+        if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
+                || PohMenuInteraction.lastResult() == PohMenuInteraction.Result.CANCELLED)
+            return PohExecutionResult.CANCELLED;
+        return executed ? PohExecutionResult.SUCCESS
+                : PohMenuInteraction.lastResult() == PohMenuInteraction.Result.UNAVAILABLE
+                    ? PohExecutionResult.DESTINATION_UNAVAILABLE : PohExecutionResult.TRANSIENT_FAILURE;
     }
 
     static boolean ensureFacility(BooleanSupplier facilityPresent, BooleanSupplier switchHouse) {
+        return ensureFacility(facilityPresent, switchHouse, () -> false);
+    }
+
+    static boolean ensureFacility(BooleanSupplier facilityPresent, BooleanSupplier switchHouse, BooleanSupplier cancelled) {
         for (int attempts = 0; attempts <= 3; attempts++) {
-            if (Thread.currentThread().isInterrupted()) return false;
+            if (Thread.currentThread().isInterrupted() || cancelled.getAsBoolean()) return false;
             if (facilityPresent.getAsBoolean()) return true;
             if (attempts == 3 || !switchHouse.getAsBoolean()) return false;
         }

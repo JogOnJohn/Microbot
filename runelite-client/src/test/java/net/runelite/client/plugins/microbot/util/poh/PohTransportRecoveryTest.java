@@ -5,6 +5,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.*;
 
 public class PohTransportRecoveryTest {
+    @Test public void changedOwnerStopsBeforeAnyFurtherHouseInteraction() {
+        assertFalse(PohTransport.ensureFacility(() -> { fail("Old route must not probe"); return true; },
+                () -> { fail("Old route must not switch"); return true; }, () -> true));
+    }
     @Test
     public void doesNotLeaveEquippedHouse() {
         assertTrue(PohTransport.ensureFacility(() -> true, () -> {
