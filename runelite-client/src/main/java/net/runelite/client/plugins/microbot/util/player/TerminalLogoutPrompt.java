@@ -9,10 +9,7 @@ import java.util.function.Supplier;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.accountselector.AutoLoginSuppressionRequest;
 
-/**
- * Keeps terminal logout separate from notification; the host pauses gameplay until completed.
- * Safe to begin or reset from one thread while another thread ticks.
- */
+/** Keeps terminal logout separate from notification; the host pauses gameplay until completed. */
 public final class TerminalLogoutPrompt {
     static final long RETRY_MILLIS = 600L;
     static final long RENEW_SUPPRESSION_MILLIS = AutoLoginSuppressionRequest.PENDING_LOGOUT_MILLIS / 3;
@@ -51,15 +48,16 @@ public final class TerminalLogoutPrompt {
     public boolean tick() {
         return throttledTick(Rs2Player::logoutWithoutAutoLoginStep, Microbot::showMessage,
                 () -> Microbot.getEventBus().post(new AutoLoginSuppressionRequest()),
-                () -> Microbot.getEventBus().post(AutoLoginSuppressionRequest.renewal()));
+                () -> Microbot.getEventBus().post(AutoLoginSuppressionRequest.renewal()),
+                () -> Microbot.getEventBus().post(AutoLoginSuppressionRequest.loggedOut()));
     }
 
     public boolean tick(Supplier<Rs2Player.TerminalLogoutState> logout, Consumer<String> notify) {
-        return tick(ignored -> logout.get(), notify, () -> {}, () -> {});
+        return tick(ignored -> logout.get(), notify, () -> {}, () -> {}, () -> {});
     }
 
     boolean throttledTick(Function<Runnable, Rs2Player.TerminalLogoutState> logout, Consumer<String> notify,
-                          Runnable requestSuppression, Runnable renewSuppression) {
+                          Runnable requestSuppression, Runnable renewSuppression, Runnable holdLoggedOut) {
         synchronized (this) {
             if (message == null) return false;
             long now = clock.getAsLong();
@@ -67,19 +65,28 @@ public final class TerminalLogoutPrompt {
             attempted = true;
             lastAttemptAt = now;
         }
-        return tick(logout, notify, requestSuppression, renewSuppression);
+        return tick(logout, notify, requestSuppression, renewSuppression, holdLoggedOut);
     }
 
     boolean tick(Function<Runnable, Rs2Player.TerminalLogoutState> logout, Consumer<String> notify,
-                 Runnable requestSuppression, Runnable renewSuppression) {
+                 Runnable requestSuppression, Runnable renewSuppression, Runnable holdLoggedOut) {
         long tickStop;
         synchronized (this) {
             if (message == null) return false;
             tickStop = stop;
         }
         Rs2Player.TerminalLogoutState state = logout.apply(
-                () -> suppress(tickStop, requestSuppression, renewSuppression));
-        if (state != Rs2Player.TerminalLogoutState.LOGGED_OUT) return false;
+                () -> requestSuppressionOnce(tickStop, requestSuppression, renewSuppression));
+        if (state != Rs2Player.TerminalLogoutState.LOGGED_OUT) {
+            renewSuppressionIfDue(tickStop, renewSuppression);
+            return false;
+        }
+        boolean neverSuppressed;
+        synchronized (this) {
+            if (stop != tickStop || message == null) return false;
+            neverSuppressed = !suppressionRequested;
+        }
+        if (neverSuppressed) holdLoggedOut.run();
         String completedMessage;
         synchronized (this) {
             if (stop != tickStop || message == null) return false;
@@ -91,24 +98,28 @@ public final class TerminalLogoutPrompt {
         return true;
     }
 
-    private void suppress(long tickStop, Runnable requestSuppression, Runnable renewSuppression) {
-        Runnable action;
+    private void requestSuppressionOnce(long tickStop, Runnable requestSuppression, Runnable renewSuppression) {
         synchronized (this) {
-            if (stop != tickStop) return;
-            if (!suppressionRequested) {
-                action = requestSuppression;
-            } else if (clock.getAsLong() - suppressionRequestedAt >= RENEW_SUPPRESSION_MILLIS) {
-                action = renewSuppression;
-            } else {
-                return;
-            }
+            if (stop != tickStop || suppressionRequested) return;
         }
-        action.run();
+        requestSuppression.run();
+        renewSuppression.run();
+        markSuppressed(tickStop);
+    }
+
+    private void renewSuppressionIfDue(long tickStop, Runnable renewSuppression) {
         synchronized (this) {
-            if (stop != tickStop) return;
-            suppressionRequested = true;
-            suppressionRequestedAt = clock.getAsLong();
+            if (stop != tickStop || !suppressionRequested
+                    || clock.getAsLong() - suppressionRequestedAt < RENEW_SUPPRESSION_MILLIS) return;
         }
+        renewSuppression.run();
+        markSuppressed(tickStop);
+    }
+
+    private synchronized void markSuppressed(long tickStop) {
+        if (stop != tickStop) return;
+        suppressionRequested = true;
+        suppressionRequestedAt = clock.getAsLong();
     }
 
     private void startNewStop() {

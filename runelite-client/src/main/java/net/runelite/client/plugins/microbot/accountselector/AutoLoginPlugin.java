@@ -23,7 +23,7 @@ import java.awt.*;
 @PluginDescriptor(
         name = PluginDescriptor.Mocrosoft + "AutoLogin",
         description = "Microbot autologin plugin",
-        version = "1.0.6",
+        version = "1.0.7",
         tags = {"account", "microbot", "login"},
         enabledByDefault = false
 )
@@ -53,6 +53,8 @@ public class AutoLoginPlugin extends Plugin {
     public void onAutoLoginSuppressionRequest(AutoLoginSuppressionRequest event) {
         if (event.isRenewal()) {
             accountSelectorScript.renewAutoLoginSuppression();
+        } else if (event.isLoggedOut()) {
+            accountSelectorScript.holdAutoLoginLoggedOut();
         } else {
             accountSelectorScript.suppressAutoLogin();
         }

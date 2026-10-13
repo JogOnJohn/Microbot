@@ -3,29 +3,36 @@ package net.runelite.client.plugins.microbot.accountselector;
 /**
  * Scripts post this event before a terminal logout to prevent automatic re-login.
  * AutoLogin resumes when another script starts, after a manual login, or on AutoLogin restart.
- * A request that does not reach the login screen within {@link #PENDING_LOGOUT_MILLIS} expires.
- * A renewal restarts that deadline only while the earlier request is still pending, so it never
- * re-blocks AutoLogin after a restart or a manual login cleared it.
  * Ordinary logouts must not post this event.
  */
 public final class AutoLoginSuppressionRequest {
     public static final long PENDING_LOGOUT_MILLIS = 15_000L;
 
-    private final boolean renewal;
+    private enum Kind { REQUEST, RENEWAL, LOGGED_OUT }
+
+    private final Kind kind;
 
     public AutoLoginSuppressionRequest() {
-        this(false);
+        this(Kind.REQUEST);
     }
 
-    private AutoLoginSuppressionRequest(boolean renewal) {
-        this.renewal = renewal;
+    private AutoLoginSuppressionRequest(Kind kind) {
+        this.kind = kind;
     }
 
     public static AutoLoginSuppressionRequest renewal() {
-        return new AutoLoginSuppressionRequest(true);
+        return new AutoLoginSuppressionRequest(Kind.RENEWAL);
+    }
+
+    public static AutoLoginSuppressionRequest loggedOut() {
+        return new AutoLoginSuppressionRequest(Kind.LOGGED_OUT);
     }
 
     public boolean isRenewal() {
-        return renewal;
+        return kind == Kind.RENEWAL;
+    }
+
+    public boolean isLoggedOut() {
+        return kind == Kind.LOGGED_OUT;
     }
 }

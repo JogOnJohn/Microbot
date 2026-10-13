@@ -36,6 +36,12 @@ final class AutoLoginSuppression {
         }
     }
 
+    synchronized void holdLoggedOut(GameState gameState) {
+        if (gameState == GameState.LOGIN_SCREEN) {
+            state = State.LOGGED_OUT;
+        }
+    }
+
     synchronized void observe(GameState gameState) {
         expirePendingRequest();
         if (state == State.AWAITING_LOGOUT && gameState == GameState.LOGIN_SCREEN) {
