@@ -451,3 +451,15 @@ mode in `finally`, and never reuse a quote across target or eligibility changes.
 
 **Defensive check:** `BankRouteCostTest` covers equality/ties and overflow;
 `DirectBankBoundTest` rejects nearby partials, wrong planes and wrong starts.
+
+## 25. Door approach is not door-action confirmation
+
+A clicked door twelve tiles away can legitimately spend the old traversal budget
+walking to its crossing. Keep one pending ticket with pre-click position, genuine
+approach progress, a separate confirmation start and a fixed absolute ceiling.
+Never renew approach for animation or movement away. Positive evidence for that
+specific collision edge still releases immediately; null/changed scenes and
+owner cancellation must release without claiming success.
+
+**Defensive check:** `DoorApproachTicketTest` covers distant approach, stationary
+or wrong-way movement, wrong plane and the non-renewable absolute deadline.

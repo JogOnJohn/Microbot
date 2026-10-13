@@ -14,10 +14,10 @@ import net.runelite.client.plugins.microbot.util.walker.door.model.DoorResolutio
 import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
+import java.util.function.BooleanSupplier;
 
 public final class Rs2WalkerAwaits {
     private static final int DOOR_INTERACTION_START_WAIT_MS = 700;
-    private static final int DOOR_TRAVERSAL_PROGRESS_WAIT_MS = 3500;
     private static final long DOOR_OPEN_STABLE_BEFORE_CROSS_MS = 600L;
     /** Stationary and not animating for longer than this, with the edge unresolved, means the click didn't land. */
     private static final long DOOR_IDLE_ACCEPT_MIN_MS = 1_200L;
@@ -43,12 +43,17 @@ public final class Rs2WalkerAwaits {
     }
 
     public static void awaitDoorInteractionProgress(AwaitTicket ticket, WorldPoint fromWp, WorldPoint toWp) {
+        awaitDoorInteractionProgress(ticket, fromWp, toWp, () -> false);
+    }
+
+    public static void awaitDoorInteractionProgress(AwaitTicket ticket, WorldPoint fromWp, WorldPoint toWp,
+            BooleanSupplier ownershipChanged) {
         if (ticket == null) {
             return;
         }
         long startPhaseAt = System.currentTimeMillis();
         sleepUntil(() -> {
-            if (Thread.currentThread().isInterrupted() || conversationOpened()) {
+            if (Thread.currentThread().isInterrupted() || ownershipChanged.getAsBoolean() || conversationOpened()) {
                 return true;
             }
             WorldPoint now = Rs2Player.getWorldLocation();
@@ -59,23 +64,20 @@ public final class Rs2WalkerAwaits {
         }, DOOR_INTERACTION_START_WAIT_MS);
         long startWaitMs = System.currentTimeMillis() - startPhaseAt;
 
-        // Which condition releases the traversal wait is the whole question for door latency: it
-        // already returns the moment the door EDGE resolves, so a wait that runs to its 2200ms cap
-        // means the edge is not being observed quickly (the live overlay needs a scene recapture
-        // before it sees the door open) rather than the door being slow. Naming the winner turns
-        // "doors feel slow" into a specific target — the same play that took the transport problem
-        // from four rounds of guessing to a one-shot fix.
+        // A remote object click first approaches the door. Its confirmation allowance starts
+        // at the crossing, not at the first movement; genuine progress cannot renew the absolute cap.
         final String[] releasedBy = {"timeout"};
         final long[] edgeResolvedSinceMs = {0L};
         long traversalPhaseAt = System.currentTimeMillis();
         sleepUntil(() -> {
-            if (Thread.currentThread().isInterrupted() || conversationOpened()) {
+            if (Thread.currentThread().isInterrupted() || ownershipChanged.getAsBoolean() || conversationOpened()) {
                 releasedBy[0] = "conversation-or-interrupt";
                 return true;
             }
             WorldPoint now = Rs2Player.getWorldLocation();
             if (now == null) {
-                return false;
+                releasedBy[0] = "scene-unavailable";
+                return true;
             }
             if (isDoorCrossingPassable(fromWp, toWp)) {
                 releasedBy[0] = "live-edge-passable";
@@ -100,8 +102,15 @@ public final class Rs2WalkerAwaits {
                 releasedBy[0] = "arrived-far-side";
                 return true;
             }
-            long elapsedMs = System.currentTimeMillis() - ticket.startedAtMs();
-            boolean idleAccepted = !edgeResolved && shouldAcceptIdleDoorAwait(
+            long nowMs = System.currentTimeMillis();
+            AwaitTicket.Progress progress = ticket.observe(now, fromWp, toWp, nowMs);
+            if (progress != AwaitTicket.Progress.WAITING) {
+                releasedBy[0] = progress.name().toLowerCase(java.util.Locale.ROOT);
+                return true;
+            }
+            long elapsedMs = ticket.confirmationStartedAtMs() < 0 ? 0
+                    : nowMs - ticket.confirmationStartedAtMs();
+            boolean idleAccepted = ticket.confirmationStartedAtMs() >= 0 && !edgeResolved && shouldAcceptIdleDoorAwait(
                     Rs2Player.isMoving(),
                     Rs2Player.isAnimating(),
                     elapsedMs,
@@ -110,13 +119,15 @@ public final class Rs2WalkerAwaits {
                 releasedBy[0] = "idle-accepted";
             }
             return idleAccepted;
-        }, DOOR_TRAVERSAL_PROGRESS_WAIT_MS);
+        }, AwaitTicket.MAX_WAIT_MS);
         long traversalWaitMs = System.currentTimeMillis() - traversalPhaseAt;
 
         if (startWaitMs + traversalWaitMs >= DOOR_AWAIT_SLOW_LOG_MS
                 || "live-edge-passable".equals(releasedBy[0])) {
-            WebWalkLog.spInfo("door_await | releasedBy={} startWaitMs={} traversalWaitMs={} from={} to={}",
-                    releasedBy[0], startWaitMs, traversalWaitMs, fromWp, toWp);
+            WebWalkLog.spInfo("door_await | releasedBy={} startWaitMs={} traversalWaitMs={} confirmationStartMs={} from={} to={}",
+                    releasedBy[0], startWaitMs, traversalWaitMs,
+                    ticket.confirmationStartedAtMs() < 0 ? -1 : ticket.confirmationStartedAtMs() - ticket.startedAtMs(),
+                    fromWp, toWp);
         }
     }
 
@@ -126,7 +137,7 @@ public final class Rs2WalkerAwaits {
      * This used to end in {@code return edgeResolved}, which made it dead code: the traversal wait
      * returns early the moment the edge resolves, so by the time this runs {@code edgeResolved} is
      * always false and the branch could never fire. The wait therefore always ran to its full
-     * {@link #DOOR_TRAVERSAL_PROGRESS_WAIT_MS} budget whenever a door interaction simply did not take.
+     * confirmation budget whenever a door interaction simply did not take.
      * <p>
      * An unresolved edge with the player standing still and not animating well past the interaction
      * tick means the click did not land; the caller re-enters and tries again, which is strictly

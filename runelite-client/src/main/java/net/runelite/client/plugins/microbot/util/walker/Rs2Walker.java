@@ -6556,7 +6556,7 @@ public class Rs2Walker {
                             return false;
                         }
                         markDoorInteractionSettling(fromWp, toWp);
-                        waitForDoorInteractionProgress(fromWp, toWp);
+                        waitForDoorInteractionProgress(fromWp, toWp, posBefore);
                         WorldPoint posAfter = Rs2Player.getWorldLocation();
                         boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, probe, fromWp, toWp);
                         if (!traversed && isQuestLockedDoorDialogue()) {
@@ -6687,7 +6687,7 @@ public class Rs2Walker {
             return false;
         }
         markDoorInteractionSettling(fromWp, toWp);
-        waitForDoorInteractionProgress(fromWp, toWp);
+        waitForDoorInteractionProgress(fromWp, toWp, posBefore);
         WorldPoint posAfter = Rs2Player.getWorldLocation();
         boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, probe, fromWp, toWp);
         if (traversed) {
@@ -7596,11 +7596,13 @@ public class Rs2Walker {
      * Door-ahead / fallback / LOS scans must treat it as non-door so {@link #handleTransports} owns it.
      */
 
-    private static void waitForDoorInteractionProgress(WorldPoint fromWp, WorldPoint toWp) {
+    private static void waitForDoorInteractionProgress(WorldPoint fromWp, WorldPoint toWp, WorldPoint beforeClick) {
         long startedAt = System.currentTimeMillis();
-        AwaitTicket ticket = Rs2WalkerAwaits.beginTicket();
+        AwaitTicket ticket = new AwaitTicket(startedAt, beforeClick);
+        WorldPoint ownerTarget = currentTarget;
         try {
-            Rs2WalkerAwaits.awaitDoorInteractionProgress(ticket, fromWp, toWp);
+            Rs2WalkerAwaits.awaitDoorInteractionProgress(ticket, fromWp, toWp,
+                    () -> !Objects.equals(ownerTarget, currentTarget));
         } finally {
             if (rawScanWallSnapshot != null || rawScanGameObjectSnapshot != null) {
                 rawScanDoorInteractionWaitMs += System.currentTimeMillis() - startedAt;
@@ -8331,7 +8333,7 @@ public class Rs2Walker {
 			return false;
 		}
         markDoorInteractionSettling(bestFrom, bestTo);
-		waitForDoorInteractionProgress(bestFrom, bestTo);
+		waitForDoorInteractionProgress(bestFrom, bestTo, posBefore);
 		WorldPoint posAfter = Rs2Player.getWorldLocation();
 		boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, bestLoc, bestFrom, bestTo);
 		if (traversed) {
