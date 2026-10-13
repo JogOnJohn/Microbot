@@ -584,6 +584,17 @@ public class Microbot {
                 () -> Microbot.getClient().getWidget(InterfaceID.Worldswitcher.BUTTONS) != null).orElse(false);
     }
 
+    public static String supplyMessage(String supplies) {
+        String item = supplies == null ? "required supplies" : supplies.trim();
+        item = item.replaceFirst("(?i)^ran out of supplies:\\s*", "")
+                .replaceFirst("(?i)^(?:out of|missing|no|not enough|insufficient)\\s+", "")
+                .replaceFirst("(?i)\\s+(?:not found|found|missing)(?: (?:in|from) (?:the )?bank)?[.!]?$", "")
+                .replaceFirst("(?i)\\s+(?:remaining|in bank)[.!]?$", "")
+                .replaceFirst("[.!]+$", "");
+        if (item.isEmpty()) item = "required supplies";
+        return "Ran out of supplies: " + item;
+    }
+
     public static void showMessage(String message) {
         try {
             Runnable messageRunnable = () ->

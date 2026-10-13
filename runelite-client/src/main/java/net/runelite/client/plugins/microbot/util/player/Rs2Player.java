@@ -1970,4 +1970,25 @@ public class Rs2Player {
     public static boolean hasCompletedTutorialIsland() {
         return Microbot.getVarbitPlayerValue(281) >= 1000;
     }
+
+    /** One off-client-thread terminal logout step with AutoLogin suppression. */
+    public static TerminalLogoutState logoutWithoutAutoLoginStep() {
+        return logoutWithoutAutoLoginStep(() -> Microbot.getEventBus().post(new AutoLoginSuppressionRequest()));
+    }
+
+    static TerminalLogoutState logoutWithoutAutoLoginStep(Runnable requestSuppression) {
+        if (Microbot.getClientThread().isClientThread()) return TerminalLogoutState.INPUT_BLOCKED;
+        GameState state = Microbot.getClientThread().runOnClientThreadOptional(
+                () -> Microbot.getClient().getGameState()).orElse(GameState.UNKNOWN);
+        if (state != GameState.LOGGED_IN && state != GameState.LOGIN_SCREEN) return TerminalLogoutState.INPUT_BLOCKED;
+        requestSuppression.run();
+        if (state == GameState.LOGIN_SCREEN) return TerminalLogoutState.LOGGED_OUT;
+        if (Rs2Bank.isOpen()) {
+            return Rs2Widget.clickChildWidget(786434, 11)
+                    ? TerminalLogoutState.BANK_CLOSING : TerminalLogoutState.INPUT_BLOCKED;
+        }
+        logout();
+        return TerminalLogoutState.LOGOUT_REQUESTED;
+    }
+
 }
