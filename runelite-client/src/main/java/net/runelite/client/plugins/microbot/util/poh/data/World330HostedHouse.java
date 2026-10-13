@@ -5,6 +5,7 @@ import net.runelite.api.ObjectID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
@@ -17,12 +18,15 @@ import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.HostedHouseContext;
 import net.runelite.client.plugins.microbot.util.walker.Rs2PathApi;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
+import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
 import net.runelite.client.util.Text;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -46,7 +50,7 @@ public enum World330HostedHouse implements PohTeleport {
     private static final int ENTER_CONTAINER_WIDGET = 3407891;
     private static final int SORT_ASCENDING_SPRITE = 1050;
     private static final int MAX_ADVERTISED_HOST_ATTEMPTS = 8;
-    private static final Set<String> EXCLUDED_ADVERTISED_HOSTS = Set.of("v 3");
+    private static final Set<String> EXCLUDED_ADVERTISED_HOSTS = Set.of("v 3", "jaecob");
     private static final Map<String, Long> unsuitableHosts = new ConcurrentHashMap<>();
     private static volatile String currentAdvertisedHost;
     private static final HostedHouseContext houseContext = new HostedHouseContext();
@@ -146,6 +150,9 @@ public enum World330HostedHouse implements PohTeleport {
             boolean exited = clicked && awaitRecovery(
                     () -> !isInHostedHouse() && isNearHouseAdvertisement(), 12000, cancelled, deadline);
             if (!exited && !recoveryStopped(cancelled, deadline)) {
+                exited = leaveHouseViaOptions(cancelled, deadline);
+            }
+            if (!exited && !recoveryStopped(cancelled, deadline)) {
                 // Reuse the verified Outside policy when the portal cannot be used.
                 log.info("[W330POH] house_switch phase=outside_fallback");
                 exited = teleportOutsideToAdvertisement(cancelled, deadline)
@@ -193,6 +200,42 @@ public enum World330HostedHouse implements PohTeleport {
         invalidateHousePreparation();
     }
 
+    public void blacklistUnreachableHouse(String facility) {
+        if (!sceneReady() || !isInHostedHouse()) return;
+        houseContext.reject();
+        String host = currentAdvertisedHost;
+        if (host != null && Microbot.getConfigManager() != null) {
+            String before = Microbot.getConfigManager().getConfiguration(
+                    ShortestPathPlugin.CONFIG_GROUP, "blockedWorld330Hosts");
+            Microbot.getConfigManager().setConfiguration(ShortestPathPlugin.CONFIG_GROUP,
+                    "blockedWorld330Hosts", addBlockedHost(before, host));
+        }
+        log.warn("[W330POH] house_blacklist host={} persistent={} facility={} generation={} at={}",
+                host, host != null && Microbot.getConfigManager() != null, facility,
+                houseContext.generation(), Rs2Player.getWorldLocation());
+        invalidateHousePreparation();
+    }
+
+    private boolean leaveHouseViaOptions(BooleanSupplier cancelled, long deadline) {
+        if (recoveryStopped(cancelled, deadline) || !Rs2Tab.switchToSettingsTab()) return false;
+        if (!Rs2Widget.isWidgetVisible(InterfaceID.SettingsSide.HOUSEOPTIONS)) {
+            if (recoveryStopped(cancelled, deadline)
+                    || !Rs2Widget.clickWidget(InterfaceID.SettingsSide.TAB_1_1_BACKING)
+                    || !awaitRecovery(() -> Rs2Widget.isWidgetVisible(InterfaceID.SettingsSide.HOUSEOPTIONS),
+                            2500, cancelled, deadline)) return false;
+        }
+        if (recoveryStopped(cancelled, deadline)
+                || !Rs2Widget.clickWidget(InterfaceID.SettingsSide.HOUSEOPTIONS)
+                || !awaitRecovery(() -> Rs2Widget.isWidgetVisible(InterfaceID.PohOptions.LEAVE_HOUSE),
+                        2500, cancelled, deadline)) return false;
+        if (recoveryStopped(cancelled, deadline)) return false;
+        boolean clicked = Rs2Widget.clickWidget(InterfaceID.PohOptions.LEAVE_HOUSE);
+        boolean exited = clicked && awaitRecovery(() -> !isInHostedHouse() && isNearHouseAdvertisement(),
+                8000, cancelled, deadline);
+        log.info("[W330POH] house_switch phase=leave_house_widget clicked={} exited={}", clicked, exited);
+        return exited;
+    }
+
     private static void invalidateHousePreparation() {
         if (Rs2PathApi.getPathfinderConfig() != null)
             Rs2PathApi.getPathfinderConfig().invalidateTransportRefreshCache();
@@ -215,11 +258,15 @@ public enum World330HostedHouse implements PohTeleport {
         if (Microbot.getClient() == null) return false;
         if (Microbot.getClient().getWorld() != 330) {
             houseContext.observe(false);
+            currentAdvertisedHost = null;
             return false;
         }
         boolean present = isOnHostedHouseTemplate();
         if (Microbot.getClient().getGameState() == net.runelite.api.GameState.LOGGED_IN
-                && Microbot.getClient().getLocalPlayer() != null) houseContext.observe(present);
+                && Microbot.getClient().getLocalPlayer() != null) {
+            houseContext.observe(present);
+            if (!present) currentAdvertisedHost = null;
+        }
         return present;
     }
 
@@ -368,8 +415,8 @@ public enum World330HostedHouse implements PohTeleport {
                     continue;
                 }
 
-                log.info("[W330POH] trying advertised host row={} skippedHosts={}",
-                        row, failedAdvertisedHosts.size());
+                log.info("[W330POH] trying advertised host={} row={} skippedHosts={}",
+                        Text.standardize(houseOwner), row, failedAdvertisedHosts.size());
                 Rs2Widget.clickChildWidget(ENTER_CONTAINER_WIDGET, enter.getIndex());
                 boolean entered = awaitRecovery(this::isInHostedHouse, 9000, cancelled, deadline);
                 if (entered) {
@@ -423,7 +470,25 @@ public enum World330HostedHouse implements PohTeleport {
         if (houseOwner == null) return false;
         String name = Text.standardize(houseOwner);
         Long until = unsuitableHosts.get(name);
-        return EXCLUDED_ADVERTISED_HOSTS.contains(name) || (until != null && now < until);
+        String blocked = Microbot.getConfigManager() == null ? null
+                : Microbot.getConfigManager().getConfiguration(ShortestPathPlugin.CONFIG_GROUP, "blockedWorld330Hosts");
+        return EXCLUDED_ADVERTISED_HOSTS.contains(name) || blockedHosts(blocked).contains(name)
+                || (until != null && now < until);
+    }
+
+    static Set<String> blockedHosts(String value) {
+        Set<String> hosts = new LinkedHashSet<>();
+        if (value != null) for (String host : value.split("[,\\r\\n]+")) {
+            String normalized = Text.standardize(host);
+            if (!normalized.isEmpty()) hosts.add(normalized);
+        }
+        return hosts;
+    }
+
+    static String addBlockedHost(String value, String host) {
+        Set<String> hosts = blockedHosts(value);
+        if (host != null && !Text.standardize(host).isEmpty()) hosts.add(Text.standardize(host));
+        return String.join(", ", hosts);
     }
 
     static void excludeUnsuitableHost(String houseOwner, long now) {

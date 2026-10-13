@@ -21,6 +21,20 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 public class World330HostedHouseAccessTest {
+
+    @Test public void permanentlyExcludesJaecobWithoutMatchingOtherNames() {
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost(" <col=ffffff>Jaecob</col> ", Long.MAX_VALUE));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("Jaecob2", Long.MAX_VALUE));
+    }
+
+    @Test public void persistentNamesAreNormalizedDeduplicatedAndRemainRemovable() {
+        String hosts = World330HostedHouse.addBlockedHost("Host A, HOST B\nHost A", "<col=fff>Host C</col>");
+        assertEquals("host a, host b, host c", hosts);
+        assertEquals(hosts, World330HostedHouse.addBlockedHost(hosts, "HOST C"));
+        assertTrue(World330HostedHouse.blockedHosts(hosts).contains("host c"));
+        assertFalse(World330HostedHouse.blockedHosts("host a, host b").contains("host c"));
+        assertEquals("", World330HostedHouse.addBlockedHost(null, " "));
+    }
     @org.junit.Test
     public void advertisementMustBeNearbyAndOnTheSamePlane() {
         net.runelite.api.coords.WorldPoint board = new net.runelite.api.coords.WorldPoint(2953, 3224, 0);

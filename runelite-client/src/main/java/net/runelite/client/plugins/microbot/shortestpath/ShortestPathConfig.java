@@ -423,6 +423,13 @@ public interface ShortestPathConfig extends Config {
         return false;
     }
 
+    @ConfigItem(keyName = "blockedWorld330Hosts", name = "Blocked W330 hosts",
+            description = "Comma-separated host names. Confirmed unreachable houses are added automatically; remove a name to retry.",
+            position = 25, section = sectionSettings)
+    default String blockedWorld330Hosts() {
+        return "";
+    }
+
     @ConfigItem(
             keyName = "usePortalNexus",
             name = "Use Portal Nexus",
