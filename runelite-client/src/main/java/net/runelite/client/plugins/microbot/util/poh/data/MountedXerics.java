@@ -35,6 +35,15 @@ public enum MountedXerics implements PohTeleport {
 
     @Override
     public boolean execute() {
+        var reachable = net.runelite.client.plugins.microbot.Microbot.getRs2TileObjectCache().query()
+                .fromWorldView().withIds(java.util.Arrays.stream(IDS).mapToInt(Integer::intValue).toArray())
+                .nearestReachable();
+        if (reachable != null) {
+            if (reachable.getId() == objectId) return reachable.click(destinationName);
+            return PohMenuInteraction.select(destinationName, () -> reachable.click("Teleport menu"),
+                    () -> new Widget[]{Rs2Widget.getWidget(InterfaceID.MENU, 3),
+                            Rs2Widget.getWidget(InterfaceID.MENU, 0), Rs2Widget.getWidget(InterfaceID.MENU_NEW, 1)});
+        }
         DecorativeObject talisman = getObject();
         if (talisman == null) {
             return false;

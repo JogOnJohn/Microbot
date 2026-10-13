@@ -6,8 +6,9 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
 import net.runelite.client.plugins.microbot.util.poh.data.PohTeleport;
-import net.runelite.client.plugins.microbot.util.poh.data.MountedXerics;
 import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
@@ -44,28 +45,64 @@ public class PohTransport extends Transport {
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return PohExecutionResult.CANCELLED;
         if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
         long recoveryDeadline = System.currentTimeMillis() + 60_000L;
-        PohMenuInteraction.resetResult();
         log.info("[W330POH] PohTransport execute teleport={} origin={} dest={}",
                 teleport.displayInfo(), getOrigin(), getDestination());
-        if (teleport instanceof MountedXerics
-                && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()
-                && !ensureFacility(
-                        () -> {
-                            if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
-                                    || System.currentTimeMillis() >= recoveryDeadline) return false;
-                            sleepUntil(() -> cancelled.getAsBoolean() || MountedXerics.getObject() != null, 3000);
-                            boolean present = !cancelled.getAsBoolean() && MountedXerics.getObject() != null;
-                            if (!present) log.info("[W330POH] facility_lookup missing=MountedXerics generation={}",
-                                    World330HostedHouse.ADVERTISED_HOUSE.houseGeneration());
-                            return present;
-                        }, () -> World330HostedHouse.ADVERTISED_HOUSE.switchUnsuitableHouse(cancelled,
-                                recoveryDeadline), cancelled)) {
+        for (int switches = 0; switches <= 3; switches++) {
+            if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
             if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
-            if (!cancelled.getAsBoolean() && !Thread.currentThread().isInterrupted())
+            boolean hosted = World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
+            PohFacilityAccess.Access access = hosted ? confirmedFacilityAccess(cancelled, recoveryDeadline)
+                    : PohFacilityAccess.Access.UNKNOWN;
+            if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
+            if (access == PohFacilityAccess.Access.PENDING) return PohExecutionResult.SCENE_PENDING;
+            boolean unusable = access == PohFacilityAccess.Access.MISSING
+                    || access == PohFacilityAccess.Access.UNREACHABLE || access == PohFacilityAccess.Access.OBSTRUCTED;
+            if (!unusable) {
+                PohExecutionResult result = executeInCurrentHouse(cancelled, recoveryDeadline);
+                if (result != PohExecutionResult.TRANSIENT_FAILURE || !hosted) return result;
+                // A dispatched click is not arrival. Re-check collision before attributing failure.
+                access = confirmedFacilityAccess(cancelled, recoveryDeadline);
+                if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
+                if (access == PohFacilityAccess.Access.PENDING) return PohExecutionResult.SCENE_PENDING;
+                unusable = access == PohFacilityAccess.Access.MISSING || access == PohFacilityAccess.Access.UNREACHABLE
+                        || access == PohFacilityAccess.Access.OBSTRUCTED;
+                if (!unusable) return result;
+            }
+            log.warn("[W330POH] facility_access teleport={} access={} generation={} at={}",
+                    teleport.displayInfo(), access, World330HostedHouse.ADVERTISED_HOUSE.houseGeneration(),
+                    Rs2Player.getWorldLocation());
+            if (access == PohFacilityAccess.Access.UNREACHABLE)
+                World330HostedHouse.ADVERTISED_HOUSE.blacklistUnreachableHouse(teleport.displayInfo());
+            if (switches == 3 || System.currentTimeMillis() >= recoveryDeadline
+                    || !World330HostedHouse.ADVERTISED_HOUSE.switchUnsuitableHouse(cancelled, recoveryDeadline)) {
+                if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
+                if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
                 World330HostedHouse.ADVERTISED_HOUSE.rejectCurrentHouse();
-            return cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
-                    ? PohExecutionResult.CANCELLED : PohExecutionResult.HOUSE_RECOVERY_FAILED;
+                return PohExecutionResult.HOUSE_RECOVERY_FAILED;
+            }
         }
+        return PohExecutionResult.HOUSE_RECOVERY_FAILED;
+    }
+
+    private PohFacilityAccess.Access confirmedFacilityAccess(BooleanSupplier cancelled, long deadline) {
+        PohFacilityAccess.Access access = PohFacilityAccess.inspect(teleport);
+        if (access == PohFacilityAccess.Access.MISSING) {
+            sleepUntil(() -> stopped(cancelled) || PohFacilityAccess.inspect(teleport) != PohFacilityAccess.Access.MISSING,
+                    remaining(deadline, 3000));
+            access = PohFacilityAccess.inspect(teleport);
+        }
+        if (access != PohFacilityAccess.Access.UNREACHABLE) return access;
+        long generation = World330HostedHouse.ADVERTISED_HOUSE.houseGeneration();
+        WorldPoint at = Rs2Player.getWorldLocation();
+        sleepUntil(() -> stopped(cancelled) || PohFacilityAccess.inspect(teleport) != PohFacilityAccess.Access.UNREACHABLE,
+                remaining(deadline, 1200));
+        if (generation != World330HostedHouse.ADVERTISED_HOUSE.houseGeneration()
+                || !Objects.equals(at, Rs2Player.getWorldLocation())) return PohFacilityAccess.Access.PENDING;
+        return PohFacilityAccess.inspect(teleport);
+    }
+
+    private PohExecutionResult executeInCurrentHouse(BooleanSupplier cancelled, long deadline) {
+        PohMenuInteraction.resetResult();
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return PohExecutionResult.CANCELLED;
         boolean poolUsed = PohTeleports.useOrnateRejuvenationPoolIfPresent();
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted() || !PohTeleports.isInHouse()) {
@@ -79,9 +116,32 @@ public class PohTransport extends Transport {
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()
                 || PohMenuInteraction.lastResult() == PohMenuInteraction.Result.CANCELLED)
             return PohExecutionResult.CANCELLED;
-        return executed ? PohExecutionResult.SUCCESS
-                : PohMenuInteraction.lastResult() == PohMenuInteraction.Result.UNAVAILABLE
-                    ? PohExecutionResult.DESTINATION_UNAVAILABLE : PohExecutionResult.TRANSIENT_FAILURE;
+        if (!executed) return PohMenuInteraction.lastResult() == PohMenuInteraction.Result.UNAVAILABLE
+                ? PohExecutionResult.DESTINATION_UNAVAILABLE : PohExecutionResult.TRANSIENT_FAILURE;
+        boolean landed = sleepUntil(() -> stopped(cancelled) || landed(), remaining(deadline, 10000));
+        if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
+        log.info("[W330POH] teleport_landing teleport={} confirmed={} at={}", teleport.displayInfo(),
+                landed && landed(), Rs2Player.getWorldLocation());
+        return landed && landed() ? PohExecutionResult.SUCCESS : PohExecutionResult.TRANSIENT_FAILURE;
+    }
+
+    private boolean landed() {
+        return teleport instanceof World330HostedHouse
+                ? World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()
+                : hasLanded(Rs2Player.getWorldLocation(), getDestination());
+    }
+
+    static boolean hasLanded(WorldPoint player, WorldPoint destination) {
+        return player != null && destination != null && player.getPlane() == destination.getPlane()
+                && player.distanceTo2D(destination) < 10;
+    }
+
+    private static boolean stopped(BooleanSupplier cancelled) {
+        return cancelled.getAsBoolean() || Thread.currentThread().isInterrupted();
+    }
+
+    private static int remaining(long deadline, int timeout) {
+        return (int) Math.min(timeout, Math.max(1, deadline - System.currentTimeMillis()));
     }
 
     static boolean ensureFacility(BooleanSupplier facilityPresent, BooleanSupplier switchHouse) {

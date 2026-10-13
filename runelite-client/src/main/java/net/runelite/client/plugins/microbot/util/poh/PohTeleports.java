@@ -314,8 +314,13 @@ public class PohTeleports {
 
         if (!checkIsInHouse()) return false;
 
+        var reachable = Microbot.getRs2TileObjectCache().query().fromWorldView()
+                .withIds(Arrays.stream(JewelleryBoxType.getJewelleryBoxIds()).mapToInt(Integer::intValue).toArray())
+                .nearestReachable();
+
         return PohMenuInteraction.select(jewelleryLocationEnum.getDestination(),
-                () -> Rs2GameObject.interact(JewelleryBoxType.getObject(), "Teleport Menu"),
+                () -> reachable != null ? reachable.click("Teleport Menu")
+                        : Rs2GameObject.interact(JewelleryBoxType.getObject(), "Teleport Menu"),
                 () -> new Widget[]{getJewelleryBoxInterface()});
     }
 
@@ -370,8 +375,13 @@ public class PohTeleports {
     public static boolean usePortalNexus(NexusPortal nexusPortal) {
         //TODO: Add config here to inform the user if the teleport is a wilderness teleport
         GameObject portal = findPohObjectAnywhere(NexusPortal.PORTAL_IDS);
+        var reachable = Microbot.getRs2TileObjectCache().query().fromWorldView()
+                .withIds(Arrays.stream(NexusPortal.PORTAL_IDS).mapToInt(Integer::intValue).toArray())
+                .nearestReachable();
         if (getPortalNexusInterface() == null) {
-            if (portal != null) {
+            if (reachable != null) {
+                reachable.click("Teleport Menu");
+            } else if (portal != null) {
                 Rs2GameObject.interact(portal, "Teleport Menu");
             } else {
                 log.warn("Portal nexus not found");

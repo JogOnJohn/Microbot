@@ -16,6 +16,24 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class PohMenuInteractionTest {
+    @Test public void mountedXericUsesReachableCopyInsteadOfUnreachableSceneMatch() {
+        var cache = mock(net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache.class);
+        var query = mock(net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable.class, RETURNS_SELF);
+        var reachable = mock(net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel.class);
+        when(cache.query()).thenReturn(query);
+        when(query.nearestReachable()).thenReturn(reachable);
+        when(reachable.getId()).thenReturn(MountedXerics.GLADE.getObjectId());
+        when(reachable.click("Xeric's Glade")).thenReturn(true);
+        try (MockedStatic<net.runelite.client.plugins.microbot.Microbot> microbot =
+                     mockStatic(net.runelite.client.plugins.microbot.Microbot.class);
+             MockedStatic<Rs2GameObject> objects = mockStatic(Rs2GameObject.class)) {
+            microbot.when(net.runelite.client.plugins.microbot.Microbot::getRs2TileObjectCache).thenReturn(cache);
+            assertTrue(MountedXerics.GLADE.execute());
+            verify(reachable).click("Xeric's Glade");
+            objects.verifyNoInteractions();
+        }
+    }
+
     @Test public void mountedXericSearchesObservedOptionsSiblingAndReusesOpenMenu() {
         Widget background = mock(Widget.class), options = mock(Widget.class);
         Widget glade = option("2: Xeric's Glade");
@@ -23,9 +41,15 @@ public class PohMenuInteractionTest {
         when(options.getDynamicChildren()).thenReturn(new Widget[]{lookout, glade});
         DecorativeObject talisman = mock(DecorativeObject.class);
         when(talisman.getId()).thenReturn(33414);
-        try (MockedStatic<Rs2Widget> widgets = mockStatic(Rs2Widget.class);
+        var cache = mock(net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache.class);
+        var query = mock(net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable.class, RETURNS_SELF);
+        when(cache.query()).thenReturn(query);
+        try (MockedStatic<net.runelite.client.plugins.microbot.Microbot> microbot =
+                     mockStatic(net.runelite.client.plugins.microbot.Microbot.class);
+             MockedStatic<Rs2Widget> widgets = mockStatic(Rs2Widget.class);
              MockedStatic<Rs2GameObject> objects = mockStatic(Rs2GameObject.class);
              MockedStatic<PohMenuInteraction> menus = mockStatic(PohMenuInteraction.class, CALLS_REAL_METHODS)) {
+            microbot.when(net.runelite.client.plugins.microbot.Microbot::getRs2TileObjectCache).thenReturn(cache);
             widgets.when(() -> Rs2Widget.getWidget(InterfaceID.MENU, 0)).thenReturn(background);
             widgets.when(() -> Rs2Widget.getWidget(InterfaceID.MENU, 3)).thenReturn(options);
             objects.when(() -> Rs2GameObject.getDecorativeObject(MountedXerics.IDS)).thenReturn(talisman);
