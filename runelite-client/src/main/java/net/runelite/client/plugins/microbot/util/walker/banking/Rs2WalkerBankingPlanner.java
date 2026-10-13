@@ -288,12 +288,16 @@ public final class Rs2WalkerBankingPlanner {
             Rs2PathApi.getPathfinderConfig().setUseBankItems(false);
             performanceLog.append("\tStart Point: ").append(startPoint).append(", Target: ").append(target).append("\n");
             long directPathStartTime = System.nanoTime();
-            List<WorldPoint> directPath = Rs2Walker.getWalkPath(startPoint, target);
+            Rs2PathApi.getPathfinderConfig().refresh(target);
+            Pathfinder directProbe = new Pathfinder(Rs2PathApi.getPathfinderConfig(), startPoint, target);
+            directProbe.run();
+            List<WorldPoint> directPath = directProbe.getPath();
             long directPathEndTime = System.nanoTime();
             double directPathTimeMs = (directPathEndTime - directPathStartTime) / 1_000_000.0;
 
             int directDistance = Rs2Walker.getTotalTilesFromPath(directPath, target);
             if (allowBound && !originalUseBankItems && !Thread.currentThread().isInterrupted()
+                    && directProbe.isDone() && completedProbeReason(directProbe.getTerminationReason())
                     && completeDirectProbe(directPath, startPoint, target)
                     && BankRouteCost.cannotBeatDirect(directDistance, overhead, minimumSaving)) {
                 WebWalkLog.spInfo("bank_walk | skip_compare_cost_bound direct={} overhead={} minSaving={} goal={}",
@@ -460,6 +464,11 @@ public final class Rs2WalkerBankingPlanner {
                 Rs2PathApi.getPathfinderConfig().refresh();
             }
         }
+    }
+
+    static boolean completedProbeReason(String reason) {
+        // LEGACY has no reason field; its exact endpoints and done flag are checked separately.
+        return reason == null || "reached-goal".equals(reason);
     }
 
     static boolean completeDirectProbe(List<WorldPoint> path, WorldPoint start, WorldPoint target) {

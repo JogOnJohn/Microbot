@@ -7,6 +7,14 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class DirectBankBoundTest {
+    @Test public void cancelledAndCutoffSearchesAreNotCompleteQuotes() {
+        assertTrue(Rs2WalkerBankingPlanner.completedProbeReason(null));
+        assertTrue(Rs2WalkerBankingPlanner.completedProbeReason("reached-goal"));
+        assertFalse(Rs2WalkerBankingPlanner.completedProbeReason("time-cutoff"));
+        assertFalse(Rs2WalkerBankingPlanner.completedProbeReason("unreachable"));
+        assertFalse(Rs2WalkerBankingPlanner.completedProbeReason("cancelled"));
+        assertFalse(Rs2WalkerBankingPlanner.completedProbeReason("backend-failure"));
+    }
     @Test public void nearbyPartialOrWrongPlaneDoesNotProveCompletion() {
         WorldPoint start = new WorldPoint(3000, 3300, 0), target = new WorldPoint(3010, 3300, 0);
         assertTrue(Rs2WalkerBankingPlanner.completeDirectProbe(List.of(start, target), start, target));
