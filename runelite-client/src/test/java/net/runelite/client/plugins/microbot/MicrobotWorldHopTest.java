@@ -5,6 +5,9 @@ import net.runelite.api.World;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
+import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
+import net.runelite.client.plugins.microbot.util.security.HopBudget;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -101,6 +104,26 @@ public class MicrobotWorldHopTest {
 
         verify(client, never()).openWorldHopper();
         verify(client).hopToWorld(target);
+    }
+
+    @Test
+    public void blockedHopIsRefusedBeforeWaitingForTheHopLimit() {
+        HopBudget budget = mock(HopBudget.class);
+        when(budget.millisUntilHopAllowed()).thenThrow(new AssertionError("waited for the hop limit"));
+        when(budget.cachedMillisUntilHopAllowed()).thenThrow(new AssertionError("waited for the hop limit"));
+        microbot.when(Microbot::isLoggedIn).thenReturn(true);
+        when(client.getWorld()).thenReturn(301);
+        try (MockedStatic<HopBudget> hopBudget = Mockito.mockStatic(HopBudget.class);
+             MockedStatic<Rs2Combat> combat = Mockito.mockStatic(Rs2Combat.class);
+             MockedStatic<Rs2Bank> bank = Mockito.mockStatic(Rs2Bank.class)) {
+            hopBudget.when(HopBudget::getInstance).thenReturn(budget);
+            combat.when(Rs2Combat::inCombat).thenReturn(false);
+            bank.when(Rs2Bank::isOpen).thenReturn(true);
+
+            assertFalse(Microbot.hopToWorld(302));
+        }
+
+        verify(client, never()).hopToWorld(any());
     }
 
     @Test

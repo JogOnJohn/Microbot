@@ -184,8 +184,9 @@ public class MicrobotPlugin extends Plugin
 		InputArbiter.setDisabled(microbotConfig.disableInputYielding());
 		InputArbiter.setMotionThresholdPx(microbotConfig.inputMotionThresholdPx());
 		InputArbiter.setIdleResumeMs(microbotConfig.inputIdleResumeMs());
-		HopBudget.getInstance().persistTo(new File(RuneLite.RUNELITE_DIR, HopBudget.FILE_NAME).toPath(), HopBudget.networkKey());
 		applyHopBudgetConfig();
+		executor.execute(() -> HopBudget.getInstance().persistTo(
+				new File(RuneLite.RUNELITE_DIR, HopBudget.FILE_NAME).toPath(), HopBudget.networkKey()));
 		CanvasInputListener.attach();
 		Microbot.enableAutoRunOn = microbotConfig.enableAutoRunOn();
 		Microbot.useStaminaPotsIfNeeded = microbotConfig.useStaminaPotsIfNeeded();

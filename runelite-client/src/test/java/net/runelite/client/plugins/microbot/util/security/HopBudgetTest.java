@@ -169,6 +169,17 @@ public class HopBudgetTest {
         assertEquals(0L, budget.millisUntilHopAllowed());
     }
 
+    @Test public void persistToRepairsAFutureTimestampForTheCachedCheck() throws Exception {
+        Path file = folder.getRoot().toPath().resolve(HopBudget.FILE_NAME);
+        Files.write(file, ("direct.tokens=5.0\ndirect.updatedAt=" + (clock.get() + TimeUnit.HOURS.toMillis(1)) + "\n")
+                .getBytes(StandardCharsets.UTF_8));
+        HopBudget budget = budget(30, 5);
+        budget.persistTo(file, "direct");
+        assertTrue(budget.cachedMillisUntilHopAllowed() > 0);
+        clock.addAndGet(ONE_TOKEN_MILLIS);
+        assertEquals(0L, budget.cachedMillisUntilHopAllowed());
+    }
+
     @Test public void zeroRefillRateIsClampedSoWaitsStayFinite() {
         HopBudget budget = new HopBudget(clock::get, new HopBudget.MemoryStore());
         budget.configure(true, 30, 0, 5);

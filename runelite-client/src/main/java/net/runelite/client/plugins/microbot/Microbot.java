@@ -375,17 +375,21 @@ public class Microbot {
             log.error("Can't hop world, already trying to hop");
             return false;
         }
-        if (Microbot.getClient().getWorld() != worldNumber && !awaitHopBudget(worldNumber)) {
-            return false;
+        if (Microbot.getClient().getWorld() != worldNumber) {
+            String blocker = Microbot.getClientThread().runOnClientThreadOptional(Microbot::hopBlocker).orElse(null);
+            if (blocker != null) {
+                log.error(blocker);
+                return false;
+            }
+            if (!awaitHopBudget(worldNumber)) {
+                return false;
+            }
         }
         final net.runelite.api.World[] target = new net.runelite.api.World[1];
         boolean prepared = Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            if (Rs2Combat.inCombat()) {
-                log.error("Player is in combat, cannot hop worlds");
-                return false;
-            }
-            if (Rs2Bank.isOpen() || Rs2Shop.isOpen() || Rs2Dialogue.isInDialogue()) {
-                log.error("Blocking widget open (bank/shop/dialogue), cannot hop worlds");
+            String blocker = hopBlocker();
+            if (blocker != null) {
+                log.error(blocker);
                 return false;
             }
             if (quickHopTargetWorld != null || Microbot.getClient().getGameState() != GameState.LOGGED_IN) {
@@ -464,6 +468,16 @@ public class Microbot {
             log.error("Failed to hop to world {}", worldNumber);
         }
         return success;
+    }
+
+    private static String hopBlocker() {
+        if (Rs2Combat.inCombat()) {
+            return "Player is in combat, cannot hop worlds";
+        }
+        if (Rs2Bank.isOpen() || Rs2Shop.isOpen() || Rs2Dialogue.isInDialogue()) {
+            return "Blocking widget open (bank/shop/dialogue), cannot hop worlds";
+        }
+        return null;
     }
 
     static boolean awaitHopBudget(int worldNumber) {

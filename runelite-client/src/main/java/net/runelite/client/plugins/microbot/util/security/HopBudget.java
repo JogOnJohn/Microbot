@@ -86,7 +86,7 @@ public final class HopBudget {
 
     public void persistTo(Path file, String networkKey) {
         store = new FileStore(file, networkKey, store);
-        store.update(UnaryOperator.identity());
+        current();
     }
 
     public void configure(boolean enabled, int capacity, int refillPerHour, int reserve) {
@@ -207,7 +207,7 @@ public final class HopBudget {
             this.lockFile = file.resolveSibling(file.getFileName() + ".lock");
             this.tokensKey = networkKey + ".tokens";
             this.updatedAtKey = networkKey + ".updatedAt";
-            this.fallback = new MemoryStore(seed.update(UnaryOperator.identity()));
+            this.fallback = new MemoryStore(seed.peek());
         }
 
         @Override
