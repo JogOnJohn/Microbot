@@ -23,14 +23,22 @@ public final class TransportRefusalLedger {
     private long revision;
 
     public synchronized void beginWalk(WorldPoint target) {
+        beginWalkAndReportEligibilityChange(target);
+    }
+
+    /** Reset ownership atomically; only clearing real exclusions changes prepared transport eligibility. */
+    public synchronized boolean beginWalkAndReportEligibilityChange(WorldPoint target) {
         if (target == null || !Objects.equals(goal, target)) {
+            boolean changed = !blocked.isEmpty();
             goal = target;
             generation++;
             refusals.clear();
             fallthroughs.clear();
             lastObservation.clear();
             blocked.clear();
+            return changed;
         }
+        return false;
     }
 
     public synchronized long generation() { return generation; }

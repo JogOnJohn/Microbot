@@ -9174,9 +9174,7 @@ public class Rs2Walker {
         PathfinderConfig config = Rs2PathApi.getPathfinderConfig();
         if (config == null) return;
         TransportRefusalLedger ledger = config.getTransportRefusals();
-        long generation = ledger.generation();
-        ledger.beginWalk(target);
-        if (generation != ledger.generation()) config.invalidateTransportRefreshCache();
+        if (ledger.beginWalkAndReportEligibilityChange(target)) config.invalidateTransportRefreshCache();
     }
 
     private static long transportRefusalGeneration() {

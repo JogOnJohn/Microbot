@@ -28,11 +28,15 @@ public class Rs2WalkerTransportRefusalTest {
             ledger.failure(ledger.generation(), transport, origin, origin, true, true, 2000);
             begin.invoke(null, goal);
             assertTrue(ledger.isBlocked(transport));
-            verify(config, times(1)).invalidateTransportRefreshCache();
+            verify(config, never()).invalidateTransportRefreshCache();
             begin.invoke(null, new WorldPoint(3200, 3200, 0));
             assertFalse(ledger.isBlocked(transport));
+            verify(config, times(1)).invalidateTransportRefreshCache();
+            ledger.failure(ledger.generation(), transport, origin, origin, true, true, 3000);
+            ledger.failure(ledger.generation(), transport, origin, origin, true, true, 4000);
             begin.invoke(null, (WorldPoint) null);
-            verify(config, times(3)).invalidateTransportRefreshCache();
+            assertFalse(ledger.isBlocked(transport));
+            verify(config, times(2)).invalidateTransportRefreshCache();
         } finally {
             ShortestPathPlugin.pathfinderConfig = previous;
         }

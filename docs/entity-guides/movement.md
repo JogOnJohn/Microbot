@@ -427,3 +427,15 @@ Failed/throttled dispatch is an attempt, not proof that any door opened.
 
 **Defensive check:** `StationaryDoorTransportSuppressionTest` covers Jess's two
 doors, reversed and shared-corner edges, invalid crossings and Norman's ladder.
+
+## 23. Reset refusal ownership without discarding unchanged preparation
+
+Every new or cancelled walk needs a new refusal generation to reject late handler
+results. That alone does not change transport eligibility: an empty or sub-threshold
+refusal scope has excluded nothing. Preserve the existing verified refresh cache
+when resetting it, but invalidate when real blocked transports become eligible
+again. Inventory, bank mode, target, world/house and other state verification remains
+unchanged; this is not permission to reuse stale routes or availability.
+
+**Defensive check:** `TransportRefusalLedgerTest`, `Rs2WalkerPreparationReuseTest`
+and both backend refusal-routing tests cover ownership and exclusion restoration.

@@ -138,4 +138,29 @@ public class TransportRefusalLedgerTest {
         assertFalse(TransportRefusalLedger.eligible(new Transport(null, DESTINATION, "Global",
                 TransportType.TELEPORTATION_ITEM, false, 1)));
     }
+
+    @Test public void emptyAndSubThresholdScopesKeepPreparationButStillRotateOwnership() {
+        TransportRefusalLedger ledger = ledger();
+        long owner = ledger.generation();
+        assertFalse(fail(ledger, transport(100), true, 1000));
+        assertFalse(ledger.beginWalkAndReportEligibilityChange(null));
+        assertTrue(ledger.generation() > owner);
+        assertFalse(ledger.beginWalkAndReportEligibilityChange(DESTINATION));
+        assertFalse(ledger.failure(owner, transport(100), ORIGIN, ORIGIN, true, true, 2000));
+        assertFalse(fail(ledger, transport(100), true, 3000));
+    }
+
+    @Test public void onlyActualBlockedTransportResetInvalidatesPreparation() {
+        TransportRefusalLedger ledger = ledger();
+        Transport transport = transport(100);
+        fail(ledger, transport, true, 1000);
+        fail(ledger, transport, true, 2000);
+        long owner = ledger.generation();
+        assertFalse(ledger.beginWalkAndReportEligibilityChange(DESTINATION));
+        assertEquals(owner, ledger.generation());
+        assertTrue(ledger.isBlocked(transport));
+        assertTrue(ledger.beginWalkAndReportEligibilityChange(new WorldPoint(3200, 3200, 0)));
+        assertFalse(ledger.isBlocked(transport));
+        assertFalse(ledger.beginWalkAndReportEligibilityChange(null));
+    }
 }
