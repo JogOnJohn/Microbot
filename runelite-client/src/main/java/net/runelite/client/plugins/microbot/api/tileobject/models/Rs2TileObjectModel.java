@@ -206,6 +206,17 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         // its size, takes the interactable tiles around it, and looks for one that is walkable and
         // reachable. Reused here rather than reimplemented so the two paths cannot drift.
         if (tileObject instanceof GameObject) {
+            if (Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    objectWorldView.getScene() != null && objectWorldView.getScene().isInstance()).orElse(false)) {
+                return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                    GameObject object = (GameObject) tileObject;
+                    Point min = object.getSceneMinLocation(), max = object.getSceneMaxLocation();
+                    WorldPoint location = object.getWorldLocation();
+                    return min != null && max != null && location != null
+                            && location.getPlane() == objectWorldView.getPlane()
+                            && Rs2Tile.isSceneAreaReachable(min.getX(), min.getY(), max.getX(), max.getY());
+                }).orElse(false);
+            }
             return Rs2GameObject.isReachable((GameObject) tileObject);
         }
 

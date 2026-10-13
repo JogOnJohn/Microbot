@@ -23,13 +23,16 @@ public class PohMenuInteractionTest {
         when(cache.query()).thenReturn(query);
         when(query.nearestReachable()).thenReturn(reachable);
         when(reachable.getId()).thenReturn(MountedXerics.GLADE.getObjectId());
-        when(reachable.click("Xeric's Glade")).thenReturn(true);
+        var composition = mock(net.runelite.api.ObjectComposition.class);
+        when(reachable.getObjectComposition()).thenReturn(composition);
+        when(composition.getActions()).thenReturn(new String[]{"Glade", "Teleport menu"});
+        when(reachable.click("Glade")).thenReturn(true);
         try (MockedStatic<net.runelite.client.plugins.microbot.Microbot> microbot =
                      mockStatic(net.runelite.client.plugins.microbot.Microbot.class);
              MockedStatic<Rs2GameObject> objects = mockStatic(Rs2GameObject.class)) {
             microbot.when(net.runelite.client.plugins.microbot.Microbot::getRs2TileObjectCache).thenReturn(cache);
             assertTrue(MountedXerics.GLADE.execute());
-            verify(reachable).click("Xeric's Glade");
+            verify(reachable).click("Glade");
             objects.verifyNoInteractions();
         }
     }

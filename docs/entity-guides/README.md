@@ -34,6 +34,9 @@ personal-house fallback. A spell dispatch is not a landing: propagate failed lan
 W330 house entry should prefer a currently castable house spell over a carried
 tablet, retaining the outside action and tablet fallback when the spell is unavailable.
 
+Hosted-house blacklisting requires confirmed scene-local disconnection, not a
+failed click or a missing object: see [movement gotchas 27-28](movement.md#27-validate-house-facilities-in-live-scene-coordinates).
+
 Each entity guide is a numbered list of gotchas. Each entry follows this structure:
 
 ```

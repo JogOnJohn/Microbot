@@ -478,3 +478,36 @@ from the same rejected house to a distant fallback.
 
 **Defensive check:** `HostedHouseContextTest`, `PohTransportRecoveryTest` and the
 existing house-action tests cover identity, eligibility, ownership and bounded switches.
+
+## 27. Validate house facilities in live scene coordinates
+
+POH routing uses template coordinates, including a template plane that can differ
+from the rendered plane. Collision and object footprints must use the live player,
+local points and scene plane instead. For solid game objects, check the reachable
+scene-footprint perimeter; for mounted decorations, retain collision-edge checks.
+Invalidate cached objects on scene/plane changes and backwards ticks before
+using reachability as persistent blacklist evidence.
+
+**Why this matters:** a reachable jewellery box was rejected because template
+and live-scene geometry were mixed during hosted-house recovery.
+
+**Defensive check:** `Rs2TileObjectInstanceReachabilityTest` uses different raw
+and template coordinates/planes and verifies both access and a genuinely blocked
+crossing. `Rs2TileObjectCacheTest` covers scene replacement and backwards ticks.
+
+## 28. Reject the host only on confirmed disconnection
+
+Observe loaded collision, all relevant facility copies and an unchanged house
+generation/position before persisting a rejected advertised host. Loading,
+movement, missing facilities, closed doors and failed menu clicks are not proof
+of a permanently blocked house. Unknown manually entered hosts must not inherit
+the last advertised owner's name. Use House Options / Leave House if the portal
+is absent or unreachable, and keep recovery bounded and owner-cancellable.
+
+**Why this matters:** a dispatched talisman click previously reported success
+without arrival and retried indefinitely. The native direct action is `Glade`,
+not the routing label `Xeric's Glade`; resolve actual actions or use its menu.
+
+**Defensive check:** `PohFacilityAccessTest`, `World330HostedHouseAccessTest` and
+`PohMenuInteractionTest` cover failure classification, persistent-name handling,
+actual action captions, reachable copies and landing evidence.

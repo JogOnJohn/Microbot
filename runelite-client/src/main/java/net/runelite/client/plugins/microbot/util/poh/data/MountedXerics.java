@@ -39,7 +39,15 @@ public enum MountedXerics implements PohTeleport {
                 .fromWorldView().withIds(java.util.Arrays.stream(IDS).mapToInt(Integer::intValue).toArray())
                 .nearestReachable();
         if (reachable != null) {
-            if (reachable.getId() == objectId) return reachable.click(destinationName);
+            if (reachable.getId() == objectId) {
+                var composition = reachable.getObjectComposition();
+                String[] actions = composition == null ? null : composition.getActions();
+                if (actions != null) for (String action : actions) {
+                    if (action != null && (action.equalsIgnoreCase(destinationName)
+                            || action.equalsIgnoreCase(destinationName.replace("Xeric's ", ""))))
+                        return reachable.click(action);
+                }
+            }
             return PohMenuInteraction.select(destinationName, () -> reachable.click("Teleport menu"),
                     () -> new Widget[]{Rs2Widget.getWidget(InterfaceID.MENU, 3),
                             Rs2Widget.getWidget(InterfaceID.MENU, 0), Rs2Widget.getWidget(InterfaceID.MENU_NEW, 1)});
