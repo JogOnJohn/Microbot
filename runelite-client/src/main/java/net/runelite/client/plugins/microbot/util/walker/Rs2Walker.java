@@ -13012,7 +13012,8 @@ public class Rs2Walker {
             WalkerState state = walkWithStateInternal(target, distance);
             if (state == WalkerState.ARRIVED) {
                 WebWalkLog.bankWalkDebug("arrived goal={}", target);
-            } else if (state == WalkerState.UNREACHABLE || state == WalkerState.EXIT) {
+            } else if (shouldReportBankWalkFailure(state,
+                    walkCompletionContext.get() != null && walkCompletionContext.get().met)) {
                 WebWalkLog.bankWalkFailed(target, state);
                 setTarget(null, "rs2walker:walkWithBankedTransports:direct-walk-failed");
                 return state;
@@ -13057,6 +13058,11 @@ public class Rs2Walker {
      * on ordinary detours around buildings. Anything above this is a real detour — a gate the
      * player lacks the item/fare for — and the banked flow must get its chance to fetch it.
      */
+    static boolean shouldReportBankWalkFailure(WalkerState state, boolean interactionCompleted) {
+        return state == WalkerState.UNREACHABLE
+                || (state == WalkerState.EXIT && !interactionCompleted);
+    }
+
     static int shortWalkDirectPathCeiling(int chebyshevDistance) {
         return Math.max(60, chebyshevDistance * 3);
     }
