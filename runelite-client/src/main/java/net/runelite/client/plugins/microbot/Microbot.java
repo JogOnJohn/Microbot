@@ -12,6 +12,7 @@ import net.runelite.api.*;
 import net.runelite.api.annotations.Component;
 import net.runelite.api.annotations.Varbit;
 import net.runelite.api.annotations.Varp;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
@@ -193,7 +194,8 @@ public class Microbot {
     private static GameState lastGameState = null;
 
     public static boolean cantReachTarget = false;
-    public static boolean cantHopWorld = false;
+    public static volatile boolean cantHopWorld = false;
+    private static volatile WorldPoint cantHopWorldLocation = null;
 
     public static int cantReachTargetRetries = 0;
 
@@ -371,11 +373,11 @@ public class Microbot {
             log.error("Already hopping world");
             return true;
         }
-        if (Microbot.cantHopWorld) {
-            log.error("Can't hop world, already trying to hop");
-            return false;
-        }
         if (Microbot.getClient().getWorld() != worldNumber) {
+            if (isNonMembersHopRefused(worldNumber)) {
+                log.error("Can't hop to non-members world {} from a members-only area", worldNumber);
+                return false;
+            }
             String blocker = Microbot.getClientThread().runOnClientThreadOptional(Microbot::hopBlocker).orElse(null);
             if (blocker != null) {
                 log.error(blocker);
@@ -468,6 +470,27 @@ public class Microbot {
             log.error("Failed to hop to world {}", worldNumber);
         }
         return success;
+    }
+
+    public static void markNonMembersHopRefused(WorldPoint location) {
+        cantHopWorldLocation = location;
+        cantHopWorld = true;
+    }
+
+    static boolean isNonMembersHopRefused(int worldNumber) {
+        if (!cantHopWorld) {
+            return false;
+        }
+        WorldPoint refusedAt = cantHopWorldLocation;
+        if (refusedAt == null || !refusedAt.equals(Rs2Player.getWorldLocation())) {
+            cantHopWorld = false;
+            cantHopWorldLocation = null;
+            return false;
+        }
+        WorldService service = getWorldService();
+        net.runelite.http.api.worlds.WorldResult worlds = service == null ? null : service.getWorlds();
+        World world = worlds == null ? null : worlds.findWorld(worldNumber);
+        return world != null && !world.getTypes().contains(net.runelite.http.api.worlds.WorldType.MEMBERS);
     }
 
     private static String hopBlocker() {

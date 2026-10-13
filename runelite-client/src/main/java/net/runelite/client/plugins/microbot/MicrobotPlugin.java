@@ -496,7 +496,7 @@ public class MicrobotPlugin extends Plugin
 			String msg = event.getMessage();
 			if (msg != null && containsIgnoreCase(msg, "you can't log into a non-members"))
 			{
-				Microbot.cantHopWorld = true;
+				Microbot.markNonMembersHopRefused(Rs2Player.getWorldLocation());
 			}
 
 			// Leagues: "haven't unlocked access to X area" -> blacklist last transport dest.
