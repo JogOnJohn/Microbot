@@ -1981,8 +1981,8 @@ public class Rs2Player {
         GameState state = Microbot.getClientThread().runOnClientThreadOptional(
                 () -> Microbot.getClient().getGameState()).orElse(GameState.UNKNOWN);
         if (state != GameState.LOGGED_IN && state != GameState.LOGIN_SCREEN) return TerminalLogoutState.INPUT_BLOCKED;
-        requestSuppression.run();
         if (state == GameState.LOGIN_SCREEN) return TerminalLogoutState.LOGGED_OUT;
+        requestSuppression.run();
         if (Rs2Bank.isOpen()) {
             return Rs2Widget.clickChildWidget(786434, 11)
                     ? TerminalLogoutState.BANK_CLOSING : TerminalLogoutState.INPUT_BLOCKED;

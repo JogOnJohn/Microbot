@@ -51,7 +51,11 @@ public class AutoLoginPlugin extends Plugin {
 
     @Subscribe
     public void onAutoLoginSuppressionRequest(AutoLoginSuppressionRequest event) {
-        accountSelectorScript.suppressAutoLogin();
+        if (event.isRenewal()) {
+            accountSelectorScript.renewAutoLoginSuppression();
+        } else {
+            accountSelectorScript.suppressAutoLogin();
+        }
     }
 
     @Subscribe

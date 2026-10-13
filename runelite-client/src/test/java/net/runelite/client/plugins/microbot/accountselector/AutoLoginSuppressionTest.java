@@ -86,4 +86,44 @@ public class AutoLoginSuppressionTest {
         clock.set(AutoLoginSuppression.AWAIT_LOGOUT_MILLIS * 2);
         assertFalse(suppression.isSuppressed());
     }
+
+    @Test public void renewalRestartsThePendingDeadline() {
+        AtomicLong clock = new AtomicLong();
+        AutoLoginSuppression suppression = new AutoLoginSuppression(clock::get);
+        suppression.request();
+        clock.set(AutoLoginSuppression.AWAIT_LOGOUT_MILLIS - 1);
+        suppression.renew();
+        clock.set(AutoLoginSuppression.AWAIT_LOGOUT_MILLIS * 2 - 2);
+        assertTrue(suppression.isSuppressed());
+        suppression.observe(GameState.LOGIN_SCREEN);
+        clock.set(AutoLoginSuppression.AWAIT_LOGOUT_MILLIS * 10);
+        assertTrue(suppression.isSuppressed());
+    }
+
+    @Test public void renewalNeverReblocksAClearedOrExpiredRequest() {
+        AtomicLong clock = new AtomicLong();
+        AutoLoginSuppression suppression = new AutoLoginSuppression(clock::get);
+        suppression.renew();
+        assertFalse(suppression.isSuppressed());
+        suppression.request();
+        suppression.clear();
+        suppression.renew();
+        assertFalse(suppression.isSuppressed());
+        suppression.request();
+        clock.set(AutoLoginSuppression.AWAIT_LOGOUT_MILLIS);
+        suppression.renew();
+        assertFalse(suppression.isSuppressed());
+    }
+
+    @Test public void renewalAfterLogoutKeepsWaitingForManualLogin() {
+        AtomicLong clock = new AtomicLong();
+        AutoLoginSuppression suppression = new AutoLoginSuppression(clock::get);
+        suppression.request();
+        suppression.observe(GameState.LOGIN_SCREEN);
+        suppression.renew();
+        clock.set(AutoLoginSuppression.AWAIT_LOGOUT_MILLIS * 10);
+        assertTrue(suppression.isSuppressed());
+        suppression.observe(GameState.LOGGED_IN);
+        assertFalse(suppression.isSuppressed());
+    }
 }

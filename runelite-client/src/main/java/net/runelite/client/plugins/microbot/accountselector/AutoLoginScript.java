@@ -92,6 +92,10 @@ public class AutoLoginScript extends Script {
         suppression.request();
     }
 
+    void renewAutoLoginSuppression() {
+        suppression.renew();
+    }
+
     void resumeAutoLogin() {
         suppression.clear();
     }

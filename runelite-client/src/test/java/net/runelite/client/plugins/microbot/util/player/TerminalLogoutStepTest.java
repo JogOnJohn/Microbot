@@ -41,8 +41,8 @@ public class TerminalLogoutStepTest {
         }
     }
 
-    @Test public void loginScreenConfirmsLogoutWithSuppression() throws Exception {
-        check(GameState.LOGIN_SCREEN,false,Rs2Player.TerminalLogoutState.LOGGED_OUT,1);
+    @Test public void loginScreenConfirmsLogoutWithoutAnUncompletableSuppression() throws Exception {
+        check(GameState.LOGIN_SCREEN,false,Rs2Player.TerminalLogoutState.LOGGED_OUT,0);
     }
 
     @Test public void clientThreadCannotDispatchOrRequestSuppression() throws Exception {
