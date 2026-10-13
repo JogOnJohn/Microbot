@@ -44,6 +44,7 @@ public class Rs2TileObjectCacheTest
 	private Client client;
 	private ClientThread clientThread;
 	private Scene scene;
+	private WorldView worldView;
 	private Rs2TileObjectCache cache;
 
 	@Before
@@ -85,7 +86,7 @@ public class Rs2TileObjectCacheTest
 		tiles[0][0][0] = tile;
 		when(scene.getTiles()).thenAnswer(invocation -> guarded(tiles));
 
-		WorldView worldView = mock(WorldView.class);
+		worldView = mock(WorldView.class);
 		when(worldView.getId()).thenAnswer(invocation -> guarded(WORLD_VIEW_ID));
 		when(worldView.getScene()).thenAnswer(invocation -> guarded(scene));
 		when(worldView.getPlane()).thenAnswer(invocation -> guarded(0));
@@ -94,6 +95,7 @@ public class Rs2TileObjectCacheTest
 		when(client.getTickCount()).thenAnswer(invocation -> guarded(tick.get()));
 		when(client.getLocalPlayer()).thenAnswer(invocation -> guarded(player));
 		when(client.getWorldView(WORLD_VIEW_ID)).thenAnswer(invocation -> guarded(worldView));
+		when(client.getTopLevelWorldView()).thenAnswer(invocation -> guarded(worldView));
 
 		Microbot.getWorldViewIds().add(WORLD_VIEW_ID);
 		cache = new Rs2TileObjectCache(client, clientThread);
@@ -135,6 +137,21 @@ public class Rs2TileObjectCacheTest
 		tick.incrementAndGet();
 		assertEquals(2, cache.getStream().count());
 		verify(scene, times(2)).getTiles();
+	}
+
+	@Test public void backwardsTickCannotReuseAnOldHouseSnapshot() {
+		assertEquals(2, cache.getStream().count());
+		tick.set(1);
+		assertEquals(2, cache.getStream().count());
+		verify(scene, times(2)).getTiles();
+	}
+
+	@Test public void changedSceneAtSameTickInvalidatesObjects() {
+		assertEquals(2, cache.getStream().count());
+		Scene replacement = mock(Scene.class);
+		when(replacement.getTiles()).thenAnswer(invocation -> guarded(new Tile[1][1][1]));
+		doReturn(replacement).when(worldView).getScene();
+		assertEquals(0, cache.getStream().count());
 	}
 
 	@Test

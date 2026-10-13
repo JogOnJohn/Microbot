@@ -5,6 +5,7 @@ import com.google.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.GameObject;
 import net.runelite.api.Player;
+import net.runelite.api.Scene;
 import net.runelite.api.Tile;
 import net.runelite.api.WorldView;
 import net.runelite.client.callback.ClientThread;
@@ -22,7 +23,9 @@ public final class Rs2TileObjectCache {
     private final Client client;
     private final ClientThread clientThread;
 
-    private volatile int lastUpdateObjects = 0;
+    private volatile int lastUpdateObjects = -1;
+    private volatile Scene lastScene;
+    private volatile int lastPlane = -1;
     private volatile List<Rs2TileObjectModel> tileObjects = new ArrayList<>();
 
     @Inject
@@ -43,7 +46,10 @@ public final class Rs2TileObjectCache {
     public Stream<Rs2TileObjectModel> getStream() {
         return clientThread.runOnClientThreadOptional(() -> {
             int tick = client.getTickCount();
-            if (lastUpdateObjects >= tick) {
+            WorldView primary = client.getTopLevelWorldView();
+            Scene scene = primary == null ? null : primary.getScene();
+            int plane = primary == null ? -1 : primary.getPlane();
+            if (lastUpdateObjects == tick && lastScene == scene && lastPlane == plane) {
                 return tileObjects;
             }
 
@@ -84,6 +90,8 @@ public final class Rs2TileObjectCache {
             }
             tileObjects = result;
             lastUpdateObjects = tick;
+            lastScene = scene;
+            lastPlane = plane;
             return result;
         }).orElse(Collections.emptyList()).stream();
     }
