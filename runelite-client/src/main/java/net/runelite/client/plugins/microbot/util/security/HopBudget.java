@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.util.security;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.proxy.ProxyConfiguration;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -9,9 +10,14 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
@@ -43,20 +49,49 @@ public final class HopBudget {
     }
 
     public static String networkKey() {
-        String proxyHost = System.getProperty("socksProxyHost");
-        if (proxyHost == null || proxyHost.isBlank()) {
+        return networkKey(System.getProperty("socksProxyHost"), System.getProperty("socksProxyPort"),
+                ProxyConfiguration.getUsername());
+    }
+
+    static String networkKey(String host, String port, String username) {
+        if (host == null || host.isBlank()) {
             return "direct";
         }
-        return "proxy." + proxyHost.trim().replaceAll("[^A-Za-z0-9._-]", "_");
+        StringBuilder key = new StringBuilder("proxy.").append(sanitize(host));
+        if (port != null && !port.isBlank()) {
+            key.append('_').append(sanitize(port));
+        }
+        if (username != null && !username.isEmpty()) {
+            key.append('.').append(digest(username));
+        }
+        return key.toString();
+    }
+
+    private static String digest(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8; i++) {
+                hex.append(String.format("%02x", hash[i]));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static String sanitize(String value) {
+        return value.trim().replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     public void persistTo(Path file, String networkKey) {
         store = new FileStore(file, networkKey, store);
+        store.update(UnaryOperator.identity());
     }
 
     public void configure(boolean enabled, int capacity, int refillPerHour, int reserve) {
         this.capacity = Math.max(1, capacity);
-        this.refillPerHour = Math.max(0, refillPerHour);
+        this.refillPerHour = Math.max(1, refillPerHour);
         this.reserve = Math.min(Math.max(0, reserve), this.capacity - 1);
         this.enabled = enabled;
     }
@@ -70,18 +105,19 @@ public final class HopBudget {
     }
 
     public long millisUntilHopAllowed() {
-        if (!enabled) {
-            return 0L;
-        }
-        double missing = reserve + 1 - current().tokens;
+        return enabled ? millisUntil(current()) : 0L;
+    }
+
+    public long cachedMillisUntilHopAllowed() {
+        return enabled ? millisUntil(refill(store.peek(), clock.getAsLong())) : 0L;
+    }
+
+    private long millisUntil(State state) {
+        double missing = reserve + 1 - state.tokens;
         if (missing <= 0) {
             return 0L;
         }
-        double perMilli = refillPerMilli();
-        if (perMilli <= 0) {
-            return Long.MAX_VALUE;
-        }
-        return Math.max(1L, (long) Math.ceil(missing / perMilli));
+        return Math.max(1L, (long) Math.ceil(missing / refillPerMilli()));
     }
 
     public void recordHop() {
@@ -102,7 +138,9 @@ public final class HopBudget {
     }
 
     private State current() {
-        return refill(store.update(UnaryOperator.identity()), clock.getAsLong());
+        long now = clock.getAsLong();
+        return refill(store.update(state -> state != null && state.updatedAt > now
+                ? new State(state.tokens, now) : state), now);
     }
 
     private State refill(State state, long now) {
@@ -130,6 +168,8 @@ public final class HopBudget {
 
     interface Store {
         State update(UnaryOperator<State> change);
+
+        State peek();
     }
 
     static final class MemoryStore implements Store {
@@ -147,10 +187,16 @@ public final class HopBudget {
             state = change.apply(state);
             return state;
         }
+
+        @Override
+        public synchronized State peek() {
+            return state;
+        }
     }
 
     static final class FileStore implements Store {
         private final Path file;
+        private final Path lockFile;
         private final String tokensKey;
         private final String updatedAtKey;
         private final MemoryStore fallback;
@@ -158,6 +204,7 @@ public final class HopBudget {
 
         FileStore(Path file, String networkKey, Store seed) {
             this.file = file;
+            this.lockFile = file.resolveSibling(file.getFileName() + ".lock");
             this.tokensKey = networkKey + ".tokens";
             this.updatedAtKey = networkKey + ".updatedAt";
             this.fallback = new MemoryStore(seed.update(UnaryOperator.identity()));
@@ -168,16 +215,16 @@ public final class HopBudget {
             boolean interrupted = Thread.interrupted();
             try {
                 Files.createDirectories(file.toAbsolutePath().getParent());
-                try (FileChannel channel = FileChannel.open(file, StandardOpenOption.CREATE,
-                        StandardOpenOption.READ, StandardOpenOption.WRITE);
+                try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.CREATE,
+                        StandardOpenOption.WRITE);
                      FileLock ignored = channel.lock()) {
-                    Properties properties = read(channel);
+                    Properties properties = read();
                     State current = parse(properties);
                     State next = change.apply(current);
                     if (next != current && next != null) {
                         properties.setProperty(tokensKey, Double.toString(next.tokens));
                         properties.setProperty(updatedAtKey, Long.toString(next.updatedAt));
-                        write(channel, properties);
+                        write(properties);
                     }
                     fallback.update(state -> next);
                     return next;
@@ -195,6 +242,11 @@ public final class HopBudget {
             }
         }
 
+        @Override
+        public State peek() {
+            return fallback.peek();
+        }
+
         private State parse(Properties properties) {
             String tokens = properties.getProperty(tokensKey);
             String updatedAt = properties.getProperty(updatedAtKey);
@@ -202,31 +254,48 @@ public final class HopBudget {
                 return null;
             }
             try {
-                return new State(Double.parseDouble(tokens), Long.parseLong(updatedAt));
+                double parsedTokens = Double.parseDouble(tokens);
+                if (!Double.isFinite(parsedTokens) || parsedTokens < 0) {
+                    return null;
+                }
+                return new State(parsedTokens, Long.parseLong(updatedAt));
             } catch (NumberFormatException e) {
                 return null;
             }
         }
 
-        private static Properties read(FileChannel channel) throws IOException {
-            ByteBuffer buffer = ByteBuffer.allocate((int) channel.size());
-            while (buffer.hasRemaining() && channel.read(buffer, buffer.position()) > 0) {
-            }
+        private Properties read() throws IOException {
             Properties properties = new Properties();
-            properties.load(new StringReader(new String(buffer.array(), 0, buffer.position(), StandardCharsets.UTF_8)));
+            byte[] bytes;
+            try {
+                bytes = Files.readAllBytes(file);
+            } catch (NoSuchFileException e) {
+                return properties;
+            }
+            properties.load(new StringReader(new String(bytes, StandardCharsets.UTF_8)));
             return properties;
         }
 
-        private static void write(FileChannel channel, Properties properties) throws IOException {
+        private void write(Properties properties) throws IOException {
             StringWriter writer = new StringWriter();
             properties.store(writer, null);
             ByteBuffer buffer = ByteBuffer.wrap(writer.toString().getBytes(StandardCharsets.UTF_8));
-            channel.truncate(0);
-            long position = 0;
-            while (buffer.hasRemaining()) {
-                position += channel.write(buffer, position);
+            Path temp = Files.createTempFile(file.toAbsolutePath().getParent(), file.getFileName().toString(), ".tmp");
+            try {
+                try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+                    while (buffer.hasRemaining()) {
+                        channel.write(buffer);
+                    }
+                    channel.force(false);
+                }
+                try {
+                    Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } finally {
+                Files.deleteIfExists(temp);
             }
-            channel.force(false);
         }
     }
 }

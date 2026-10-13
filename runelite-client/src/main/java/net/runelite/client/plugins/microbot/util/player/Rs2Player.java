@@ -1711,12 +1711,13 @@ public class Rs2Player {
      * @return {@code true} if the player's idle time exceeds or equals the adjusted timeout, {@code false} otherwise.
      */
     public static boolean checkIdleLogout(long randomDelay) {
-        long idleClientTicks = Long.min(
-                Microbot.getClient().getMouseIdleTicks(),
-                Microbot.getClient().getKeyboardIdleTicks()
-        );
-
-        return idleClientTicks >= Microbot.getClient().getIdleTimeout() - randomDelay;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            long idleClientTicks = Long.min(
+                    Microbot.getClient().getMouseIdleTicks(),
+                    Microbot.getClient().getKeyboardIdleTicks()
+            );
+            return idleClientTicks >= Microbot.getClient().getIdleTimeout() - randomDelay;
+        }).orElse(false);
     }
 
     /**

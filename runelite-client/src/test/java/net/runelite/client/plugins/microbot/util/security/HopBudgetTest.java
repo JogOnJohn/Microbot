@@ -134,6 +134,63 @@ public class HopBudgetTest {
         assertEquals(29, budget.available());
     }
 
+    @Test public void nonFiniteOrNegativeTokensAreTreatedAsAFullBudget() throws Exception {
+        for (String tokens : new String[]{"NaN", "Infinity", "-5"}) {
+            Path file = folder.newFolder().toPath().resolve(HopBudget.FILE_NAME);
+            Files.write(file, ("direct.tokens=" + tokens + "\ndirect.updatedAt=" + clock.get() + "\n")
+                    .getBytes(StandardCharsets.UTF_8));
+            HopBudget budget = budget(30, 5);
+            budget.persistTo(file, "direct");
+            assertEquals(tokens, 30, budget.available());
+            assertEquals(tokens, 0L, budget.millisUntilHopAllowed());
+        }
+    }
+
+    @Test public void writesLeaveNoTemporaryFilesBehind() throws Exception {
+        Path file = folder.getRoot().toPath().resolve(HopBudget.FILE_NAME);
+        HopBudget budget = budget(30, 5);
+        budget.persistTo(file, "direct");
+        hop(budget, 3);
+        try (java.util.stream.Stream<Path> files = Files.list(folder.getRoot().toPath())) {
+            assertEquals(java.util.Set.of(HopBudget.FILE_NAME, HopBudget.FILE_NAME + ".lock"),
+                    files.map(path -> path.getFileName().toString()).collect(java.util.stream.Collectors.toSet()));
+        }
+        assertTrue(new String(Files.readAllBytes(file), StandardCharsets.UTF_8).contains("direct.tokens=27"));
+    }
+
+    @Test public void storedTimestampInTheFutureIsRepairedSoRefillResumes() throws Exception {
+        Path file = folder.getRoot().toPath().resolve(HopBudget.FILE_NAME);
+        HopBudget budget = budget(30, 5);
+        budget.persistTo(file, "direct");
+        hop(budget, 25);
+        clock.addAndGet(-TimeUnit.HOURS.toMillis(1));
+        assertTrue(budget.millisUntilHopAllowed() > 0);
+        clock.addAndGet(ONE_TOKEN_MILLIS);
+        assertEquals(0L, budget.millisUntilHopAllowed());
+    }
+
+    @Test public void zeroRefillRateIsClampedSoWaitsStayFinite() {
+        HopBudget budget = new HopBudget(clock::get, new HopBudget.MemoryStore());
+        budget.configure(true, 30, 0, 5);
+        hop(budget, 25);
+        assertTrue(Math.abs(budget.millisUntilHopAllowed() - TimeUnit.HOURS.toMillis(1)) <= 1);
+    }
+
+    @Test public void cachedWaitUsesThisClientsLastKnownState() throws Exception {
+        Path file = folder.getRoot().toPath().resolve(HopBudget.FILE_NAME);
+        HopBudget first = budget(30, 5);
+        first.persistTo(file, "direct");
+        HopBudget second = budget(30, 5);
+        second.persistTo(file, "direct");
+        assertEquals(0L, first.cachedMillisUntilHopAllowed());
+        hop(second, 25);
+        assertEquals(0L, first.cachedMillisUntilHopAllowed());
+        assertTrue(first.millisUntilHopAllowed() > 0);
+        assertTrue(first.cachedMillisUntilHopAllowed() > 0);
+        first.configure(false, 30, 93, 5);
+        assertEquals(0L, first.cachedMillisUntilHopAllowed());
+    }
+
     @Test public void unwritableFileFallsBackToThisClientOnly() throws Exception {
         Path directory = folder.newFolder("blocked").toPath();
         HopBudget budget = budget(30, 5);
@@ -145,20 +202,55 @@ public class HopBudgetTest {
     }
 
     @Test public void networkKeyFollowsTheSocksProxy() {
-        String previous = System.getProperty("socksProxyHost");
+        String previousHost = System.getProperty("socksProxyHost");
+        String previousPort = System.getProperty("socksProxyPort");
         try {
             System.clearProperty("socksProxyHost");
+            System.clearProperty("socksProxyPort");
             assertEquals("direct", HopBudget.networkKey());
             System.setProperty("socksProxyHost", "proxy.example.com");
-            assertEquals("proxy.proxy.example.com", HopBudget.networkKey());
-            System.setProperty("socksProxyHost", "fe80::1");
-            assertEquals("proxy.fe80__1", HopBudget.networkKey());
+            System.setProperty("socksProxyPort", "10001");
+            assertEquals("proxy.proxy.example.com_10001", HopBudget.networkKey());
         } finally {
-            if (previous == null) {
-                System.clearProperty("socksProxyHost");
-            } else {
-                System.setProperty("socksProxyHost", previous);
-            }
+            restore("socksProxyHost", previousHost);
+            restore("socksProxyPort", previousPort);
+        }
+    }
+
+    @Test public void networkKeySeparatesProxyPortsAndUsersWithoutStoringTheUsername() {
+        assertEquals("direct", HopBudget.networkKey(null, "1080", "user"));
+        assertEquals("direct", HopBudget.networkKey(" ", "1080", "user"));
+        assertEquals("proxy.fe80__1_1080", HopBudget.networkKey("fe80::1", "1080", null));
+        assertNotEquals(HopBudget.networkKey("gate.example.com", "10001", null),
+                HopBudget.networkKey("gate.example.com", "10002", null));
+        String first = HopBudget.networkKey("gate.example.com", "7000", "customer-session-a");
+        String second = HopBudget.networkKey("gate.example.com", "7000", "customer-session-b");
+        assertNotEquals(first, second);
+        assertFalse(first.contains("customer"));
+        assertTrue(first.matches("[A-Za-z0-9._-]+"));
+    }
+
+    @Test public void networkKeyUsernamesWithEqualHashCodesGetSeparateKeys() {
+        assertEquals("Aa".hashCode(), "BB".hashCode());
+        assertNotEquals(HopBudget.networkKey("gate.example.com", "7000", "Aa"),
+                HopBudget.networkKey("gate.example.com", "7000", "BB"));
+    }
+
+    @Test public void freshClientReadsTheSharedFileBeforeAnsweringFromCache() throws Exception {
+        Path file = folder.getRoot().toPath().resolve(HopBudget.FILE_NAME);
+        HopBudget first = budget(30, 5);
+        first.persistTo(file, "direct");
+        hop(first, 25);
+        HopBudget fresh = budget(30, 5);
+        fresh.persistTo(file, "direct");
+        assertTrue(fresh.cachedMillisUntilHopAllowed() > 0);
+    }
+
+    private static void restore(String property, String value) {
+        if (value == null) {
+            System.clearProperty(property);
+        } else {
+            System.setProperty(property, value);
         }
     }
 }
