@@ -4,6 +4,19 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class BankRouteCostTest {
+    @Test public void lowerBoundIsStrictAndOverflowSafe() {
+        assertTrue(BankRouteCost.cannotBeatDirect(103, 24, 80));
+        assertFalse(BankRouteCost.cannotBeatDirect(104, 24, 80));
+        assertFalse(BankRouteCost.cannotBeatDirect(105, 24, 80));
+        assertFalse(BankRouteCost.cannotBeatDirect(0, 0, 0));
+        assertFalse(BankRouteCost.cannotBeatDirect(-1, 24, 80));
+        assertFalse(BankRouteCost.cannotBeatDirect(Integer.MAX_VALUE, 24, 80));
+        assertTrue(BankRouteCost.cannotBeatDirect(Integer.MAX_VALUE - 1,
+                Integer.MAX_VALUE, Integer.MAX_VALUE));
+        for (int cost = 0; cost < 104; cost++)
+            for (int bank = 0; bank < 150; bank++)
+                assertFalse(BankRouteCost.prefersBank(cost, bank, 24, 80, true));
+    }
     @Test
     public void observedOverheadConvertsToRunningTilesAndDiscountsOpenBank() {
         assertEquals(24, BankRouteCost.interactionOverheadTiles(7, false));

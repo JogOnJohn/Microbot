@@ -12996,9 +12996,24 @@ public class Rs2Walker {
         long compareStartedAt = System.currentTimeMillis();
         long compareFromWalkStart = routeState.walkSessionStartedAtMs > 0 ? compareStartedAt - routeState.walkSessionStartedAtMs : 0L;
         WebWalkLog.tmark("compare_start", compareFromWalkStart, target, pl, "bank_vs_direct");
-        TransportRouteAnalysis comparison = compareRoutes(target);
+        int minBankRouteSavings = config != null ? config.minBankRouteSavings() : 0;
+        boolean preferTransportToTarget = config != null && config.preferTransportToTarget();
+        int overhead = BankRouteCost.interactionOverheadTiles(
+                config == null ? 7 : config.bankInteractionOverheadSeconds(), Rs2Bank.isOpen());
+        TransportRouteAnalysis comparison = Rs2WalkerBankingPlanner.compareRoutes(pl, target,
+                overhead, minBankRouteSavings, !forceBanking);
         WebWalkLog.tmark("compare_done", System.currentTimeMillis() - compareStartedAt, target, pl,
                 "direct=" + comparison.getDirectDistance() + " bank=" + comparison.getBankingRouteDistance());
+        boolean bankRouteIsBetter = BankRouteCost.prefersBank(comparison.getDirectDistance(),
+                comparison.getBankingRouteDistance(), overhead, minBankRouteSavings, preferTransportToTarget);
+        if (!forceBanking && (comparison.isBankComparisonSkipped()
+                || (comparison.getDirectDistance() >= 0 && comparison.getDirectDistance() != Integer.MAX_VALUE
+                    && !bankRouteIsBetter))) {
+            WebWalkLog.spInfo("bank_walk | direct_before_item_extraction direct={} bankTravel={} bound={} goal={}",
+                    comparison.getDirectDistance(), comparison.getBankingRouteDistance(),
+                    comparison.isBankComparisonSkipped(), target);
+            return walkWithStateInternal(target, distance);
+        }
         List<Transport> missingTransports = getMissingTransports(getTransportsForDestination(target, true, TransportType.TELEPORTATION_SPELL));
 
         Map<Integer, Integer> missingItemsWithQuantities = getMissingTransportItemIdsWithQuantities(missingTransports);
@@ -13022,12 +13037,6 @@ public class Rs2Walker {
         } else {
             // Compare routes if we have missing items that could be obtained from bank
             // Use config for minimum bank route savings
-            int minBankRouteSavings = config != null ? config.minBankRouteSavings() : 0;
-            boolean preferTransportToTarget = config != null && config.preferTransportToTarget();
-            int overhead = BankRouteCost.interactionOverheadTiles(
-                    config == null ? 7 : config.bankInteractionOverheadSeconds(), Rs2Bank.isOpen());
-            boolean bankRouteIsBetter = BankRouteCost.prefersBank(comparison.getDirectDistance(),
-                    comparison.getBankingRouteDistance(), overhead, minBankRouteSavings, preferTransportToTarget);
             WebWalkLog.spInfo("bank_walk | scored direct={} bankTravel={} interactionOverhead={} minSaving={} preferBank={} forced={}",
                     comparison.getDirectDistance(), comparison.getBankingRouteDistance(), overhead,
                     minBankRouteSavings, bankRouteIsBetter, forceBanking);

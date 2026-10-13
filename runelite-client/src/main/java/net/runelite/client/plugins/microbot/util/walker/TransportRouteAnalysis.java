@@ -41,6 +41,7 @@ public class TransportRouteAnalysis {
     
     /** Summary text describing the analysis results and recommendation */
     private final String analysis;
+    private final boolean bankComparisonSkipped;
     
     /**
      * Constructs a complete transport route analysis result.
@@ -64,6 +65,14 @@ public class TransportRouteAnalysis {
                                 BankLocation nearestBank, WorldPoint bankLocation, List<WorldPoint> pathToBank,
                                 List<WorldPoint> pathFromBank, String analysis,
                                 int directDistance, int bankingRouteDistance) {
+        this(directPath, nearestBank, bankLocation, pathToBank, pathFromBank, analysis,
+                directDistance, bankingRouteDistance, false);
+    }
+
+    private TransportRouteAnalysis(List<WorldPoint> directPath,
+            BankLocation nearestBank, WorldPoint bankLocation, List<WorldPoint> pathToBank,
+            List<WorldPoint> pathFromBank, String analysis, int directDistance,
+            int bankingRouteDistance, boolean bankComparisonSkipped) {
         this.directPath = directPath;
         this.nearestBank = nearestBank;
         this.bankLocation = bankLocation;
@@ -72,6 +81,13 @@ public class TransportRouteAnalysis {
         this.analysis = analysis;
         this.directDistance = directDistance;
         this.bankingRouteDistance = bankingRouteDistance;
+        this.bankComparisonSkipped = bankComparisonSkipped;
+    }
+
+    public static TransportRouteAnalysis directByBound(List<WorldPoint> path, int distance) {
+        return new TransportRouteAnalysis(new ArrayList<>(path), null, null,
+                java.util.Collections.emptyList(), java.util.Collections.emptyList(),
+                "Direct route proven by bank cost lower bound", distance, -1, true);
     }
     
     /**

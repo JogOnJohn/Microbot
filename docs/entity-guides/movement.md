@@ -439,3 +439,15 @@ unchanged; this is not permission to reuse stale routes or availability.
 
 **Defensive check:** `TransportRefusalLedgerTest`, `Rs2WalkerPreparationReuseTest`
 and both backend refusal-routing tests cover ownership and exclusion restoration.
+
+## 24. Prove a complete direct route before skipping a bank alternative
+
+A bank detour cannot beat a complete inventory-only direct route whose comparison
+cost is strictly below bank interaction overhead plus the required saving. Apply
+that bound before calculating bank legs and extracting missing items. Retain
+forced banking and bank-mirror bootstrap. A partial path ending near the goal is
+not proof of completion: the new bound checks both exact endpoints. Restore bank
+mode in `finally`, and never reuse a quote across target or eligibility changes.
+
+**Defensive check:** `BankRouteCostTest` covers equality/ties and overflow;
+`DirectBankBoundTest` rejects nearby partials, wrong planes and wrong starts.

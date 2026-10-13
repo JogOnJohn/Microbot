@@ -262,6 +262,11 @@ public final class Rs2WalkerBankingPlanner {
     }
 
     public static TransportRouteAnalysis compareRoutes(WorldPoint startPoint, WorldPoint target) {
+        return compareRoutes(startPoint, target, 0, 0, false);
+    }
+
+    public static TransportRouteAnalysis compareRoutes(WorldPoint startPoint, WorldPoint target,
+            int overhead, int minimumSaving, boolean allowBound) {
         long totalStartTime = System.nanoTime();
         StringBuilder performanceLog = new StringBuilder();
         performanceLog.append("\n\t=== compareRoutes Performance Analysis ===\n");
@@ -288,6 +293,13 @@ public final class Rs2WalkerBankingPlanner {
             double directPathTimeMs = (directPathEndTime - directPathStartTime) / 1_000_000.0;
 
             int directDistance = Rs2Walker.getTotalTilesFromPath(directPath, target);
+            if (allowBound && !originalUseBankItems && !Thread.currentThread().isInterrupted()
+                    && completeDirectProbe(directPath, startPoint, target)
+                    && BankRouteCost.cannotBeatDirect(directDistance, overhead, minimumSaving)) {
+                WebWalkLog.spInfo("bank_walk | skip_compare_cost_bound direct={} overhead={} minSaving={} goal={}",
+                        directDistance, overhead, minimumSaving, target);
+                return TransportRouteAnalysis.directByBound(directPath, directDistance);
+            }
             performanceLog.append("\t-Direct path calculation: ").append(String.format("%.2f ms", directPathTimeMs))
                     .append(" (").append(directPath.size()).append(" waypoints, ").append(directDistance).append(" tiles)\n");
 
@@ -448,6 +460,11 @@ public final class Rs2WalkerBankingPlanner {
                 Rs2PathApi.getPathfinderConfig().refresh();
             }
         }
+    }
+
+    static boolean completeDirectProbe(List<WorldPoint> path, WorldPoint start, WorldPoint target) {
+        return path != null && !path.isEmpty() && start != null && target != null
+                && start.equals(path.get(0)) && target.equals(path.get(path.size() - 1));
     }
 
     static boolean reusableBankApproach(List<WorldPoint> path, WorldPoint start, WorldPoint bank) {

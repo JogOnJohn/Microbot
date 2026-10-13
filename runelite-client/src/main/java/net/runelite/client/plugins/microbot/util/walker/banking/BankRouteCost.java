@@ -18,4 +18,9 @@ public final class BankRouteCost {
         long saving = (long) direct - bank - Math.max(0, overhead);
         return saving >= Math.max(0, minimumSaving) && (saving > 0 || preferTie);
     }
+
+    public static boolean cannotBeatDirect(int direct, int overhead, int minimumSaving) {
+        return direct >= 0 && direct != Integer.MAX_VALUE
+                && (long) direct < (long) Math.max(0, overhead) + Math.max(0, minimumSaving);
+    }
 }
