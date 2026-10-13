@@ -41,7 +41,14 @@ public final class Rs2DoorHandler {
         }
     }
 
-    public static boolean recentlyOpenedStationaryDoorOnSegment(Map<WorldPoint, Long> recentlyOpenedStationaryDoors,
+    public static void markStationaryDoorCrossingOpened(Map<String, Long> crossings,
+                                                       WorldPoint from, WorldPoint to) {
+        if (from != null && to != null && from.getPlane() == to.getPlane() && from.distanceTo2D(to) == 1) {
+            crossings.put(new DoorEdge(from, to).normalizedKey(), System.currentTimeMillis());
+        }
+    }
+
+    public static boolean recentlyOpenedStationaryDoorOnSegment(Map<String, Long> crossings,
                                                                 long suppressMs,
                                                                 WorldPoint fromWp,
                                                                 WorldPoint toWp) {
@@ -49,13 +56,10 @@ public final class Rs2DoorHandler {
                 || fromWp.distanceTo2D(toWp) > 1) {
             return false;
         }
-        final int segmentDoorSuppressDist = 2;
         long now = System.currentTimeMillis();
-        recentlyOpenedStationaryDoors.entrySet().removeIf(entry -> now - entry.getValue() > suppressMs);
-        return recentlyOpenedStationaryDoors.keySet().stream()
-                .anyMatch(door -> door != null
-                        && door.getPlane() == fromWp.getPlane()
-                        && (door.distanceTo2D(fromWp) <= segmentDoorSuppressDist || door.distanceTo2D(toWp) <= segmentDoorSuppressDist));
+        crossings.entrySet().removeIf(entry -> now - entry.getValue() > suppressMs);
+        Long openedAt = crossings.get(new DoorEdge(fromWp, toWp).normalizedKey());
+        return openedAt != null && now - openedAt >= 0 && now - openedAt < suppressMs;
     }
 
     public static boolean shouldThrottleGlobalDoorInteraction(long nextDoorInteractionAllowedAtMs) {

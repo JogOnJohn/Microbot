@@ -416,3 +416,14 @@ if the direct probe fails. Do not cache bank decisions across changing game stat
 
 **Defensive check:** `BankRouteSupplyBoundaryTest` covers supply boundaries, rejected
 object/partial paths and mode restoration on direct-probe failure.
+
+## 22. Suppress only the opened door crossing, not neighbouring doors
+
+Jess's bedroom door previously suppressed her distinct bathroom door for several
+seconds. Keep normalized crossing keys for successful segment interactions and
+release them when that live edge becomes passable. Mark only the actual opened
+object, not every nearby matching door family or every fallback component member.
+Failed/throttled dispatch is an attempt, not proof that any door opened.
+
+**Defensive check:** `StationaryDoorTransportSuppressionTest` covers Jess's two
+doors, reversed and shared-corner edges, invalid crossings and Norman's ladder.

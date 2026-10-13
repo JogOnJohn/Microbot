@@ -201,7 +201,6 @@ public class Rs2Walker {
     private static final int FINAL_ADJACENT_CANVAS_NUDGE_CHEBYSHEV = 1;
     private static final int PATH_ADJ_COMPONENT_LINK_MAX_TILE_GAP = 6;
     private static final int PATH_ADJ_COMPONENT_LINK_MAX_EDGE_GAP = 6;
-    private static final int SEGMENT_DOOR_FAMILY_MARK_RADIUS = 2;
     private static final int UNREACHABLE_DOOR_RECOVERY_BACKTRACK_EDGES = 2;
     private static final int UNREACHABLE_DOOR_RECOVERY_LOOKAHEAD_EDGES = 10;
     private static final int STALL_RECOVERY_MINIMAP_REACH_EUCLIDEAN = 10;
@@ -6179,6 +6178,7 @@ public class Rs2Walker {
     // through the same restricted door when the restriction isn't in restrictions.tsv.
     static final Set<WorldPoint> sessionBlacklistedDoors = ConcurrentHashMap.newKeySet();
     private static final Map<WorldPoint, Long> recentlyOpenedStationaryDoors = new ConcurrentHashMap<>();
+    private static final Map<String, Long> recentlyOpenedDoorCrossings = new ConcurrentHashMap<>();
     private static final long STATIONARY_DOOR_SUPPRESS_MS = 10_000;
     private static final Map<String, Long> recentDoorAttemptByEdge = new ConcurrentHashMap<>();
     private static final long DOOR_ATTEMPT_EDGE_COOLDOWN_MS = 2_500;
@@ -6589,13 +6589,13 @@ public class Rs2Walker {
                                 }
                             }
                             if (isDoorEdgeResolved(fromWp, toWp)) {
-                                markStationaryDoorOpened(probe);
-                                markNearbyDoorFamilyOpened(object, probe, action, SEGMENT_DOOR_FAMILY_MARK_RADIUS);
+                                markStationaryDoorOpened(probe, fromWp, toWp);
+                                markNearbyDoorFamilyOpened(object, probe, action, 2);
                             }
                             return true;
                         }
-                        markStationaryDoorOpened(probe);
-                        markNearbyDoorFamilyOpened(object, probe, action, SEGMENT_DOOR_FAMILY_MARK_RADIUS);
+                        markStationaryDoorOpened(probe, fromWp, toWp);
+                        markNearbyDoorFamilyOpened(object, probe, action, 2);
                     }
                     return true;
                 }
@@ -6691,8 +6691,8 @@ public class Rs2Walker {
         WorldPoint posAfter = Rs2Player.getWorldLocation();
         boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, probe, fromWp, toWp);
         if (traversed) {
-            markStationaryDoorOpened(probe);
-            markNearbyDoorFamilyOpened(object, probe, action, SEGMENT_DOOR_FAMILY_MARK_RADIUS);
+            markStationaryDoorOpened(probe, fromWp, toWp);
+            markNearbyDoorFamilyOpened(object, probe, action, 2);
             return true;
         }
         if (shouldBlacklistDoorAfterWrongTraversal(posBefore, posAfter, fromWp, toWp, Rs2Player.isMoving())) {
@@ -6714,8 +6714,8 @@ public class Rs2Walker {
         }
 
         if (isDoorEdgeResolved(fromWp, toWp)) {
-            markStationaryDoorOpened(probe);
-            markNearbyDoorFamilyOpened(object, probe, action, SEGMENT_DOOR_FAMILY_MARK_RADIUS);
+            markStationaryDoorOpened(probe, fromWp, toWp);
+            markNearbyDoorFamilyOpened(object, probe, action, 2);
         }
         return true;
     }
@@ -6766,6 +6766,11 @@ public class Rs2Walker {
 
     private static void markStationaryDoorOpened(WorldPoint doorTile) {
         Rs2DoorHandler.markStationaryDoorOpened(recentlyOpenedStationaryDoors, doorTile);
+    }
+
+    private static void markStationaryDoorOpened(WorldPoint doorTile, WorldPoint from, WorldPoint to) {
+        markStationaryDoorOpened(doorTile);
+        Rs2DoorHandler.markStationaryDoorCrossingOpened(recentlyOpenedDoorCrossings, from, to);
     }
 
     private static String doorAttemptKey(WorldPoint doorTile, WorldPoint fromWp, WorldPoint toWp) {
@@ -7308,11 +7313,16 @@ public class Rs2Walker {
     }
 
     private static boolean recentlyOpenedStationaryDoorOnSegment(WorldPoint fromWp, WorldPoint toWp) {
-        return Rs2DoorHandler.recentlyOpenedStationaryDoorOnSegment(
-                recentlyOpenedStationaryDoors,
+        boolean recent = Rs2DoorHandler.recentlyOpenedStationaryDoorOnSegment(
+                recentlyOpenedDoorCrossings,
                 STATIONARY_DOOR_SUPPRESS_MS,
                 fromWp,
                 toWp);
+        if (recent && isDoorEdgeResolved(fromWp, toWp)) {
+            recentlyOpenedDoorCrossings.remove(doorAttemptKey(null, fromWp, toWp));
+            return false;
+        }
+        return recent;
     }
 
     private static boolean wasStationaryDoorOpenedRecently(WorldPoint doorTile) {
@@ -8293,11 +8303,6 @@ public class Rs2Walker {
 		if (shouldThrottleDoorAttempt(bestLoc, bestFrom, bestTo)) {
 			WebWalkLog.spInfo("door_attempt_throttled | mode=path-adj probe={} from={} to={}",
 					compactWorldPoint(bestLoc), compactWorldPoint(bestFrom), compactWorldPoint(bestTo));
-            for (WorldPoint loc : bestComponent.locations) {
-                if (loc != null) {
-                    markStationaryDoorOpened(loc);
-                }
-            }
 			return false;
 		}
 		if (shouldThrottleGlobalDoorInteraction()) {
@@ -8318,21 +8323,11 @@ public class Rs2Walker {
 		} catch (Exception ex) {
 			WebWalkLog.spInfo("door_interact_exception | mode=path-adj probe={} from={} to={} ex={}",
 					compactWorldPoint(bestLoc), compactWorldPoint(bestFrom), compactWorldPoint(bestTo), ex.getClass().getSimpleName());
-            for (WorldPoint loc : bestComponent.locations) {
-                if (loc != null) {
-                    markStationaryDoorOpened(loc);
-                }
-            }
 			return false;
 		}
 		if (!interacted) {
 			WebWalkLog.spInfo("door_interact_failed | mode=path-adj probe={} from={} to={}",
 					compactWorldPoint(bestLoc), compactWorldPoint(bestFrom), compactWorldPoint(bestTo));
-            for (WorldPoint loc : bestComponent.locations) {
-                if (loc != null) {
-                    markStationaryDoorOpened(loc);
-                }
-            }
 			return false;
 		}
         markDoorInteractionSettling(bestFrom, bestTo);
@@ -8340,23 +8335,15 @@ public class Rs2Walker {
 		WorldPoint posAfter = Rs2Player.getWorldLocation();
 		boolean traversed = didTraverseInteractedDoor(posBefore, posAfter, bestLoc, bestFrom, bestTo);
 		if (traversed) {
-            for (WorldPoint loc : bestComponent.locations) {
-                if (loc != null) {
-                    markStationaryDoorOpened(loc);
-                }
-            }
+            markStationaryDoorOpened(bestLoc, bestFrom, bestTo);
 			return true;
 		}
         boolean wrongTraversal = bestLoc != null && shouldBlacklistDoorAfterWrongTraversal(posBefore, posAfter, bestFrom, bestTo, Rs2Player.isMoving());
         if (wrongTraversal) {
             log.warn("[Walker] Path-adj door traversed wrong way; not session-blacklisting fallback candidate: door={} from={} to={} before={} after={}",
                     bestLoc, bestFrom, bestTo, posBefore, posAfter);
-        } else {
-            for (WorldPoint loc : bestComponent.locations) {
-                if (loc != null) {
-                    markStationaryDoorOpened(loc);
-                }
-            }
+        } else if (isDoorEdgeResolved(bestFrom, bestTo)) {
+            markStationaryDoorOpened(bestLoc, bestFrom, bestTo);
         }
 		log.debug("[Walker] path-adj blocker-scan interact did not traverse (at={} from={} to={} before={} after={})",
 				bestLoc, bestFrom, bestTo, posBefore, posAfter);
@@ -8463,40 +8450,22 @@ public class Rs2Walker {
     }
 
     private static void markNearbyDoorFamilyOpened(TileObject originObject, WorldPoint originLocation, String action, int radiusTiles) {
-        if (originObject == null || originLocation == null || radiusTiles <= 0) {
-            return;
-        }
+        if (originObject == null || originLocation == null || radiusTiles <= 0) return;
+        // Only co-located representations can be variants of the opened door. A matching
+        // name/id family on another tile can be Jess's still-closed bathroom door.
         String familyKey = normalizePathAdjFamilyKey(originObject, action);
-        if (familyKey == null || familyKey.isEmpty()) {
-            markStationaryDoorOpened(originLocation);
-            return;
-        }
         markStationaryDoorOpened(originLocation);
         for (WallObject wall : Rs2GameObject.getWallObjects(o -> true, originLocation, radiusTiles)) {
-            if (wall == null || wall.getWorldLocation() == null) {
-                continue;
-            }
-            if (wall.getWorldLocation().getPlane() != originLocation.getPlane()) {
-                continue;
-            }
+            if (wall == null || !originLocation.equals(wall.getWorldLocation())) continue;
             ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(wall);
             String neighborFamily = normalizePathAdjFamilyKey(wall, comp == null ? null : Rs2DoorClassifier.pickWalkDoorAction(comp));
-            if (arePathAdjFamiliesCompatible(familyKey, neighborFamily)) {
-                markStationaryDoorOpened(wall.getWorldLocation());
-            }
+            if (arePathAdjFamiliesCompatible(familyKey, neighborFamily)) markStationaryDoorOpened(wall.getWorldLocation());
         }
         for (GameObject game : Rs2GameObject.getGameObjects(o -> true, originLocation, radiusTiles)) {
-            if (game == null || game.getWorldLocation() == null) {
-                continue;
-            }
-            if (game.getWorldLocation().getPlane() != originLocation.getPlane()) {
-                continue;
-            }
+            if (game == null || !originLocation.equals(game.getWorldLocation())) continue;
             ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(game);
             String neighborFamily = normalizePathAdjFamilyKey(game, comp == null ? null : Rs2DoorClassifier.pickWalkDoorAction(comp));
-            if (arePathAdjFamiliesCompatible(familyKey, neighborFamily)) {
-                markStationaryDoorOpened(game.getWorldLocation());
-            }
+            if (arePathAdjFamiliesCompatible(familyKey, neighborFamily)) markStationaryDoorOpened(game.getWorldLocation());
         }
     }
 

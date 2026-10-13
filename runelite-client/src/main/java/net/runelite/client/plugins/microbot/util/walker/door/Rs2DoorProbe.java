@@ -239,10 +239,6 @@ public final class Rs2DoorProbe {
         if (playerLoc == null || fromWp == null || toWp == null || fromWp.getPlane() != toWp.getPlane()) {
             return null;
         }
-        if (Rs2DoorHandler.recentlyOpenedStationaryDoorOnSegment(recentlyOpened, stationaryDoorSuppressMs, fromWp, toWp)) {
-            return null;
-        }
-
         final int searchDistance = 10;
         List<WallObject> wallSnapshot = ctx.wallSnapshot();
         List<GameObject> gameObjectSnapshot = ctx.gameObjectSnapshot();
@@ -267,7 +263,8 @@ public final class Rs2DoorProbe {
                 candidates.addAll(gameObjectSnapshot);
             }
             TileObject match = candidates.stream()
-                    .filter(o -> isDoorCandidateOnSegment(ctx, blacklist, o, locations.get(o),
+                    .filter(o -> !wasDoorOpenedRecently(recentlyOpened, locations.get(o), stationaryDoorSuppressMs)
+                            && isDoorCandidateOnSegment(ctx, blacklist, o, locations.get(o),
                             playerLoc, fromWp, toWp, doorActions, searchDistance))
                     .min(Comparator.comparingInt(o -> locations.get(o).distanceTo2D(playerLoc)))
                     .orElse(null);
@@ -276,9 +273,23 @@ public final class Rs2DoorProbe {
             }
             return match;
         }
-        return Rs2GameObject.getAll(o -> isDoorCandidateOnSegment(ctx, blacklist, o, o.getWorldLocation(),
-                        playerLoc, fromWp, toWp, doorActions, searchDistance), playerLoc, searchDistance).stream()
+        return Rs2GameObject.getAll(o -> {
+                    WorldPoint location = objectLocationOnClientThread(o);
+                    return !wasDoorOpenedRecently(recentlyOpened, location, stationaryDoorSuppressMs)
+                            && isDoorCandidateOnSegment(ctx, blacklist, o, location,
+                            playerLoc, fromWp, toWp, doorActions, searchDistance);
+                }, playerLoc, searchDistance).stream()
                 .min(Comparator.comparingInt(o -> o.getWorldLocation().distanceTo2D(playerLoc)))
                 .orElse(null);
+    }
+
+    static boolean wasDoorOpenedRecently(Map<WorldPoint, Long> recentlyOpened, WorldPoint door, long suppressMs) {
+        Long openedAt = door == null ? null : recentlyOpened.get(door);
+        long age = openedAt == null ? -1 : System.currentTimeMillis() - openedAt;
+        return age >= 0 && age < suppressMs;
+    }
+
+    private static WorldPoint objectLocationOnClientThread(TileObject object) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> object.getWorldLocation()).orElse(null);
     }
 }
