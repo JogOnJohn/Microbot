@@ -289,9 +289,11 @@ public final class Rs2WalkerBankingPlanner {
             performanceLog.append("\tStart Point: ").append(startPoint).append(", Target: ").append(target).append("\n");
             long directPathStartTime = System.nanoTime();
             Pathfinder directProbe = null;
+            List<Object> directStamp = null;
             List<WorldPoint> directPath;
             if (allowBound) {
                 Rs2PathApi.getPathfinderConfig().refresh(target);
+                directStamp = Rs2PathApi.getPathfinderConfig().transportDecisionStamp(target);
                 directProbe = new Pathfinder(Rs2PathApi.getPathfinderConfig(), startPoint, target);
                 directProbe.run();
                 directPath = directProbe.getPath();
@@ -304,6 +306,8 @@ public final class Rs2WalkerBankingPlanner {
             int directDistance = Rs2Walker.getTotalTilesFromPath(directPath, target);
             if (allowBound && !originalUseBankItems && !Thread.currentThread().isInterrupted()
                     && directProbe != null && directProbe.isDone() && completedProbeReason(directProbe.getTerminationReason())
+                    && directStamp != null
+                    && directStamp.equals(Rs2PathApi.getPathfinderConfig().transportDecisionStamp(target))
                     && completeDirectProbe(directPath, startPoint, target)
                     && BankRouteCost.cannotBeatDirect(directDistance, overhead, minimumSaving)) {
                 WebWalkLog.spInfo("bank_walk | skip_compare_cost_bound direct={} overhead={} minSaving={} goal={}",

@@ -2322,6 +2322,27 @@ public class PathfinderConfig {
         }
     }
 
+    /** Decision-local proof only: unknown or changed availability cannot authorize a bank shortcut. */
+    public List<Object> transportDecisionStamp(WorldPoint target) {
+        if (client == null || Microbot.getClientThread() == null) return null;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            if (!hasTransportRefreshSnapshot()) return null;
+            int key = computeTransportRefreshCacheKeyHash(target, Rs2LeaguesTransport.leaguesContext());
+            TransportRefreshSnapshot snapshot = transportRefreshSnapshots.get(key);
+            if (snapshot == null) return null;
+            int[] boosted = new int[SKILLS.length];
+            if (snapshot.sortedSkillOrdinals != null)
+                for (int ordinal : snapshot.sortedSkillOrdinals)
+                    if (ordinal >= 0 && ordinal < SKILLS.length)
+                        boosted[ordinal] = client.getBoostedSkillLevel(SKILLS[ordinal]);
+            int verification = computeTransportRefreshVerificationHash(boosted, snapshot.sortedSkillOrdinals,
+                    snapshot.sortedVarbitConditions, snapshot.sortedVarplayerConditions, snapshot.sortedQuestIds);
+            if (verification != snapshot.verificationHash) return null;
+            return List.<Object>of(key, verification, getBackend(),
+                    World330HostedHouse.ADVERTISED_HOUSE.houseGeneration());
+        }).orElse(null);
+    }
+
     private int computeTransportRefreshCacheKeyHash(WorldPoint target, Rs2LeaguesTransport.LeaguesContext leaguesCtx) {
         assert leaguesCtx != null;
         int invFp = fingerprintInventoryEquipmentBank();

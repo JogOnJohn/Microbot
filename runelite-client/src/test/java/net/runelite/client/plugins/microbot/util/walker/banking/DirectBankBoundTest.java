@@ -18,13 +18,16 @@ import static org.junit.Assert.*;
 
 public class DirectBankBoundTest {
     @Test public void provenBoundAvoidsBankLookupButCutoffStillChecksBankAlternatives() {
-        for (String reason : List.of("reached-goal", "time-cutoff")) {
+        for (String reason : List.of("reached-goal", "time-cutoff", "changed-availability")) {
             PathfinderConfig config = mock(PathfinderConfig.class);
             AtomicBoolean banked = new AtomicBoolean(false);
             when(config.isUseBankItems()).thenAnswer(call -> banked.get());
             doAnswer(call -> { banked.set(call.getArgument(0)); return null; })
                     .when(config).setUseBankItems(anyBoolean());
             WorldPoint start = new WorldPoint(3000, 3300, 0), target = new WorldPoint(3010, 3300, 0);
+            if ("changed-availability".equals(reason))
+                when(config.transportDecisionStamp(target)).thenReturn(List.of(1), List.of(2));
+            else when(config.transportDecisionStamp(target)).thenReturn(List.of(1));
             try (MockedStatic<Rs2PathApi> api = mockStatic(Rs2PathApi.class);
                  MockedStatic<Rs2Bank> bank = mockStatic(Rs2Bank.class);
                  MockedStatic<Rs2Walker> walker = mockStatic(Rs2Walker.class);
@@ -32,7 +35,8 @@ public class DirectBankBoundTest {
                      assertFalse(banked.get());
                      when(probe.getPath()).thenReturn(List.of(start, target));
                      when(probe.isDone()).thenReturn(true);
-                     when(probe.getTerminationReason()).thenReturn(reason);
+                     when(probe.getTerminationReason()).thenReturn(
+                             "changed-availability".equals(reason) ? "reached-goal" : reason);
                  })) {
                 api.when(Rs2PathApi::getPathfinderConfig).thenReturn(config);
                 walker.when(() -> Rs2Walker.getTotalTilesFromPath(anyList(), eq(target))).thenReturn(50);
