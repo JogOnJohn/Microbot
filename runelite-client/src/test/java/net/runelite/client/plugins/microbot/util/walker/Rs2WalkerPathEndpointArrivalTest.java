@@ -15,7 +15,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.HashMap;
-import java.util.List;
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
@@ -30,11 +30,6 @@ import static org.mockito.Mockito.when;
 public class Rs2WalkerPathEndpointArrivalTest
 {
 	private static final WorldPoint TARGET = new WorldPoint(3227, 3214, 0);
-	private static final List<WorldPoint> PATH = List.of(
-		new WorldPoint(3224, 3214, 0),
-		new WorldPoint(3225, 3214, 0),
-		new WorldPoint(3226, 3214, 0),
-		TARGET);
 	private static final String REACHED_ENDPOINT = "rs2walker:processWalk:reached-path-endpoint";
 
 	private MockedStatic<Microbot> microbot;
@@ -43,10 +38,10 @@ public class Rs2WalkerPathEndpointArrivalTest
 	private MockedStatic<Rs2PathApi> pathApi;
 	private ShortestPathConfig originalConfig;
 	private WorldPoint originalTarget;
-	private Rs2ActiveRouteStatus status;
+	private Method settle;
 
 	@Before
-	public void setUp()
+	public void setUp() throws Exception
 	{
 		originalConfig = Rs2Walker.config;
 		originalTarget = Rs2Walker.currentTarget;
@@ -75,15 +70,11 @@ public class Rs2WalkerPathEndpointArrivalTest
 		tile = Mockito.mockStatic(Rs2Tile.class);
 		tile.when(() -> Rs2Tile.getReachableTilesFromTile(any(WorldPoint.class), anyInt())).thenReturn(new HashMap<>());
 
-		status = mock(Rs2ActiveRouteStatus.class);
-		when(status.isPresent()).thenReturn(true);
-		when(status.isReady()).thenReturn(true);
-		when(status.getRawPath()).thenReturn(PATH);
-		when(status.getWalkablePath()).thenReturn(PATH);
-		when(status.getMetrics()).thenReturn(Optional.empty());
 		pathApi = Mockito.mockStatic(Rs2PathApi.class);
-		pathApi.when(Rs2PathApi::getActiveRouteStatus).thenReturn(status);
-		pathApi.when(() -> Rs2PathApi.hasWalkableTileWithin(any(WorldPoint.class), anyInt())).thenReturn(true);
+		pathApi.when(Rs2PathApi::getPathfinderMutex).thenReturn(new Object());
+		settle = Rs2Walker.class.getDeclaredMethod("settleReachedPathEndpoint",
+			WorldPoint.class, WorldPoint.class, WorldPoint.class, int.class, int.class);
+		settle.setAccessible(true);
 
 		Rs2Walker.currentTarget = TARGET;
 	}
@@ -101,9 +92,9 @@ public class Rs2WalkerPathEndpointArrivalTest
 	}
 
 	@Test
-	public void standingOnTheEndpointThatIsTheTargetArrives()
+	public void standingOnTheEndpointThatIsTheTargetArrives() throws Exception
 	{
-		WalkerState state = Rs2Walker.processWalkForTesting(TARGET, 0);
+		WalkerState state = (WalkerState) settle.invoke(null, TARGET, TARGET, TARGET, 0, 0);
 
 		assertEquals(WalkerState.ARRIVED, state);
 		assertEquals(REACHED_ENDPOINT, Rs2Walker.getLastRouteClearReason());
@@ -111,29 +102,34 @@ public class Rs2WalkerPathEndpointArrivalTest
 	}
 
 	@Test
-	public void externalCancelBeforeTheEndpointCheckStillExits()
+	public void externalCancelBeforeTheEndpointCheckStillExits() throws Exception
 	{
-		player.when(Rs2Player::isInteracting).thenAnswer(invocation -> {
-			Rs2Walker.currentTarget = null;
-			return false;
-		});
+		Rs2Walker.currentTarget = null;
 
-		WalkerState state = Rs2Walker.processWalkForTesting(TARGET, 0);
+		WalkerState state = (WalkerState) settle.invoke(null, TARGET, TARGET, TARGET, 0, 0);
 
 		assertEquals(WalkerState.EXIT, state);
 		assertNotEquals(REACHED_ENDPOINT, Rs2Walker.getLastRouteClearReason());
 	}
 
 	@Test
-	public void endpointShortOfTheTightFinishThresholdDoesNotArrive()
+	public void endpointShortOfTheTightFinishThresholdDoesNotArrive() throws Exception
 	{
 		WorldPoint farTarget = new WorldPoint(3230, 3214, 0);
 		Rs2Walker.currentTarget = farTarget;
 
-		WalkerState state = Rs2Walker.processWalkForTesting(farTarget, 5);
+		WalkerState state = (WalkerState) settle.invoke(null, farTarget, TARGET, TARGET, 5, 0);
 
 		assertEquals(WalkerState.EXIT, state);
 		assertEquals(REACHED_ENDPOINT, Rs2Walker.getLastRouteClearReason());
 		assertNull(Rs2Walker.currentTarget);
+	}
+
+	@Test
+	public void wrongFloorCannotReportArrival() throws Exception
+	{
+		WorldPoint upstairs = new WorldPoint(3227, 3214, 1);
+		Rs2Walker.currentTarget = upstairs;
+		assertEquals(WalkerState.EXIT, settle.invoke(null, upstairs, upstairs, TARGET, 5, 0));
 	}
 }
