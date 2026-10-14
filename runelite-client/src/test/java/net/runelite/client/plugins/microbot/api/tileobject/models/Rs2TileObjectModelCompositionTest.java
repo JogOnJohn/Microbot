@@ -89,4 +89,18 @@ public class Rs2TileObjectModelCompositionTest {
 
         assertFalse(new Rs2TileObjectModel(tileObject).click("Enter"));
     }
+
+    @Test
+    public void visibleObjectStillRefusesAnUnavailableAction() {
+        ObjectComposition base = mock(ObjectComposition.class);
+        ObjectComposition impostor = mock(ObjectComposition.class);
+        when(base.getImpostorIds()).thenReturn(new int[]{1, 2});
+        when(base.getImpostor()).thenReturn(impostor);
+        when(impostor.getActions()).thenReturn(new String[]{"Open"});
+        when(impostor.getName()).thenReturn("Door");
+        when(client.getObjectDefinition(OBJECT_ID)).thenReturn(base);
+
+        assertFalse(new Rs2TileObjectModel(tileObject).click("Climb-up"));
+        microbot.verify(() -> Microbot.doInvoke(any(NewMenuEntry.class), any(Rectangle.class)), never());
+    }
 }
