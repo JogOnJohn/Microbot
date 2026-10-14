@@ -83,6 +83,7 @@ public class Login {
         List<World> filteredWorlds = worlds.stream()
                 .filter(x -> !x.getTypes().contains(WorldType.PVP) &&
                         !x.getTypes().contains(WorldType.HIGH_RISK) &&
+                        !x.getTypes().contains(WorldType.HARDCORE_MAIN) &&
                         !x.getTypes().contains(WorldType.BOUNTY) &&
                         !x.getTypes().contains(WorldType.SKILL_TOTAL) &&
                         !x.getTypes().contains(WorldType.LAST_MAN_STANDING) &&
@@ -140,6 +141,7 @@ public class Login {
         List<World> filteredWorlds = worlds.stream()
                 .filter(x -> !x.getTypes().contains(WorldType.PVP) &&
                         !x.getTypes().contains(WorldType.HIGH_RISK) &&
+                        !x.getTypes().contains(WorldType.HARDCORE_MAIN) &&
                         !x.getTypes().contains(WorldType.BOUNTY) &&
                         !x.getTypes().contains(WorldType.SKILL_TOTAL) &&
                         !x.getTypes().contains(WorldType.LAST_MAN_STANDING) &&
