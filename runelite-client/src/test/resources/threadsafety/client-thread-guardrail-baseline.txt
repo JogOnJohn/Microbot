@@ -30,7 +30,6 @@ net.runelite.client.plugins.microbot.api.npc.Rs2NpcCache#getStream(): Stream  ->
 net.runelite.client.plugins.microbot.api.npc.Rs2NpcCache#getStream(): Stream  ->  net.runelite.api.IndexedObjectSet#stream(): Stream
 net.runelite.client.plugins.microbot.api.npc.Rs2NpcCache#getStream(): Stream  ->  net.runelite.api.WorldView#npcs(): IndexedObjectSet
 net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel#click(String): boolean  ->  net.runelite.api.NPCComposition#getActions(): String[]
-net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel#getId(): int  ->  net.runelite.api.NPC#getId(): int
 net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel#getIndex(): int  ->  net.runelite.api.NPC#getIndex(): int
 net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel#getMenuAction(int): MenuAction  ->  net.runelite.api.Client#isWidgetSelected(): boolean
 net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel#hasLineOfSight(): boolean  ->  net.runelite.api.Client#getTopLevelWorldView(): WorldView

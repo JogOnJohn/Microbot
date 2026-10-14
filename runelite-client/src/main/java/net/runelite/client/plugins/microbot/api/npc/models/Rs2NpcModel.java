@@ -36,7 +36,7 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
     @Override
     public int getId()
     {
-        return npc.getId();
+        return Microbot.getClientThread().runOnClientThreadOptional(npc::getId).orElse(-1);
     }
 
     public int getIndex()
