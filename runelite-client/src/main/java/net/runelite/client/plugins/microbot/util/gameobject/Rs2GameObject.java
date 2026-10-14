@@ -1557,10 +1557,11 @@ public class Rs2GameObject {
             return result.stream();
         }
 
-        int sceneSize = Constants.SCENE_SIZE;
+        int sizeX = tiles[z].length;
+        int sizeY = sizeX > 0 ? tiles[z][0].length : 0;
 
-        for (int x = 0; x < sceneSize; x++) {
-            for (int y = 0; y < sceneSize; y++) {
+        for (int x = 0; x < sizeX; x++) {
+            for (int y = 0; y < sizeY; y++) {
                 for (int h = 0; h <= z; h++) {
                     Tile tile = tiles[h][x][y];
                     if (tile == null) continue;
