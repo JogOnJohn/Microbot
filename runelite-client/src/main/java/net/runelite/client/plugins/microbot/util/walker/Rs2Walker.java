@@ -9247,7 +9247,7 @@ public class Rs2Walker {
             if (transportConfig != null && transportConfig.isWalkScopedTransportBlocked(transport)) continue;
             if (PathfinderConfig.isPersonalHouseEntry(transport)
                     && (transportConfig == null || !Microbot.getClientThread().runOnClientThreadOptional(
-                            () -> transportConfig.allowsPersonalHouseEntry(transport)).orElse(false))) {
+                            transportConfig::isPersonalHouseRoutingEnabled).orElse(false))) {
                 WebWalkLog.spWarn("personal house entry rejected by current policy: {}", transport.getDisplayInfo());
                 if (transportConfig != null) transportConfig.invalidateTransportRefreshCache();
                 recalculatePath();

@@ -1750,7 +1750,11 @@ public class PathfinderConfig {
     }
 
     public boolean allowsPersonalHouseEntry(Transport transport) {
-        return allowsPersonalHouseEntry(transport, !usePoh || prefersHostedHouse());
+        return allowsPersonalHouseEntry(transport, !isPersonalHouseRoutingEnabled());
+    }
+
+    public boolean isPersonalHouseRoutingEnabled() {
+        return usePoh && !prefersHostedHouse();
     }
 
     public static boolean isPersonalHouseEntry(Transport transport) {
