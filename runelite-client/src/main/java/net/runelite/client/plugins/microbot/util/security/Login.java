@@ -198,7 +198,8 @@ public class Login {
             rsWorld.setAddress(world.getAddress());
             rsWorld.setId(world.getId());
             rsWorld.setPlayerCount(world.getPlayers());
-            rsWorld.setLocation(world.getLocation());
+            var region = world.getRegion();
+            rsWorld.setLocation(region == null ? 0 : region.getId());
             rsWorld.setTypes(WorldUtil.toWorldTypes(world.getTypes()));
             Microbot.getClient().changeWorld(rsWorld);
         } catch (Exception ex) {

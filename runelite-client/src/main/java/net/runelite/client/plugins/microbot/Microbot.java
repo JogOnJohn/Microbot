@@ -416,7 +416,8 @@ public class Microbot {
             rsWorld.setAddress(newWorld.getAddress());
             rsWorld.setId(newWorld.getId());
             rsWorld.setPlayerCount(newWorld.getPlayers());
-            rsWorld.setLocation(newWorld.getLocation());
+            var region = newWorld.getRegion();
+            rsWorld.setLocation(region == null ? 0 : region.getId());
             rsWorld.setTypes(WorldUtil.toWorldTypes(newWorld.getTypes()));
 
             return true;
