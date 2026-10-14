@@ -31,6 +31,9 @@ the inverted imported house rows without changing synced data. Resolve the live 
 widget's Inside/Outside action and operation index; do not assume Cast/1 or Outside/2.
 When W330 hosted routing is enabled, skipping it for a short trip must not enable a
 personal-house fallback. A spell dispatch is not a landing: propagate failed landing waits.
+`usePoh=false` must also reject imported personal-house entry edges on non-W330
+worlds; an outside spell can otherwise chain through `Home Portal` into an
+unconfigured house. Recheck this policy before dispatching a cached entry edge.
 W330 house entry should prefer a currently castable house spell over a carried
 tablet, retaining the outside action and tablet fallback when the spell is unavailable.
 

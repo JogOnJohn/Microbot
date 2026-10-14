@@ -9245,6 +9245,14 @@ public class Rs2Walker {
         for (Transport transport : orderedTransports) {
             PathfinderConfig transportConfig = Rs2PathApi.getPathfinderConfig();
             if (transportConfig != null && transportConfig.isWalkScopedTransportBlocked(transport)) continue;
+            if (PathfinderConfig.isPersonalHouseEntry(transport)
+                    && (transportConfig == null || !Microbot.getClientThread().runOnClientThreadOptional(
+                            () -> transportConfig.allowsPersonalHouseEntry(transport)).orElse(false))) {
+                WebWalkLog.spWarn("personal house entry rejected by current policy: {}", transport.getDisplayInfo());
+                if (transportConfig != null) transportConfig.invalidateTransportRefreshCache();
+                recalculatePath();
+                return true;
+            }
             Collection<WorldPoint> worldPointCollections;
             //in some cases the getOrigin is null, for teleports that start the player location
             if (transport.getOrigin() == null) {

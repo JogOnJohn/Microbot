@@ -1,5 +1,7 @@
 package net.runelite.client.plugins.microbot.shortestpath.pathfinder;
 
+import net.runelite.api.Client;
+import net.runelite.api.WorldType;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.TransportType;
@@ -8,14 +10,107 @@ import org.junit.Test;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Collections;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class PathfinderConfigWorld330MergeTest {
+    @Test
+    public void disabledPersonalHouseRejectsImportedEntriesOnEveryWorld() throws Exception {
+        WorldPoint outside = new WorldPoint(2953, 3224, 0);
+        WorldPoint inside = new WorldPoint(1858, 7051, 0);
+        Client client = mock(Client.class);
+        PathfinderConfig config = new PathfinderConfig(null, Collections.emptyMap(),
+                Collections.emptyList(), client, null, false);
+        setFlag(config, "usePoh", false);
+        for (int world : new int[]{532, 330, 390}) {
+            when(client.getWorld()).thenReturn(world);
+            for (boolean hosted : new boolean[]{false, true}) {
+                setFlag(config, "useWorld330MaxHouse", hosted);
+                assertFalse(config.allowsPersonalHouseEntry(new Transport(outside, inside,
+                        "Home Portal", TransportType.TELEPORTATION_PORTAL, true, 4)));
+                for (TransportType type : new TransportType[]{TransportType.TELEPORTATION_SPELL,
+                        TransportType.TELEPORTATION_ITEM, TransportType.FAIRY_RING, TransportType.SPIRIT_TREE}) {
+                    assertFalse(config.allowsPersonalHouseEntry(teleport(inside, type)));
+                }
+                assertTrue(config.allowsPersonalHouseEntry(new Transport(null, outside,
+                        "Teleport to House", TransportType.TELEPORTATION_SPELL, true, 4)));
+                assertTrue(config.allowsPersonalHouseEntry(new Transport(null, outside,
+                        "Teleport to House tablet (Outside)", TransportType.TELEPORTATION_ITEM, true, 4)));
+                assertTrue(config.allowsPersonalHouseEntry(new Transport(inside, outside,
+                        "Home Portal", TransportType.TELEPORTATION_PORTAL, true, 4)));
+                assertTrue(config.allowsPersonalHouseEntry(teleport(
+                        new WorldPoint(2964, 3378, 0), TransportType.TELEPORTATION_SPELL)));
+                assertTrue(config.allowsPersonalHouseEntry(new World330HostedHouseTransport(inside)));
+            }
+        }
+    }
+
+    @Test
+    public void explicitPersonalHouseOptInWorksOffW330ButHostedPreferenceStillWinsOnW330() throws Exception {
+        Client client = mock(Client.class);
+        PathfinderConfig config = new PathfinderConfig(null, Collections.emptyMap(),
+                Collections.emptyList(), client, null, false);
+        setFlag(config, "usePoh", true);
+        setFlag(config, "useWorld330MaxHouse", true);
+        Transport entry = teleport(new WorldPoint(1858, 7051, 0), TransportType.TELEPORTATION_ITEM);
+        when(client.getWorld()).thenReturn(532);
+        assertTrue(config.allowsPersonalHouseEntry(entry));
+        when(client.getWorld()).thenReturn(330);
+        assertFalse(config.allowsPersonalHouseEntry(entry));
+        setFlag(config, "useWorld330MaxHouse", false);
+        assertTrue(config.allowsPersonalHouseEntry(entry));
+        // A saved edge must be rejected after the effective setting changes.
+        setFlag(config, "usePoh", false);
+        assertFalse(config.allowsPersonalHouseEntry(entry));
+    }
+
+    @Test
+    public void insideActionIsPersonalEntryEvenAtConfiguredNonTemplateAnchor() {
+        Transport entry = new Transport(null, new WorldPoint(1877, 7052, 1),
+                "Teleport to House (Inside)", TransportType.TELEPORTATION_SPELL, true, 4);
+        assertTrue(PathfinderConfig.isPersonalHouseEntry(entry));
+        assertFalse(PathfinderConfig.allowsPersonalHouseEntry(entry, true));
+        assertFalse(PathfinderConfig.isPersonalHouseEntry(new World330HostedHouseTransport(
+                new WorldPoint(1858, 7051, 0))));
+    }
+
+    @Test
+    public void featureFilteringCannotBypassDisabledHouseViaGenericPortal() throws Exception {
+        Client client = mock(Client.class);
+        when(client.getWorld()).thenReturn(532);
+        when(client.getWorldType()).thenReturn(java.util.EnumSet.of(WorldType.MEMBERS));
+        PathfinderConfig config = new PathfinderConfig(null, Collections.emptyMap(),
+                Collections.emptyList(), client, null, false);
+        setFlag(config, "usePoh", false);
+        setFlag(config, "useWorld330MaxHouse", true);
+        setFlag(config, "useTeleportationPortals", true);
+        java.lang.reflect.Method feature = PathfinderConfig.class.getDeclaredMethod("isFeatureEnabled", Transport.class);
+        feature.setAccessible(true);
+        WorldPoint outside = new WorldPoint(2953, 3224, 0);
+        WorldPoint inside = new WorldPoint(1858, 7051, 0);
+        assertFalse((boolean) feature.invoke(config, new Transport(outside, inside,
+                "Home Portal", TransportType.TELEPORTATION_PORTAL, true, 4)));
+        assertTrue((boolean) feature.invoke(config, new Transport(inside, outside,
+                "Home Portal", TransportType.TELEPORTATION_PORTAL, true, 4)));
+        setFlag(config, "usePoh", true);
+        assertTrue((boolean) feature.invoke(config, new Transport(outside, inside,
+                "Home Portal", TransportType.TELEPORTATION_PORTAL, true, 4)));
+    }
+
+    private static void setFlag(PathfinderConfig config, String name, boolean value) throws Exception {
+        Field field = PathfinderConfig.class.getDeclaredField(name);
+        field.setAccessible(true);
+        field.setBoolean(config, value);
+    }
+
     @Test
     public void localHousePolicyAllowsNearbyBoardAndExistingHostedHouse() {
         WorldPoint player = new WorldPoint(2953, 3221, 0);
