@@ -373,6 +373,16 @@ public class Rs2Walker {
         WebWalkLog.tmark("walk_start", 0, target, Rs2Player.getWorldLocation(), "target_set");
     }
 
+    /** Same package (e.g. unit tests) only — not part of the script API. */
+    static WalkerRouteState routeStateForTesting() {
+        return routeState;
+    }
+
+    static WalkerState processWalkForTesting(WorldPoint target, int distance) {
+        return processWalk(target, distance, 0);
+    }
+
+
     private static void clearRecentTransportContext() {
         routeState.lastTransportHandledAtMs = 0L;
         routeState.lastTransportHandledAtLocation = null;
@@ -1757,6 +1767,19 @@ public class Rs2Walker {
         return processWalk(target, distance, 0);
     }
 
+    private static WalkerState settleReachedPathEndpoint(WorldPoint target, WorldPoint endpoint, WorldPoint playerLoc,
+                                                         int distance, int processWalkTail) {
+        if (walkCancelledDiag(target, "processWalk:at-path-endpoint", processWalkTail)) {
+            return WalkerState.EXIT;
+        }
+        boolean arrived = playerLoc.distanceTo(target) <= tightFinishThreshold(target, endpoint, distance);
+        if (!arrived) {
+            traceProcessWalkExit("path-endpoint-short-of-target", target, processWalkTail);
+        }
+        setTarget(null, "rs2walker:processWalk:reached-path-endpoint");
+        return arrived ? WalkerState.ARRIVED : WalkerState.EXIT;
+    }
+
     private static WalkerState processWalk(WorldPoint target, int distance, int partialRetries) {
         if (debug) {
             return WalkerState.EXIT;
@@ -1951,7 +1974,7 @@ public class Rs2Walker {
             // Partial paths end at an intermediate waypoint (dst still far from {@code target});
             // clearing here would drop currentTarget before the partial-path retry/recalc branch.
             if (!partialPath && isNear(dst) && routeState.interimTargetWp == null) {
-                setTarget(null, "rs2walker:processWalk:reached-path-endpoint");
+                return settleReachedPathEndpoint(target, dst, walkLoop.playerLoc, distance, processWalkTail);
             }
 
             boolean shouldIssueActiveRouteIdleNudge = shouldIssueActiveRouteIdleNudge();
