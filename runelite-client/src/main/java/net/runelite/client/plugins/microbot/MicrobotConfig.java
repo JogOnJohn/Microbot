@@ -293,7 +293,7 @@ public interface MicrobotConfig extends Config
 	)
 	default boolean enableHopLimit()
 	{
-		return true;
+		return false;
 	}
 
 	String keyHopLimitCapacity = "hopLimitCapacity";
