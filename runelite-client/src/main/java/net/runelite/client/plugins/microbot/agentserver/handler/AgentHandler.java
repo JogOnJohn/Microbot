@@ -108,6 +108,9 @@ public abstract class AgentHandler implements HttpHandler {
 
 	public static boolean isClientDisconnect(Throwable t) {
 		while (t != null) {
+			if (t instanceof ClientDisconnectException) {
+				return true;
+			}
 			if (t instanceof java.io.IOException) {
 				String msg = t.getMessage();
 				if (msg != null) {
@@ -115,6 +118,8 @@ public abstract class AgentHandler implements HttpHandler {
 					if (lower.contains("broken pipe")
 							|| lower.contains("connection reset")
 							|| lower.contains("connection closed")
+							|| lower.contains("connection was aborted")
+							|| lower.contains("forcibly closed")
 							|| lower.contains("insufficient bytes written")) {
 						return true;
 					}
@@ -142,8 +147,14 @@ public abstract class AgentHandler implements HttpHandler {
 		byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().set("Content-Type", "application/json");
 		exchange.sendResponseHeaders(statusCode, bytes.length);
+		writeBody(exchange, bytes);
+	}
+
+	protected static void writeBody(HttpExchange exchange, byte[] bytes) throws IOException {
 		try (OutputStream os = exchange.getResponseBody()) {
 			os.write(bytes);
+		} catch (IOException e) {
+			throw new ClientDisconnectException(e);
 		}
 	}
 
@@ -154,9 +165,7 @@ public abstract class AgentHandler implements HttpHandler {
 		byte[] bytes = "Not Found".getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
 		exchange.sendResponseHeaders(404, bytes.length);
-		try (OutputStream os = exchange.getResponseBody()) {
-			os.write(bytes);
-		}
+		writeBody(exchange, bytes);
 	}
 
 	protected Map<String, Object> errorResponse(String message) {
@@ -229,6 +238,12 @@ public abstract class AgentHandler implements HttpHandler {
 		String full = exchange.getRequestURI().getPath();
 		if (full.length() <= basePath.length()) return "";
 		return full.substring(basePath.length());
+	}
+
+	public static final class ClientDisconnectException extends IOException {
+		public ClientDisconnectException(IOException cause) {
+			super(cause.getMessage(), cause);
+		}
 	}
 
 	public static class HttpMethodException extends Exception {
