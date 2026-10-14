@@ -114,13 +114,13 @@ public class GameChatAppenderTest
 		context.getLogger("net.runelite.client.plugins.microbot.walker").warn("walker stalled");
 
 		assertTrue(installed.isStarted());
-		verify(clientThread, times(1)).invoke(any(Runnable.class));
+		verify(clientThread, times(1)).invokeLater(any(Runnable.class));
 
 		attachment.remove();
 		context.getLogger("net.runelite.client.plugins.microbot.walker").warn("after remove");
 
 		assertFalse(installed.isStarted());
-		verify(clientThread, times(1)).invoke(any(Runnable.class));
+		verify(clientThread, times(1)).invokeLater(any(Runnable.class));
 	}
 
 	@Test
@@ -134,7 +134,7 @@ public class GameChatAppenderTest
 		context.getLogger("net.runelite.client.plugins.microbot.walker").warn("walker stalled");
 
 		assertFalse(installed.isStarted());
-		verify(clientThread, never()).invoke(any(Runnable.class));
+		verify(clientThread, never()).invokeLater(any(Runnable.class));
 		context.stop();
 	}
 
