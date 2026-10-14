@@ -183,6 +183,7 @@ public class Rs2WorldUtil {
         // Check for restricted world types (same as LoginManager filtering)
         if (world.getTypes().contains(WorldType.PVP) ||
             world.getTypes().contains(WorldType.HIGH_RISK) ||
+            world.getTypes().contains(WorldType.HARDCORE_MAIN) ||
             world.getTypes().contains(WorldType.BOUNTY) ||
             world.getTypes().contains(WorldType.SKILL_TOTAL) ||
             world.getTypes().contains(WorldType.LAST_MAN_STANDING) ||
