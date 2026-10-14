@@ -173,7 +173,18 @@ public class QuestHelperHandler extends AgentHandler
 			return;
 		}
 
-		plugin.getQuestManager().shutDownQuest(true);
+		boolean stopped = Microbot.getClientThread()
+			.runOnClientThreadOptional(() ->
+			{
+				plugin.getQuestManager().shutDownQuest(true);
+				return true;
+			})
+			.orElse(false);
+		if (!stopped)
+		{
+			sendJson(exchange, 500, errorResponse("Failed to stop quest helper"));
+			return;
+		}
 
 		Map<String, Object> result = new LinkedHashMap<>();
 		result.put("success", true);
