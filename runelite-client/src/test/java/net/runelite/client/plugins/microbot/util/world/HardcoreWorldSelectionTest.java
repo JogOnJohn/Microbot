@@ -17,10 +17,10 @@ import static org.mockito.Mockito.*;
 
 public class HardcoreWorldSelectionTest {
     private World world(int id, boolean hardcore) {
-        World world = new World();
-        world.setId(id);
-        world.setPlayers(100);
-        world.setTypes(hardcore ? EnumSet.of(WorldType.MEMBERS, WorldType.HARDCORE_MAIN)
+        World world = mock(World.class);
+        when(world.getId()).thenReturn(id);
+        when(world.getPlayers()).thenReturn(100);
+        when(world.getTypes()).thenReturn(hardcore ? EnumSet.of(WorldType.MEMBERS, WorldType.HARDCORE_MAIN)
                 : EnumSet.of(WorldType.MEMBERS));
         return world;
     }
