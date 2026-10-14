@@ -1905,7 +1905,7 @@ public class Rs2Walker {
             // Partial paths end at an intermediate waypoint (dst still far from {@code target});
             // clearing here would drop currentTarget before the partial-path retry/recalc branch.
             if (!partialPath && isNear(dst) && routeState.interimTargetWp == null) {
-                return settleReachedPathEndpoint(target, dst, Rs2Player.getWorldLocation(), distance, processWalkTail);
+                return settleReachedPathEndpoint(target, dst, walkLoop.playerLoc, distance, processWalkTail);
             }
 
             boolean shouldIssueActiveRouteIdleNudge = shouldIssueActiveRouteIdleNudge();

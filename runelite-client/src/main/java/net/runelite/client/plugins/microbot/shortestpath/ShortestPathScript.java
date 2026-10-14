@@ -95,12 +95,7 @@ public class ShortestPathScript extends Script {
                         break;
                     }
 
-                    WalkerState state;
-                    if (config.walkWithBankedTransports()) {
-                        state = Rs2Walker.walkWithBankedTransportsAndState(target, 10, false);
-                    } else {
-                        state = Rs2Walker.walkWithState(target);
-                    }
+                    WalkerState state = executeWalk(target);
 
                     if (!target.equals(getTriggerWalker())) {
                         break;
@@ -123,6 +118,12 @@ public class ShortestPathScript extends Script {
                 walkTaskRunning.set(false);
             }
         });
+    }
+
+    WalkerState executeWalk(WorldPoint target) {
+        return config.walkWithBankedTransports()
+                ? Rs2Walker.walkWithBankedTransportsAndState(target, config.reachedDistance(), false)
+                : Rs2Walker.walkWithState(target);
     }
 
     private boolean shouldRetryAfterExit(WorldPoint target) {
