@@ -15,3 +15,13 @@ WorldPoint.fromLocalInstance. A later stable scene read can resolve the instance
 
 **Defensive checks:** Rs2GameObjectSmallWorldViewTest and
 Rs2PlayerInstanceWorldLocationTest cover both boundaries.
+
+## 3. Bound local points before canvas projection
+
+Before projecting a local point, resolve its own WorldView and check both scene
+coordinates against that view's actual dimensions on the client thread. Missing
+views, null points and out-of-bounds coordinates are off screen, not safe inputs
+to Perspective.getCanvasTilePoly. This prevents height-array indexing failures
+during NPC/object interaction without changing route camera policy.
+
+**Defensive check:** Rs2CameraTileOnScreenTest covers invalid and small views.
