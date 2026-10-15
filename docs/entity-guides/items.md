@@ -276,9 +276,9 @@ An ordinary logout can be a break or world hop, so it must keep normal AutoLogin
 
 ## 16. Bank widgets can be missing or blank right after the bank opens
 
-`BANK_ITEM_CONTAINER` can be null and the `BANK_ITEM_COUNT_TOP` text can be `""` while the bank interface is opening, closing or rebuilding. Never `assert` a widget non-null (asserts are disabled at runtime) and never `Integer.parseInt` widget text without handling blank or non-numeric input. `Rs2Bank.getBankItemCount()` returns 0 for unpopulated text, and `scrollBankToSlot` returns false before computing a scroll when the container is missing.
+`BANK_ITEM_CONTAINER` can be null and the `BANK_ITEM_COUNT_TOP` text can be `""` while the bank interface is opening, closing or rebuilding. Never `assert` a widget non-null (asserts are disabled at runtime) and never `Integer.parseInt` widget text without handling blank or non-numeric input. `Rs2Bank.getBankItemCount()` returns 0 for unpopulated text, and `scrollBankToSlot` returns false before computing a scroll when the container is missing. The looting bag view (`15:11`) can be unloaded or have null/empty children once the bag closes, so `depositLootingBag` waits on `Rs2Bank.isLootingBagViewEmpty()`, which reads the widget on the client thread and treats a missing widget or children as emptied.
 
-**Defensive check:** Run `Rs2BankUnloadedWidgetsTest`.
+**Defensive check:** Run `Rs2BankUnloadedWidgetsTest` and `Rs2BankLootingBagViewTest`.
 
 
 ## Terminal supply stops need observed logout
