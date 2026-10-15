@@ -1,7 +1,7 @@
 package net.runelite.client.plugins.microbot.util.bank;
 
 import net.runelite.api.Client;
-import net.runelite.api.widgets.ComponentID;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -50,7 +50,7 @@ public class Rs2BankUnloadedWidgetsTest {
     private void bankSizeText(String text) {
         Widget size = mock(Widget.class);
         when(size.getText()).thenReturn(text);
-        when(client.getWidget(ComponentID.BANK_ITEM_COUNT_TOP)).thenReturn(size);
+        when(client.getWidget(InterfaceID.Bankmain.OCCUPIEDSLOTS)).thenReturn(size);
     }
 
     @Test
