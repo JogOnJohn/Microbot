@@ -3126,7 +3126,13 @@ public class Rs2Bank {
     public static int getBankItemCount() {
         Widget bank = getBankSizeWidget();
         if (bank == null) return 0;
-        return Integer.parseInt(bank.getText());
+        String text = bank.getText();
+        if (text == null) return 0;
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /**
@@ -3449,7 +3455,7 @@ public class Rs2Bank {
         Widget w = Microbot.getClient().getWidget(BANK_ITEM_CONTAINER);
 
         // Check the height of the bank window to adjust scrolling if necessary
-        assert w != null;
+        if (w == null) return 0;
         int bankHeight = w.getHeight() / (BANK_ITEM_HEIGHT + BANK_ITEM_Y_PADDING);
 
         // Calculate the minimum scrollY to ensure the item is visible at the top of the window
@@ -3480,9 +3486,9 @@ public class Rs2Bank {
      * @param slotId the slot ID of the item to scroll to
      */
     public static boolean scrollBankToSlot(int slotId) {
-        int scrollY = calculateScrollYFromSlotId(slotId);
         Widget w = Microbot.getClient().getWidget(BANK_ITEM_CONTAINER);
         if (w == null) return false;
+        int scrollY = calculateScrollYFromSlotId(slotId);
 
         Microbot.getClientThread().invokeLater(() -> {
             Microbot.getClient().setVarcIntValue(VarClientInt.BANK_SCROLL, scrollY);

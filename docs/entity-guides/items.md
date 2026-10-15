@@ -274,6 +274,13 @@ An ordinary logout can be a break or world hop, so it must keep normal AutoLogin
 **Defensive check:** Run `AutoLoginSuppressionTest`, `AutoLoginPluginSupplyStopTest`, `ScriptStartedTest`, `TerminalSupplyLogoutTest`, and `InventorySetupSupplyLogoutTest`. Verify live that a shortage stays logged out and restarting a gameplay script permits login.
 
 
+## 16. Bank widgets can be missing or blank right after the bank opens
+
+`BANK_ITEM_CONTAINER` can be null and the `BANK_ITEM_COUNT_TOP` text can be `""` while the bank interface is opening, closing or rebuilding. Never `assert` a widget non-null (asserts are disabled at runtime) and never `Integer.parseInt` widget text without handling blank or non-numeric input. `Rs2Bank.getBankItemCount()` returns 0 for unpopulated text, and `scrollBankToSlot` returns false before computing a scroll when the container is missing.
+
+**Defensive check:** Run `Rs2BankUnloadedWidgetsTest`.
+
+
 ## Terminal supply stops need observed logout
 
 An owning script can set `withMissingSupplyHandler` on its Inventory Setup loader to keep its scheduled loop alive while `TerminalLogoutPrompt` closes the bank and requests logout. Do not show a blocking shortage notification or cancel that loop until `LOGGED_OUT` is observed. The default loader policy stays unchanged when no handler is supplied; ordinary breaks and world hops do not arm terminal Auto Login suppression.
