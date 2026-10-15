@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.agentserver.handler;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -65,20 +66,27 @@ public abstract class AgentHandler implements HttpHandler {
 
 		try {
 			handleRequest(exchange);
+		} catch (BadRequestException e) {
+			log.debug("Bad request for {}: {}", exchange.getRequestURI(), e.getMessage());
+			sendErrorResponse(exchange, 400, e.getMessage());
 		} catch (Exception e) {
 			if (isClientDisconnect(e)) {
 				log.debug("Client disconnected before {} response could be sent", exchange.getRequestURI());
 				return;
 			}
 			log.error("Error handling {}", exchange.getRequestURI(), e);
-			try {
-				sendJson(exchange, 500, errorResponse("Internal server error: " + e.getMessage()));
-			} catch (IOException ioe) {
-				if (!isClientDisconnect(ioe)) {
-					throw ioe;
-				}
-				log.debug("Client disconnected before error response could be sent for {}", exchange.getRequestURI());
+			sendErrorResponse(exchange, 500, "Internal server error: " + e.getMessage());
+		}
+	}
+
+	private void sendErrorResponse(HttpExchange exchange, int statusCode, String message) throws IOException {
+		try {
+			sendJson(exchange, statusCode, errorResponse(message));
+		} catch (IOException ioe) {
+			if (!isClientDisconnect(ioe)) {
+				throw ioe;
 			}
+			log.debug("Client disconnected before error response could be sent for {}", exchange.getRequestURI());
 		}
 	}
 
@@ -189,25 +197,30 @@ public abstract class AgentHandler implements HttpHandler {
 		return params;
 	}
 
+	@SuppressWarnings("unchecked")
 	protected Map<String, Object> readJsonBody(HttpExchange exchange) throws IOException {
 		String cl = exchange.getRequestHeaders().getFirst("Content-Length");
 		if (cl != null) {
 			try {
 				long advertised = Long.parseLong(cl.trim());
 				if (advertised > MAX_BODY_SIZE) {
-					throw new IllegalArgumentException("Request body too large");
+					throw new BadRequestException("Request body too large");
 				}
 			} catch (NumberFormatException ignored) {
 			}
 		}
 		byte[] bodyBytes = exchange.getRequestBody().readNBytes(MAX_BODY_SIZE + 1);
 		if (bodyBytes.length > MAX_BODY_SIZE) {
-			throw new IllegalArgumentException("Request body too large");
+			throw new BadRequestException("Request body too large");
 		}
 		String body = new String(bodyBytes, StandardCharsets.UTF_8);
-		@SuppressWarnings("unchecked")
-		Map<String, Object> parsed = gson.fromJson(body, LinkedHashMap.class);
-		return parsed;
+		Map<String, Object> parsed;
+		try {
+			parsed = gson.fromJson(body, LinkedHashMap.class);
+		} catch (JsonParseException e) {
+			throw new BadRequestException("Invalid JSON body");
+		}
+		return parsed != null ? parsed : new LinkedHashMap<>();
 	}
 
 	protected int getIntParam(Map<String, String> params, String key, int defaultValue) {
@@ -243,6 +256,12 @@ public abstract class AgentHandler implements HttpHandler {
 	public static final class ClientDisconnectException extends IOException {
 		public ClientDisconnectException(IOException cause) {
 			super(cause.getMessage(), cause);
+		}
+	}
+
+	public static class BadRequestException extends IllegalArgumentException {
+		public BadRequestException(String message) {
+			super(message);
 		}
 	}
 
