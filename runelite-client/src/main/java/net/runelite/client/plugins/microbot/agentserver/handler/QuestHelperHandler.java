@@ -137,9 +137,16 @@ public class QuestHelperHandler extends AgentHandler
 			return;
 		}
 
+		PluginManager pluginManager = Microbot.getPluginManager();
+		if (pluginManager == null || !pluginManager.isActive(plugin))
+		{
+			sendJson(exchange, 409, errorResponse("Quest Helper plugin is not active"));
+			return;
+		}
+
 		if (!plugin.startQuestHelper(name))
 		{
-			sendJson(exchange, 404, errorResponse("Quest helper not found: " + name));
+			sendJson(exchange, 404, errorResponse("Quest helper not found or not loaded: " + name));
 			return;
 		}
 
