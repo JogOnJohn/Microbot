@@ -66,7 +66,7 @@ public class Rs2CameraAngleToTileTest {
     public void localPointWithoutLocalPlayerKeepsCurrentFacing() {
         when(client.getLocalPlayer()).thenReturn(null);
 
-        assertEquals(180, Rs2Camera.angleToTile(new LocalPoint(6400, 6400)));
+        assertEquals(180, Rs2Camera.angleToTile(new LocalPoint(6400, 6400, WorldView.TOPLEVEL)));
     }
 
     @Test

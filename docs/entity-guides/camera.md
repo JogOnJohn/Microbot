@@ -13,3 +13,10 @@ Client-thread camera turns remain a no-op rather than blocking that thread.
 
 **Defensive check:** Rs2CameraSettleTest covers coasting, timeouts, same-cycle
 samples, equal-pitch no-ops and the direct-read fallbacks.
+
+## 2. Keep the current facing while player location is unavailable
+
+`Rs2Camera.angleToTile` returns the current camera facing, using the existing
+client-to-legacy yaw conversion, when the local player has no world location.
+Do not infer a bearing from the target alone during login or scene transitions.
+`Rs2CameraAngleToTileTest` covers missing players and normal cardinal bearings.
