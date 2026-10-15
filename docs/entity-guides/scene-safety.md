@@ -25,3 +25,13 @@ to Perspective.getCanvasTilePoly. This prevents height-array indexing failures
 during NPC/object interaction without changing route camera policy.
 
 **Defensive check:** Rs2CameraTileOnScreenTest covers invalid and small views.
+
+## 4. Default object clicks still require a visible composition
+
+An omitted action selects the first option; it does not permit a hidden multiloc
+or an object whose definition disappeared during a scene transition. Check the
+visible composition for both named and default clicks. A caught interaction
+exception must return false so the caller can re-query instead of assuming success.
+
+**Defensive check:** Rs2TileObjectModelCompositionTest covers default-click
+visibility, absent action arrays, first-option dispatch and scene exceptions.

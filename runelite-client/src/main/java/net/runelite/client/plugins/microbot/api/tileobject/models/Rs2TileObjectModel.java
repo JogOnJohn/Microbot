@@ -238,6 +238,10 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
      */
     public boolean click(String action) {
         try {
+            var objComp = getVisibleObjectComposition();
+            if (objComp == null) {
+                return false;
+            }
 
             int param0;
             int param1;
@@ -270,13 +274,10 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             String objName = "";
             String[] actions = new String[0];
             if (action != null && !action.isEmpty()) {
-                //performance improvement to only get compoisiton if action has been specified
-                var objComp = getVisibleObjectComposition();
-                if (objComp == null) {
-                    log.warn("Failed to interact with object {} - object not currently visible", getId());
+                actions = objComp.getActions();
+                if (actions == null) {
                     return false;
                 }
-                actions = objComp.getActions();
 
                 for (int i = 0; i < actions.length; i++) {
                     if (actions[i] == null) continue;
@@ -289,7 +290,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                 objName = objComp.getName();
 
                 // both hands must be free before using MINECART
-                if (objComp.getName().toLowerCase().contains("train cart")) {
+                if (objName != null && objName.toLowerCase().contains("train cart")) {
                     Rs2Equipment.unEquip(EquipmentInventorySlot.WEAPON);
                     Rs2Equipment.unEquip(EquipmentInventorySlot.SHIELD);
                     sleepUntil(() -> Rs2Equipment.get(EquipmentInventorySlot.WEAPON) == null && Rs2Equipment.get(EquipmentInventorySlot.SHIELD) == null);
@@ -341,6 +342,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
 
         } catch (Exception ex) {
             log.error("Failed to interact with object: ", ex);
+            return false;
         }
 
         return true;
