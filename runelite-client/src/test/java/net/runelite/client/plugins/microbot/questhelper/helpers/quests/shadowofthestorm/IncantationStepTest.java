@@ -6,9 +6,11 @@ import net.runelite.api.Client;
 import net.runelite.api.MenuEntry;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.questhelper.questhelpers.QuestHelper;
+import net.runelite.client.plugins.microbot.questhelper.requirements.item.ItemRequirement;
 import net.runelite.client.plugins.microbot.questhelper.steps.QuestStep;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,7 +28,8 @@ public class IncantationStepTest
 	public void setUp() throws Exception
 	{
 		client = mock(Client.class);
-		step = new IncantationStep(mock(QuestHelper.class), false);
+		step = new IncantationStep(mock(QuestHelper.class), false,
+			new ItemRequirement("Demonic sigil", ItemID.AGRITH_SIGIL));
 		Field clientField = QuestStep.class.getDeclaredField("client");
 		clientField.setAccessible(true);
 		clientField.set(step, client);
