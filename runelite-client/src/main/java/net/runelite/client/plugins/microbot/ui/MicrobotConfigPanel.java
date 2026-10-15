@@ -421,10 +421,10 @@ class MicrobotConfigPanel extends MicrobotPluginPanel {
 
             if (result == JOptionPane.YES_OPTION) {
                 configManager.setDefaultConfiguration(pluginConfig.getConfig(), true);
-                MicrobotConfigManager.resetProfilePluginProperties(pluginConfig.getPlugin().getClass());
                 // Reset non-config panel keys
                 Plugin plugin = pluginConfig.getPlugin();
                 if (plugin != null) {
+                    MicrobotConfigManager.resetProfilePluginProperties(plugin.getClass());
                     plugin.resetConfiguration();
                 }
 
