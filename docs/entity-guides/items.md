@@ -286,3 +286,15 @@ An ordinary logout can be a break or world hop, so it must keep normal AutoLogin
 An owning script can set `withMissingSupplyHandler` on its Inventory Setup loader to keep its scheduled loop alive while `TerminalLogoutPrompt` closes the bank and requests logout. Do not show a blocking shortage notification or cancel that loop until `LOGGED_OUT` is observed. The default loader policy stays unchanged when no handler is supplied; ordinary breaks and world hops do not arm terminal Auto Login suppression.
 
 The observed terminal state is `LOGIN_SCREEN`; loading, hopping, connection loss and login transitions are not successful logout. A terminal prompt requests Auto Login suppression once across its retries so an explicit script/Auto Login restart is not repeatedly re-blocked by the old prompt.
+
+## 17. Keep Kourend bank access separate from travel requirements
+
+Ordinary Kourend banks and deposit boxes do not require starting Client of Kourend.
+Keep membership checks and unrelated location-specific quest gates, but do not
+exclude these destinations merely because the boat journey has quest-dependent
+dialogue. An incorrect destination gate can send a nearby banking request across
+the map even when our walker is working correctly.
+
+**Defensive check:** `BankLocationKourendRequirementsTest` and
+`DepositBoxLocationKourendRequirementsTest` cover members without the quest,
+non-members, and the separate Canifis quest requirement.
