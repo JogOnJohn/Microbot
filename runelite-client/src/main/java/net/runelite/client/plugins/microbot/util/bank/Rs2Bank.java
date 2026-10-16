@@ -2669,13 +2669,17 @@ public class Rs2Bank {
 
     /**
      * Walks to a specified bank location with an option to toggle run energy.
-     * If the bank is already open, the method exits immediately.
+     * Returns false if bankLocation is null; otherwise exits immediately if the bank is already open.
      *
      * @param bankLocation the target bank location to walk to.
      * @param toggleRun    whether to toggle run energy during the walk.
      * @return true if the Rs2Player's location is within 4 tiles of the specified bank location.
      */
     public static boolean walkToBank(BankLocation bankLocation, boolean toggleRun) {
+        if (bankLocation == null) {
+            log.warn("Bank location is null, cannot walk to bank.");
+            return false;
+        }
         if (Rs2Bank.isOpen()) return true;
         Rs2Player.toggleRunEnergy(toggleRun);
         Microbot.status = "Walking to nearest bank " + bankLocation.toString();
