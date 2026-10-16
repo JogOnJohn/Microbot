@@ -123,7 +123,7 @@ public class QuestHelperHandler extends AgentHandler
 		}
 
 		Map<String, Object> body = readJsonBody(exchange);
-		String name = (String) body.get("name");
+		String name = getStringField(body, "name");
 		if (name == null || name.isEmpty())
 		{
 			sendJson(exchange, 400, errorResponse("name is required"));

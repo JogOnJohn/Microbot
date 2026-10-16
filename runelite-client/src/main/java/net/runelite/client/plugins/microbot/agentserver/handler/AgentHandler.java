@@ -223,6 +223,38 @@ public abstract class AgentHandler implements HttpHandler {
 		return parsed != null ? parsed : new LinkedHashMap<>();
 	}
 
+	protected static Integer getIntField(Map<String, Object> body, String key) {
+		Object val = body.get(key);
+		if (val == null) return null;
+		if (val instanceof Number) return ((Number) val).intValue();
+		if (val instanceof String) {
+			try {
+				return Integer.parseInt(((String) val).trim());
+			} catch (NumberFormatException ignored) {
+			}
+		}
+		throw new BadRequestException("Field '" + key + "' must be a number");
+	}
+
+	protected static String getStringField(Map<String, Object> body, String key) {
+		Object val = body.get(key);
+		if (val == null) return null;
+		if (val instanceof String) return (String) val;
+		throw new BadRequestException("Field '" + key + "' must be a string");
+	}
+
+	protected static Boolean getBooleanField(Map<String, Object> body, String key) {
+		Object val = body.get(key);
+		if (val == null) return null;
+		if (val instanceof Boolean) return (Boolean) val;
+		if (val instanceof String) {
+			String s = ((String) val).trim();
+			if ("true".equalsIgnoreCase(s)) return Boolean.TRUE;
+			if ("false".equalsIgnoreCase(s)) return Boolean.FALSE;
+		}
+		throw new BadRequestException("Field '" + key + "' must be a boolean");
+	}
+
 	protected int getIntParam(Map<String, String> params, String key, int defaultValue) {
 		String val = params.get(key);
 		if (val == null) return defaultValue;
