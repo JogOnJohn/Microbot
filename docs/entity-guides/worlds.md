@@ -41,9 +41,9 @@ return Microbot.getClientThread().runOnClientThreadOptional(() -> {
 }).orElse(-1);
 ```
 
-**Where this applies:** `Rs2Player` accessors (`getWorldLocation_Internal`, `getPoseAnimation`, `getAnimation`, `getCombatLevel`, `getLocalPlayer`, `getLocalLocation`, `getGraphicId`, `hasSpotAnimation`), the position accessors of `Rs2ActorModel` (`getWorldView`, `getWorldLocation`, `getLocalLocation`, `projectActorLocationToMainWorld`) and its `getAnimation` (returns -1), which `new Rs2PlayerModel()` reaches with a null actor, the callers of those accessors (`Rs2Camera.angleToTile` returns the current facing so a turn is a no-op), and any new helper that reads the local player.
+**Where this applies:** `Rs2Player` accessors (`getWorldLocation_Internal`, `getPoseAnimation`, `getAnimation`, `getCombatLevel`, `getLocalPlayer`, `getLocalLocation`, `getGraphicId`, `hasSpotAnimation`), the position accessors of `Rs2ActorModel` (`getWorldView`, `getWorldLocation`, `getLocalLocation`, `projectActorLocationToMainWorld`) and its `getAnimation` (returns -1), which `new Rs2PlayerModel()` reaches with a null actor, the callers of those accessors (`Rs2Camera.angleToTile` returns the current facing so a turn is a no-op), both `Rs2NpcModel` classes' `getDistanceFromPlayer` (returns `Integer.MAX_VALUE`) and `isWithinDistanceFromPlayer` (returns `false`), and any new helper that reads the local player.
 
-**Defensive check:** Mock `Client.getLocalPlayer()` to return `null` and assert each accessor returns its fallback, as in `Rs2PlayerNullLocalPlayerTest` and `Rs2PlayerModelNullLocalPlayerTest`.
+**Defensive check:** Mock `Client.getLocalPlayer()` to return `null` and assert each accessor returns its fallback, as in `Rs2PlayerNullLocalPlayerTest`, `Rs2PlayerModelNullLocalPlayerTest` and `Rs2NpcModelDistanceFromPlayerTest`.
 
 **Wrapped locations:** `Rs2Player.getRs2WorldPoint()` still returns an `Rs2WorldPoint`, but it can wrap a `null` `WorldPoint` in these states. `pathTo` returns `null` and `distanceToPath` returns `Integer.MAX_VALUE` for it; check `getWorldPoint() != null` before calling `getX()`, `getY()` or `getPlane()`, as in `Rs2WorldPointNullPointTest`.
 
