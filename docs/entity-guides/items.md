@@ -281,6 +281,13 @@ An ordinary logout can be a break or world hop, so it must keep normal AutoLogin
 **Defensive check:** Run `Rs2BankUnloadedWidgetsTest` and `Rs2BankLootingBagViewTest`.
 
 
+## 17. An inventory container may have no child for the item's slot
+
+While a shop, bank, deposit box or Grand Exchange inventory is open or rebuilding, the active container's children may not include a widget whose index matches `Rs2ItemModel.getSlot()`. Look the child up with `findFirst().orElse(null)` and fall back to `rs2Item.getInventoryActions()`; never pass `null` to `Optional.orElseGet`, which throws an NPE instead of returning null.
+
+**Defensive check:** Run `Rs2InventoryInvokeMenuTest`.
+
+
 ## Terminal supply stops need observed logout
 
 An owning script can set `withMissingSupplyHandler` on its Inventory Setup loader to keep its scheduled loop alive while `TerminalLogoutPrompt` closes the bank and requests logout. Do not show a blocking shortage notification or cancel that loop until `LOGGED_OUT` is observed. The default loader policy stays unchanged when no handler is supplied; ordinary breaks and world hops do not arm terminal Auto Login suppression.
