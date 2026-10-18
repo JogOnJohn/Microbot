@@ -511,3 +511,16 @@ not the routing label `Xeric's Glade`; resolve actual actions or use its menu.
 **Defensive check:** `PohFacilityAccessTest`, `World330HostedHouseAccessTest` and
 `PohMenuInteractionTest` cover failure classification, persistent-name handling,
 actual action captions, reachable copies and landing evidence.
+## 29. Construct markers before publishing them and tolerate missing wait samples
+
+Create and configure a target marker through `Rs2PathApi.createTargetMarker`, then
+publish and add that same local reference. Do not repeatedly read the shared marker
+while configuring it: route cancellation can clear it between reads. This prevents
+a null dereference without changing ownership, cancellation or route selection.
+
+A missing player-location sample during the existing bounded proximity wait is
+not evidence of arrival or progress. Keep waiting for a valid sample or the same
+timeout; preserve the existing proximity and progress thresholds.
+
+**Defensive check:** `Rs2WalkerLifecycleRuntimeMarkerTest` simulates a cleared
+shared marker; `Rs2WalkerProximityWaitTest` covers absent and valid position samples.
