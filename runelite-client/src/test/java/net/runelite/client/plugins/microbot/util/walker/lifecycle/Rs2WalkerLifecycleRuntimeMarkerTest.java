@@ -14,8 +14,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-import java.util.Optional;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -43,7 +41,7 @@ public class Rs2WalkerLifecycleRuntimeMarkerTest
 
 		pathApi = Mockito.mockStatic(Rs2PathApi.class, Mockito.CALLS_REAL_METHODS);
 		pathApi.when(Rs2PathApi::isStartPointSet).thenReturn(true);
-		pathApi.when(Rs2PathApi::getActiveRouteStart).thenReturn(Optional.empty());
+		pathApi.when(Rs2PathApi::getPathfinder).thenReturn(null);
 		pathApi.when(Rs2PathApi::getMarker).thenReturn(null);
 		pathApi.when(() -> Rs2PathApi.setMarker(any())).thenAnswer(inv -> null);
 		pathApi.when(() -> Rs2PathApi.setLastLocation(any())).thenAnswer(inv -> null);

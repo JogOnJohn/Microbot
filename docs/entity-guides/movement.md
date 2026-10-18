@@ -324,3 +324,17 @@ energy (>1000 by default), replacing the walker's rounded >10% (>=1100) check.
 
 **Defensive check:** `Rs2PlayerRunEnergyTest` covers threshold boundaries, explicit disable,
 missing/hidden orbs, interior geometry, pending updates, and client-thread requests.
+
+## 16. Construct markers before publishing them and tolerate missing wait samples
+
+Create and configure a target marker through `Rs2PathApi.createTargetMarker`, then
+publish and add that same local reference. Do not repeatedly read the shared marker
+while configuring it: route cancellation can clear it between reads. This prevents
+a null dereference without changing ownership, cancellation or route selection.
+
+A missing player-location sample during the existing bounded proximity wait is
+not evidence of arrival or progress. Keep waiting for a valid sample or the same
+timeout; preserve the existing proximity and progress thresholds.
+
+**Defensive check:** `Rs2WalkerLifecycleRuntimeMarkerTest` simulates a cleared
+shared marker; `Rs2WalkerProximityWaitTest` covers absent and valid position samples.
