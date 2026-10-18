@@ -119,7 +119,6 @@ net.runelite.client.plugins.microbot.util.combat.Rs2Combat#inCombat(): boolean  
 net.runelite.client.plugins.microbot.util.combat.Rs2Combat#setAttackStyle(WidgetInfo): boolean  ->  net.runelite.api.widgets.Widget#getId(): int
 net.runelite.client.plugins.microbot.util.combat.Rs2Combat#setAttackStyle(WidgetInfo): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.combat.Rs2Combat#setAutoCastSpell(Rs2CombatSpells, boolean): boolean  ->  net.runelite.api.widgets.WidgetInfo#getId(): int
-net.runelite.client.plugins.microbot.util.combat.Rs2Combat#setSpecState(boolean, int): boolean  ->  net.runelite.api.widgets.Widget#getBounds(): Rectangle
 net.runelite.client.plugins.microbot.util.combat.models.Rs2DropSource#toString(): String  ->  net.runelite.api.ItemComposition#getName(): String
 net.runelite.client.plugins.microbot.util.coords.Rs2WorldPoint#convertInstancedWorldPoint(WorldPoint): WorldPoint  ->  net.runelite.api.coords.WorldPoint#fromLocal(Client, LocalPoint): WorldPoint
 net.runelite.client.plugins.microbot.util.coords.Rs2WorldPoint#pathTo(WorldPoint, boolean): List  ->  net.runelite.api.Client#getTopLevelWorldView(): WorldView
