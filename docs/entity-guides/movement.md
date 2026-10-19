@@ -541,3 +541,9 @@ routes must not trigger this recovery. This is not evidence against the host.
 **Defensive check:** `Rs2WalkerContinuationLeadTest` and
 `Rs2WalkerHostedHouseAnchorTest`; `click_preparation_slow` separates selection,
 fallback and door-probe time from transport-inclusive startup timings.
+
+Pending/continuation door checks must consume the existing scan-scoped wall and
+game-object snapshots rather than rescan the scene for every route edge. Keep
+the original nested-impostor resolver and close-only/transport ownership rules;
+do not substitute a partially resolved definition cache for live door state.
+`Rs2WalkerPendingDoorSnapshotTest` exercises those preserved classifications.

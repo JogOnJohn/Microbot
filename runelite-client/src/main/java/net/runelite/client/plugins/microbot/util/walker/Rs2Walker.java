@@ -5522,6 +5522,15 @@ public class Rs2Walker {
             return false;
         }
 
+        if (rawScanWallSnapshot == null && rawScanGameObjectSnapshot == null) {
+            return withScopedDoorProbeSnapshot(playerLoc, HANDLER_RANGE + 2, new BooleanSupplier() {
+                public boolean getAsBoolean() {
+                    return handlePendingDoorBeforeRouteClick(rawPath, path, fromPathIdx, targetPathIdx,
+                            smoothedToRaw, timeoutMs, attempted, playerLoc);
+                }
+            });
+        }
+
         int rawStart = rawIndexForSmoothedIndex(fromPathIdx, smoothedToRaw, rawPath);
         int rawTarget = rawIndexForSmoothedIndex(targetPathIdx, smoothedToRaw, rawPath);
         if (rawStart < 0 || rawTarget < 0) {
@@ -5939,14 +5948,14 @@ public class Rs2Walker {
         if (rawScanWallSnapshot != null || rawScanGameObjectSnapshot != null) {
             return operation.getAsBoolean();
         }
-        rawScanWallSnapshot = Rs2GameObject.getWallObjects(o -> true, playerLoc, radiusTiles);
-        rawScanGameObjectSnapshot = Rs2GameObject.getGameObjects(o -> true, playerLoc, radiusTiles);
-        rawScanDoorLocationSnapshot = Microbot.getClientThread()
-                .invoke(Rs2Walker::captureRawScanDoorLocationsOnClientThread);
-        rawScanDoorCompositionCache = new IdentityHashMap<>();
-        rawScanDoorSegmentCache = new HashMap<>();
-        rawScanDoorEligibilityCache = new IdentityHashMap<>();
         try {
+            rawScanWallSnapshot = Rs2GameObject.getWallObjects(o -> true, playerLoc, radiusTiles);
+            rawScanGameObjectSnapshot = Rs2GameObject.getGameObjects(o -> true, playerLoc, radiusTiles);
+            rawScanDoorLocationSnapshot = Microbot.getClientThread()
+                    .invoke(Rs2Walker::captureRawScanDoorLocationsOnClientThread);
+            rawScanDoorCompositionCache = new IdentityHashMap<>();
+            rawScanDoorSegmentCache = new HashMap<>();
+            rawScanDoorEligibilityCache = new IdentityHashMap<>();
             return operation.getAsBoolean();
         } finally {
             rawScanWallSnapshot = null;
@@ -6694,7 +6703,7 @@ public class Rs2Walker {
             return false;
         }
 
-        ObjectComposition comp = Rs2DoorProbe.resolveDoorComposition(doorProbeContext(), object);
+        ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
         if (!Rs2DoorClassifier.isDoorComposition(comp, doorActions)) return false;
 
         String action = Rs2DoorClassifier.getDoorAction(comp, doorActions);
@@ -7840,12 +7849,12 @@ public class Rs2Walker {
             return false;
         }
 
-        for (WallObject wall : Rs2GameObject.getWallObjects(o -> true, playerLoc, radiusTiles)) {
+        for (WallObject wall : pendingDoorWallSnapshot(o -> true, playerLoc, radiusTiles)) {
             if (isPendingRouteDoorObject(wall, fromWp, toWp, playerLoc, radiusTiles)) {
                 return true;
             }
         }
-        for (GameObject object : Rs2GameObject.getGameObjects(o -> true, playerLoc, radiusTiles)) {
+        for (GameObject object : pendingDoorGameSnapshot(o -> true, playerLoc, radiusTiles)) {
             if (isPendingRouteDoorObject(object, fromWp, toWp, playerLoc, radiusTiles)) {
                 return true;
             }
@@ -7861,6 +7870,15 @@ public class Rs2Walker {
                                                                   int radiusTiles) {
         if (rawPath == null || rawPath.size() < 2 || playerLoc == null || rawEdgeStart < 0) {
             return false;
+        }
+
+        if (rawScanWallSnapshot == null && rawScanGameObjectSnapshot == null) {
+            return withScopedDoorProbeSnapshot(playerLoc, radiusTiles + 2, new BooleanSupplier() {
+                public boolean getAsBoolean() {
+                    return hasUnresolvedDoorLikeObjectNearRawPath(rawPath, rawEdgeStart, playerLoc,
+                            backtrackEdges, lookaheadEdges, radiusTiles);
+                }
+            });
         }
 
         int start = Math.max(0, rawEdgeStart - Math.max(0, backtrackEdges));
@@ -7896,17 +7914,29 @@ public class Rs2Walker {
             return false;
         }
 
-        for (WallObject wall : Rs2GameObject.getWallObjects(o -> true, playerLoc, radiusTiles)) {
+        for (WallObject wall : pendingDoorWallSnapshot(o -> true, playerLoc, radiusTiles)) {
             if (isUnresolvedRouteDoorObject(wall, fromWp, toWp, playerLoc, radiusTiles)) {
                 return true;
             }
         }
-        for (GameObject object : Rs2GameObject.getGameObjects(o -> true, playerLoc, radiusTiles)) {
+        for (GameObject object : pendingDoorGameSnapshot(o -> true, playerLoc, radiusTiles)) {
             if (isUnresolvedRouteDoorObject(object, fromWp, toWp, playerLoc, radiusTiles)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static List<WallObject> pendingDoorWallSnapshot(Predicate<WallObject> predicate,
+                                                           WorldPoint player, int radius) {
+        return rawScanWallSnapshot != null ? rawScanWallSnapshot
+                : Rs2GameObject.getWallObjects(predicate, player, radius);
+    }
+
+    private static List<GameObject> pendingDoorGameSnapshot(Predicate<GameObject> predicate,
+                                                            WorldPoint player, int radius) {
+        return rawScanGameObjectSnapshot != null ? rawScanGameObjectSnapshot
+                : Rs2GameObject.getGameObjects(predicate, player, radius);
     }
 
     private static boolean isUnresolvedRouteDoorObject(TileObject object, WorldPoint fromWp, WorldPoint toWp,
@@ -7920,7 +7950,7 @@ public class Rs2Walker {
                 || !Rs2DoorGeometry.isDoorOnSegment(object, fromWp, toWp)) {
             return false;
         }
-        if (Rs2DoorProbe.isTransportOwnedSceneObject(null, object)) {
+        if (Rs2DoorProbe.isTransportOwnedSceneObject(doorProbeContext(), object)) {
             return false;
         }
 
@@ -7947,11 +7977,11 @@ public class Rs2Walker {
                 || !Rs2DoorGeometry.isDoorOnSegment(object, fromWp, toWp)) {
             return false;
         }
-        if (Rs2DoorProbe.isTransportOwnedSceneObject(null, object)) {
+        if (Rs2DoorProbe.isTransportOwnedSceneObject(doorProbeContext(), object)) {
             return false;
         }
 
-        ObjectComposition comp = Rs2DoorDetection.resolveCompositionForDoorProbe(object);
+        ObjectComposition comp = Rs2DoorProbe.resolveDoorComposition(doorProbeContext(), object);
         if (comp == null
                 || Rs2DoorClassifier.isNullOrPlaceholderObjectName(comp.getName())
                 || Rs2DoorClassifier.doorCompositionSpecifiesOnlyCloseOrShut(comp)) {
