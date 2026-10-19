@@ -49,6 +49,9 @@ their existing execution/landing handling, not a nested interaction request.
 - One operation has a 120-second deadline and at most three accepted dispatch
   attempts. Each attempt waits at most eight seconds, with earlier recovery
   after stationary progress loss. Pauses/interruptions cancel instead of clicking.
+  The operation deadline is checked at controller polls; an existing approach or
+  transport call retains its own bounded waits. This is not a preemptive timeout
+  or a guarantee that an already-issued server action has been cancelled.
 - Object animations defer stationary retry while the independent effect deadline
   still bounds the attempt. Guarded NPC dispatch uses its own fresh collision
   check and bounded recovery, not the global rejection flag from an older action.
