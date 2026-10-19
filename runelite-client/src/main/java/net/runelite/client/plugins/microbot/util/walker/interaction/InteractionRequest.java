@@ -19,6 +19,7 @@ public final class InteractionRequest {
     public final WorldPoint access;
     public final InteractionLifecycle lifecycle = new InteractionLifecycle();
     public final AtomicReference<WorldPoint> ownedTarget = new AtomicReference<>();
+    public final InteractionTargetRuntime runtime = new InteractionTargetRuntime(this);
     private final BooleanSupplier effect;
     private volatile WorldPoint goal;
 
@@ -50,6 +51,7 @@ public final class InteractionRequest {
     }
 
     public boolean effectObserved() { return effect.getAsBoolean(); }
+    public WorldPoint destination() { return goal; }
     public boolean active() { return lifecycle.active(); }
     public void cancel() { lifecycle.cancel(); }
 }

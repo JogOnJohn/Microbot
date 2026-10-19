@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 public class NewMenuEntry implements MenuEntry {
     @Getter
@@ -29,6 +30,19 @@ public class NewMenuEntry implements MenuEntry {
     private TileObject gameObject;
     private Widget widget;
     private int worldViewId = WorldView.TOPLEVEL;
+    private BooleanSupplier dispatchGuard;
+
+    /** Optional opt-in guard, checked again at emission and menu dispatch. */
+    public NewMenuEntry validWhen(BooleanSupplier guard) {
+        dispatchGuard = guard;
+        return this;
+    }
+
+    public boolean isDispatchValid() {
+        if (dispatchGuard == null) return true;
+        try { return dispatchGuard.getAsBoolean(); }
+        catch (RuntimeException ex) { return false; }
+    }
 
     private NewMenuEntry(int param0, int param1, MenuAction type, int identifier) {
         this.param0 = param0;

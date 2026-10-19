@@ -9,6 +9,7 @@ public final class InteractionLifecycle {
     private static final long EFFECT_MS = 8_000;
     private static final long RETRY_MS = 1_200;
     private long started = -1;
+    private boolean initialized;
     private long dispatched = -1;
     private long retryAfter;
     private long lastProgress;
@@ -21,7 +22,7 @@ public final class InteractionLifecycle {
             boolean moving, boolean ready, boolean confirmed, boolean cancelled) {
         if (terminal != null) return terminal;
         if (cancelled) return terminal = Decision.CANCELLED;
-        if (started < 0) { started = lastProgress = now; lastPosition = position; }
+        if (!initialized) { initialized = true; started = lastProgress = now; lastPosition = position; }
         if (now < started || now - started >= OPERATION_MS) return terminal = Decision.FAILED;
         if (attempts > 0 && confirmed) return terminal = Decision.SUCCEEDED;
         if (!sceneReady) return Decision.WAIT;

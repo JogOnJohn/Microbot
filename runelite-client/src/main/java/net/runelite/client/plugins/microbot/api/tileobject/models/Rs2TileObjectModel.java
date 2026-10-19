@@ -345,7 +345,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                             .option(action)
                             .target(objName)
                             .setWorldViewId(getWorldView().getId())
-                            .gameObject(tileObject)
+                            .gameObject(tileObject).validWhen(clickDispatchGuard.get())
                     ,
                     Rs2UiHelper.getObjectClickbox(tileObject));
 // MenuEntryImpl(getOption=Use, getTarget=Barrier, getIdentifier=43700, getType=GAME_OBJECT_THIRD_OPTION, getParam0=53, getParam1=51, getItemId=-1, isForceLeftClick=true, getWorldViewId=-1, isDeprioritized=false)
@@ -359,4 +359,14 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         return true;
     }
 
+    private static final ThreadLocal<java.util.function.BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();
+
+    public boolean click(String action, java.util.function.BooleanSupplier guard) {
+        java.util.function.BooleanSupplier previous = clickDispatchGuard.get();
+        clickDispatchGuard.set(guard);
+        try { return click(action); }
+        finally {
+            if (previous == null) clickDispatchGuard.remove(); else clickDispatchGuard.set(previous);
+        }
+    }
 }

@@ -279,7 +279,7 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
                             .itemId(-1)
                             .target(npcName)
                             .actor(npc)
-                            .option(action)
+                            .option(action).validWhen(clickDispatchGuard.get())
                     ,
                     Rs2UiHelper.getActorClickbox(npc));
             return true;
@@ -287,6 +287,17 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
         } catch (Exception ex) {
             log.error("Error interacting with NPC '{}' for action '{}': ", npcName, action, ex);
             return false;
+        }
+    }
+
+    private static final ThreadLocal<java.util.function.BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();
+
+    public boolean click(String action, java.util.function.BooleanSupplier guard) {
+        java.util.function.BooleanSupplier previous = clickDispatchGuard.get();
+        clickDispatchGuard.set(guard);
+        try { return click(action); }
+        finally {
+            if (previous == null) clickDispatchGuard.remove(); else clickDispatchGuard.set(previous);
         }
     }
 

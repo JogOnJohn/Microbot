@@ -33,6 +33,9 @@ import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.input.InputArbiter;
+import net.runelite.client.plugins.microbot.util.walker.interaction.InteractionRequest;
+import net.runelite.client.plugins.microbot.util.walker.interaction.InteractionResult;
+import net.runelite.client.plugins.microbot.util.walker.interaction.InteractionLifecycle;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
@@ -1013,6 +1016,11 @@ public class Rs2Walker {
     // can still see null only when setTarget(null) is intended. recalculatePath no longer nulls
     // currentTarget between restarts (avoids false cancel during sleepUntil).
     private static final ReentrantLock walkerLock = new ReentrantLock();
+    private static final java.util.concurrent.atomic.AtomicReference<InteractionRequest>
+            activeInteraction = new java.util.concurrent.atomic.AtomicReference<>();
+    private static final ThreadLocal<InteractionRequest>
+            interactionOwner = new ThreadLocal<>();
+
     /**
      * Optional completion rule owned by the thread currently executing {@link #walkUntil}.
      *
@@ -1389,6 +1397,7 @@ public class Rs2Walker {
     }
 
     public static WalkerState walkWithState(WorldPoint target, int distance) {
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (config == null) {
             return WalkerState.EXIT;
         }
@@ -1589,6 +1598,7 @@ public class Rs2Walker {
      * {@link #setTarget(WorldPoint, String) setTarget(null, reason)} when you stop (e.g. once you interact).
      */
     public static WalkerState walkStep(WorldPoint target, int distance) {
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (config == null) {
             return WalkerState.EXIT;
         }
@@ -3707,7 +3717,7 @@ public class Rs2Walker {
     private static boolean isWalkCancelled(WorldPoint target) {
         // The single choke point for stopping a walk: processWalk already consults it at every
         // checkpoint and inside the movement-wait predicates.
-        if (InputArbiter.isHuman()) {
+        if (InputArbiter.isHuman() || interactionReservedByAnotherCaller()) {
             return true;
         }
         WalkCompletionContext completion = walkCompletionContext.get();
@@ -3876,6 +3886,7 @@ public class Rs2Walker {
      *                     maximally zoomed-out minimap.
      */
     public static boolean walkMiniMap(WorldPoint worldPoint, double zoomDistance) {
+        if (interactionMovementDeferred()) return false;
         ensureWalkerMinimapZoom();
 
         Point point = Rs2MiniMap.worldToMinimap(worldPoint);
@@ -3883,6 +3894,8 @@ public class Rs2Walker {
         if (point == null) return false;
         if (!disableWalkerUpdate && !Rs2MiniMap.isPointInsideMinimap(point)) return false;
 
+        BooleanSupplier interactionGuard = interactionMovementGuard();
+        if (interactionGuard != null) return Microbot.getMouse().clickGuarded(point, interactionGuard);
         Microbot.getMouse().click(point);
         return true;
     }
@@ -4494,7 +4507,7 @@ public class Rs2Walker {
                 .type(MenuAction.WALK)
                 .identifier(0)
                 .itemId(-1)
-                .option("Walk here");
+                .option("Walk here").validWhen(interactionMovementGuard());
 
         Microbot.doInvoke(entry,
                 new Rectangle(1, 1, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
@@ -4506,6 +4519,7 @@ public class Rs2Walker {
     }
 
     private static boolean walkFastCanvasOnScreenOnly(WorldPoint worldPoint, boolean toggleRun) {
+        if (interactionMovementDeferred()) return false;
         LocalPoint localPoint = localPointForWorld(worldPoint);
         if (localPoint == null || !Rs2Camera.isTileOnScreen(localPoint)) {
             return false;
@@ -4527,7 +4541,7 @@ public class Rs2Walker {
                 .type(MenuAction.WALK)
                 .identifier(0)
                 .itemId(0)
-                .option("Walk here");
+                .option("Walk here").validWhen(interactionMovementGuard());
 
         Microbot.doInvoke(entry,
                 new Rectangle(canvasX, canvasY, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
@@ -4546,6 +4560,7 @@ public class Rs2Walker {
     }
 
     public static boolean walkFastCanvas(WorldPoint worldPoint, boolean toggleRun) {
+        if (interactionMovementDeferred()) return false;
         if (worldPoint == null) {
             log.debug("[Walker] walkFastCanvas rejected: null worldPoint");
             return false;
@@ -4591,7 +4606,7 @@ public class Rs2Walker {
                 .type(MenuAction.WALK)
                 .identifier(0)
                 .itemId(0)
-                .option("Walk here");
+                .option("Walk here").validWhen(interactionMovementGuard());
 
         Microbot.doInvoke(entry,
                 new Rectangle(canvasX, canvasY, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
@@ -9227,6 +9242,10 @@ public class Rs2Walker {
      *                         (teardown-safe). Non-null destinations still require a live client and login/player checks.
      */
     public static void setTarget(WorldPoint target, String clearReasonWhenNull) {
+        if (interactionReservedByAnotherCaller()) {
+            var pending = activeInteraction.getAndSet(null);
+            if (pending != null) pending.cancel();
+        }
         if (target != null && !Microbot.isLoggedIn()) {
             log.warn("Unable to set target: not logged in");
             return;
@@ -13130,6 +13149,7 @@ public class Rs2Walker {
      * @return true if travel was successful, false otherwise
      */
     public static WalkerState walkWithBankedTransportsAndState(WorldPoint target, int distance, boolean forceBanking) {
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (target == null) {
             log.warn("Cannot travel to null target location");
             return WalkerState.EXIT;
@@ -13493,5 +13513,133 @@ public class Rs2Walker {
             Microbot.doInvoke(closeEntry, closeButtonBounds != null && Rs2UiHelper.isRectangleWithinCanvas(closeButtonBounds) ? closeButtonBounds : Rs2UiHelper.getDefaultRectangle());
         }
         return sleepUntil(() -> !Rs2Widget.isWidgetVisible(InterfaceID.Worldmap.CLOSE), 3000);
+    }
+    /** Opt-in execution overload. Retain the request across polls; coordinate arrival is not success. */
+    public static InteractionResult walkTo(
+            WorldPoint target, InteractionRequest request) {
+        return advanceInteraction(target, 0, request, false);
+    }
+
+    /** Bank-aware counterpart using the same interaction lifecycle and owned intermediate legs. */
+    public static InteractionResult walkWithBankedTransportsAndState(
+            WorldPoint target, int distance,
+            InteractionRequest request) {
+        return advanceInteraction(target, distance, request, true);
+    }
+
+    private static InteractionResult advanceInteraction(
+            WorldPoint target, int distance,
+            InteractionRequest request, boolean bankAware) {
+        if (request == null || target == null || !request.bind(target) || isClientThread())
+            return InteractionResult.FAILED;
+        if (!walkerLock.tryLock()) return InteractionResult.IN_PROGRESS;
+        InteractionRequest previous = interactionOwner.get();
+        try {
+            if (activeInteraction.get() != null && activeInteraction.get() != request)
+                return InteractionResult.BLOCKED;
+            if (activeInteraction.get() == null && currentTarget != null
+                    && !Objects.equals(currentTarget, request.ownedTarget.get()))
+                return InteractionResult.BLOCKED;
+            activeInteraction.set(request);
+            interactionOwner.set(request);
+            for (int pass = 0; pass < 2; pass++) {
+                var snapshot = request.runtime.probe(pass > 0);
+                boolean cancelled = !request.active() || Thread.currentThread().isInterrupted()
+                        || InputArbiter.isHuman() || Microbot.pauseAllScripts.get();
+                var decision = request.lifecycle.update(System.nanoTime() / 1_000_000,
+                        snapshot.position, snapshot.sceneReady, snapshot.moving, snapshot.ready,
+                        snapshot.sceneReady && snapshot.position != null
+                                && snapshot.position.getPlane() == request.anchor.getPlane()
+                                && snapshot.position.distanceTo(request.anchor) <= 16
+                                && (snapshot.confirmed || request.lifecycle.attempts() > 0 && request.effectObserved()), cancelled);
+                switch (decision) {
+                    case SUCCEEDED:
+                        WebWalkLog.spInfo("interaction_done | op={} kind={} target={} attempts={} probes={} hits={} probeMs={}",
+                                request.id, request.kind, request.entityId, request.lifecycle.attempts(),
+                                request.runtime.probes, request.runtime.cacheHits, request.runtime.probeNanos / 1_000_000);
+                        releaseInteraction(request);
+                        return InteractionResult.SUCCEEDED;
+                    case CANCELLED:
+                    case FAILED:
+                        releaseInteraction(request);
+                        return decision == InteractionLifecycle.Decision.CANCELLED
+                                ? InteractionResult.CANCELLED
+                                : InteractionResult.FAILED;
+                    case WAIT:
+                        return InteractionResult.IN_PROGRESS;
+                    case DISPATCH:
+                        if (currentTarget != null && Objects.equals(currentTarget, request.ownedTarget.get()))
+                            clearWalkingRoute("interaction:handoff-owned-route");
+                        request.ownedTarget.set(null);
+                        long readyAt = System.nanoTime();
+                        boolean sent = request.runtime.dispatch(snapshot, () -> activeInteraction.get() == request
+                                && request.active() && !Microbot.pauseAllScripts.get() && !InputArbiter.isHuman()
+                                && !Thread.currentThread().isInterrupted());
+                        if (sent) request.lifecycle.dispatched(System.nanoTime() / 1_000_000);
+                        else request.lifecycle.rejected(System.nanoTime() / 1_000_000);
+                        WebWalkLog.spInfo("interaction_dispatch | op={} kind={} target={} sent={} readyToDispatchMs={} at={}",
+                                request.id, request.kind, request.entityId, sent,
+                                (System.nanoTime() - readyAt) / 1_000_000, snapshot.position);
+                        return InteractionResult.IN_PROGRESS;
+                    case APPROACH:
+                        if (pass > 0) return InteractionResult.IN_PROGRESS;
+                        WalkerState state = bankAware
+                                ? walkWithBankedTransportsUntil(target, distance, request.ownedTarget,
+                                        () -> !request.active() || request.runtime.probe(false).ready)
+                                : walkWithStateUntil(target, distance, () -> !request.active() || request.runtime.probe(false).ready);
+                        if (!bankAware) request.ownedTarget.set(currentTarget);
+                        if (state == WalkerState.UNREACHABLE || state == WalkerState.EXIT && request.active()) {
+                            request.cancel(); releaseInteraction(request);
+                            return InteractionResult.BLOCKED;
+                        }
+                        break;
+                }
+            }
+            return InteractionResult.IN_PROGRESS;
+        } catch (RuntimeException ex) {
+            log.warn("Interaction walk failed for op=" + request.id, ex);
+            request.cancel(); releaseInteraction(request);
+            return InteractionResult.FAILED;
+        } finally {
+            if (previous == null) interactionOwner.remove(); else interactionOwner.set(previous);
+            walkerLock.unlock();
+        }
+    }
+
+    private static void releaseInteraction(InteractionRequest request) {
+        if (activeInteraction.compareAndSet(request, null)) {
+            WorldPoint owned = request.ownedTarget.getAndSet(null);
+            if (owned != null && Objects.equals(currentTarget, owned)) clearWalkingRoute("interaction:release-owned-route");
+        }
+    }
+
+    public static void cancelInteraction(InteractionRequest request) {
+        if (request == null) return;
+        request.cancel();
+        // The owner will release its route/lock at the next existing cancellation checkpoint.
+        if (walkerLock.tryLock()) {
+            try { releaseInteraction(request); } finally { walkerLock.unlock(); }
+        }
+    }
+
+    private static boolean interactionReservedByAnotherCaller() {
+        var active = activeInteraction.get();
+        return active != null && active != interactionOwner.get();
+    }
+
+    private static boolean interactionMovementDeferred() {
+        InteractionRequest owner = activeInteraction.get();
+        if (owner == null) return false;
+        if (owner != interactionOwner.get() || !owner.active() || owner.lifecycle.awaiting()) return true;
+        if (currentTarget != null && !currentTarget.equals(owner.destination())) return false;
+        return owner.runtime.probe(false).ready;
+    }
+
+    private static BooleanSupplier interactionMovementGuard() {
+        InteractionRequest owner = activeInteraction.get();
+        if (owner == null) return null;
+        return () -> activeInteraction.get() == owner && owner.active()
+                && !InputArbiter.isHuman() && !Microbot.pauseAllScripts.get()
+                && !interactionMovementDeferred();
     }
 }

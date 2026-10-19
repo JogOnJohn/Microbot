@@ -91,7 +91,7 @@ public class VirtualMouse extends Mouse {
 
 
     public Mouse click(Point point, boolean rightClick, NewMenuEntry entry) {
-        if (point == null) return this;
+        if (point == null || entry != null && !entry.isDispatchValid()) return this;
 
         runGesture(() -> InputLoop.run(emit -> {
             Point newPoint = point;
@@ -116,11 +116,25 @@ public class VirtualMouse extends Mouse {
                 }
             }
 
+            if (entry != null && !entry.isDispatchValid()) return;
             Microbot.targetMenu = entry;
             handleClick(emit, newPoint, rightClick);
         }));
 
         return this;
+    }
+
+    @Override
+    public boolean clickGuarded(Point point, java.util.function.BooleanSupplier valid) {
+        if (point == null || Microbot.getClient().isClientThread() || !valid.getAsBoolean()) return false;
+        boolean[] sent = {false};
+        InputLoop.run(emit -> {
+            if (shouldMoveNaturally(point)) Microbot.naturalMouse.moveTo(point.getX(), point.getY());
+            if (!valid.getAsBoolean()) return;
+            handleClick(emit, point, false);
+            sent[0] = true;
+        });
+        return sent[0];
     }
 
 

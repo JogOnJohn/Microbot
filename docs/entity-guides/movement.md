@@ -574,3 +574,12 @@ radius across the obstruction. Instance behavior remains separate.
 
 **Defensive check:** `Rs2WalkerDirectLocalApproachTest` covers the Noella detour,
 short corners, unknown/wrong-plane paths and accepted clicks without progress.
+
+## 32. Treat interaction handoff as an operation, not coordinate arrival
+
+The opt-in [interaction-aware walking API](interaction-aware-walking.md) retains
+one owner/request through approach, guarded dispatch, confirmation and recovery.
+Keep readiness callbacks read-only; never emit input inside a cancellation/wait
+predicate. Cancel requests on plugin shutdown, and confirm effects rather than
+counting an accepted menu dispatch as success. A moving/closed-door target is
+revalidated at dispatch; do not cancel another plugin's route to click it.
