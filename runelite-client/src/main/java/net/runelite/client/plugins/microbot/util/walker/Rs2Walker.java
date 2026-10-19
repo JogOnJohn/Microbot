@@ -2093,7 +2093,7 @@ public class Rs2Walker {
             // here: the player stops, the "moving" deferral ends, and OFFPATH_RECALC replans properly.
             boolean approachingInterim = shouldPrepareRouteContinuation(routeState.interimTargetWp,
                     plImmediate, Rs2Player.isMoving(), interimPreclickTiles());
-            if ((clearedInterimTarget || approachingInterim)
+            if (shouldAttemptRouteContinuation(clearedInterimTarget, approachingInterim, Rs2Player.isMoving())
                     && isNearPath()
                     && !Rs2Player.isInteracting()
                     && !Rs2Player.isAnimating()
@@ -4357,6 +4357,11 @@ public class Rs2Walker {
         // policy applied depended on which path happened to fire (timing-dependent, e.g. a slow
         // pathfinder makes the idle nudge issue the first click instead of the main loop).
         WorldPoint clickTarget = selectRouteClickTarget(rawPath, playerLoc, maxEuclidean, rawAnchorIndex);
+        if (shouldRejectRouteMovementFallback(clickTarget, markRecoveryCooldown)) {
+            WebWalkLog.spInfo("continuation_deferred | reason=no_collision_safe_target at={} goal={}",
+                    playerLoc, target);
+            return false;
+        }
         if (clickTarget == null) {
             int clickableIdx = RouteRecovery.findFurthestForwardClickableIndex(path, startIdx, playerLoc,
                     wp -> {
@@ -7010,6 +7015,17 @@ public class Rs2Walker {
     static boolean hostedHouseAnchorDiscontinuous(WorldPoint origin, WorldPoint player) {
         return origin != null && player != null && origin.getPlane() == player.getPlane()
                 && origin.distanceTo2D(player) > NORMAL_MINIMAP_REACH_EUCLIDEAN;
+    }
+
+    static boolean shouldAttemptRouteContinuation(boolean checkpointCleared, boolean withinLead,
+                                                   boolean moving) {
+        return moving && (checkpointCleared || withinLead);
+    }
+
+    static boolean shouldRejectRouteMovementFallback(WorldPoint collisionSafeTarget, boolean recoveryClick) {
+        // Only explicit recovery may use its own fallback policy. Ordinary continuation
+        // must not undo a closed-door/wall rejection with a smoothed-path click.
+        return !recoveryClick && collisionSafeTarget == null;
     }
 
     static boolean shouldPrepareRouteContinuation(WorldPoint interim, WorldPoint player,

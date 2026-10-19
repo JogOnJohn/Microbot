@@ -30,4 +30,19 @@ public class Rs2WalkerContinuationLeadTest {
         assertFalse(Rs2Walker.shouldPrepareRouteContinuation(null, player, true, 8));
         assertFalse(Rs2Walker.shouldPrepareRouteContinuation(player, null, true, 8));
     }
+
+    @Test
+    public void stationaryCheckpointClearMustNotStarveClosedDoorRecovery() {
+        assertFalse(Rs2Walker.shouldAttemptRouteContinuation(true, false, false));
+        assertFalse(Rs2Walker.shouldAttemptRouteContinuation(true, true, false));
+        assertTrue(Rs2Walker.shouldAttemptRouteContinuation(true, false, true));
+        assertTrue(Rs2Walker.shouldAttemptRouteContinuation(false, true, true));
+    }
+
+    @Test
+    public void continuationCannotUndoCollisionRejectionWithSmoothedFallback() {
+        assertTrue(Rs2Walker.shouldRejectRouteMovementFallback(null, false));
+        assertFalse(Rs2Walker.shouldRejectRouteMovementFallback(new WorldPoint(3208, 3200, 0), false));
+        assertFalse(Rs2Walker.shouldRejectRouteMovementFallback(null, true));
+    }
 }

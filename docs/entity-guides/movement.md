@@ -547,3 +547,10 @@ game-object snapshots rather than rescan the scene for every route edge. Keep
 the original nested-impostor resolver and close-only/transport ownership rules;
 do not substitute a partially resolved definition cache for live door state.
 `Rs2WalkerPendingDoorSnapshotTest` exercises those preserved classifications.
+
+An issued minimap click is not proof of movement. Normal continuation must not
+undo a collision-rejected target via the smoothed-route fallback. A stationary
+checkpoint clear must fall through to normal door/recovery handling, not click
+the blocked inside tile again and refresh the movement timer indefinitely.
+Ross's closed entrance at (2614,3319,0) exposed this starvation loop; see
+`Rs2WalkerContinuationLeadTest` for the regression policy.
