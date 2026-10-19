@@ -18,6 +18,18 @@ import static org.junit.Assert.assertNotNull;
 public class TransportResourceLoadTest
 {
 	@Test
+	public void correctedUpstreamBoatAndMinecartApproachesLoad()
+	{
+		Map<WorldPoint, Set<Transport>> catalog = Transport.loadAllFromResources();
+		Transport weiss = catalog.get(new WorldPoint(2707, 3735, 0)).stream()
+			.filter(t -> t.getObjectId() == 21176 && t.getDestination().getX() == 2849).findFirst().orElse(null);
+		assertNotNull(weiss);
+		assertEquals(new WorldPoint(2849, 3967, 0), weiss.getDestination());
+		assertEquals(QuestState.FINISHED, weiss.getQuests().get(Quest.MAKING_FRIENDS_WITH_MY_ARM));
+		assertTrue(catalog.get(new WorldPoint(3605, 3163, 1)).stream().anyMatch(t -> t.getObjectId() == 38089));
+		assertTrue(catalog.get(new WorldPoint(1670, 3833, 0)).stream().anyMatch(t -> t.getObjectId() == 28835));
+	}
+	@Test
 	public void varrockTabletsSelectExplicitDestinationRegardlessOfDefault()
 	{
 		Map<WorldPoint, Set<Transport>> catalog = Transport.loadAllFromResources();

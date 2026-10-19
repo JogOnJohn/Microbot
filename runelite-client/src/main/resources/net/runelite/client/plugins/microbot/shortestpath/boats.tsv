@@ -69,11 +69,11 @@
 2658 3988 1	2706 3735 0	Travel Boat 21175			Cold War		9
 2659 3988 1	2706 3735 0	Travel Boat 21175			Cold War		9
 2707 3735 0	2660 3989 1	Iceberg Boat 21176			Cold War		9
-2707 3735 0	2849 3968 0	Weiss Boat 21176			Making Friends with My Arm		12
+2707 3735 0	2849 3967 0	Weiss Boat 21176			Making Friends with My Arm		12
 2707 3736 0	2660 3989 1	Iceberg Boat 21176			Cold War		9
-2707 3736 0	2849 3968 0	Weiss Boat 21176			Making Friends with My Arm		12
+2707 3736 0	2849 3967 0	Weiss Boat 21176			Making Friends with My Arm		12
 2711 3732 0	2660 3989 1	Iceberg Boat 21176			Cold War		9
-2711 3732 0	2849 3968 0	Weiss Boat 21176			Making Friends with My Arm		12
+2711 3732 0	2849 3967 0	Weiss Boat 21176			Making Friends with My Arm		12
 2720 3301 0	2782 3273 0	Travel Holgart 7789			Sea Slug		9
 2782 3273 0	2720 3301 0	Travel Holgart 5070			Sea Slug		9
 2803 2706 0	2892 2724 0	Travel Lumdo 1454					5
@@ -81,7 +81,6 @@
 2841 10129 0	2892 10225 0	Travel Dwarven Boatman 7726					5
 2848 3966 0	2706 3735 0	Travel Boat 21177			Making Friends with My Arm		12
 2849 3967 0	2706 3735 0	Travel Boat 21177			Making Friends with My Arm		12
-2849 3968 0	2706 3735 0	Travel Boat 21177			Making Friends with My Arm		12
 2855 10145 0	2863 10133 0	Travel Dwarven Ferryman 4897					5		2 Coins
 2888 10226 0	2838 10127 0	Travel Dwarven Boatman 7726					5
 2892 2724 0	2803 2706 0	Travel Lumdo 1454					5
@@ -102,9 +101,9 @@
 3525 3170 0	3684 3176 0	Board Boat 38089				7255>41	13	2: Icyene Graveyard.
 3582 3973 0	3660 3849 0	Travel Rowboat 32079			Dragon Slayer II		5
 3583 3973 0	3660 3849 0	Travel Rowboat 32079			Dragon Slayer II		5
-3605 3161 1	3525 3170 0	Board Boat 38089				7255>41	13	1: Burgh de Rott.
-3605 3161 1	3663 3277 0	Board Boat 38089				7255>87	13	3: Slepe.
-3605 3161 1	3684 3176 0	Board Boat 38089				7255>41	13	2: Icyene Graveyard.
+3605 3163 1	3525 3170 0	Board Boat 38089				7255>41	13	1: Burgh de Rott.
+3605 3163 1	3663 3277 0	Board Boat 38089				7255>87	13	3: Slepe.
+3605 3163 1	3684 3176 0	Board Boat 38089				7255>41	13	2: Icyene Graveyard.
 3660 3848 0	3583 3973 0	Travel Rowboat 29916			Dragon Slayer II		5
 3660 3849 0	3583 3973 0	Travel Rowboat 29916			Dragon Slayer II		5
 3661 3278 0	3671 3542 0	Travel Row boat 32602					5
