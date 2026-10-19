@@ -63,6 +63,9 @@ public class InteractionTargetRuntimeTest {
             assertTrue(request.runtime.probe(false).ready); // same-tick memoization is read-only
             assertFalse(request.runtime.dispatch(ready, () -> true)); // fresh collision at dispatch
             verify(model, never()).click(anyString(), any());
+            when(view.isInstance()).thenReturn(true);
+            assertTrue(request.runtime.probe(true).sceneReady);
+            assertFalse(request.runtime.probe(true).ready);
             when(c.getGameState()).thenReturn(GameState.LOADING);
             assertFalse(request.runtime.probe(true).sceneReady);
         }

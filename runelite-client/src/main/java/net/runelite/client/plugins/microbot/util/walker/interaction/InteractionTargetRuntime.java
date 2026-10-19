@@ -54,9 +54,15 @@ public final class InteractionTargetRuntime {
     private Snapshot read(boolean force) {
         Client c = Microbot.getClient();
         if (c == null || c.getGameState() != GameState.LOGGED_IN || c.getLocalPlayer() == null
-                || c.getTopLevelWorldView() == null || c.getTopLevelWorldView().isInstance()) {
+                || c.getTopLevelWorldView() == null) {
             cached = null; lastTick = -1;
             return new Snapshot(null, false, false, false, false, 0);
+        }
+        if (c.getTopLevelWorldView().isInstance()) {
+            cached = null; lastTick = -1;
+            // The final target is not interactable here, but the existing POH/transport
+            // executor must still be allowed to approach it by leaving the instance.
+            return new Snapshot(Rs2Player.getWorldLocation(), true, Rs2Player.isMoving(), false, false, 0);
         }
         Object scene = c.getTopLevelWorldView().getScene();
         if (!force && cached != null && lastTick == c.getTickCount() && lastScene == scene) {
