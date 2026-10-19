@@ -524,3 +524,53 @@ timeout; preserve the existing proximity and progress thresholds.
 
 **Defensive check:** `Rs2WalkerLifecycleRuntimeMarkerTest` simulates a cleared
 shared marker; `Rs2WalkerProximityWaitTest` covers absent and valid position samples.
+
+## 30. Separate continuation readiness and POH template-anchor recovery
+
+The normal five-tile checkpoint cleanup is not the moving player's continuation
+lead. Prepare a guarded replacement click at the existing walking/running lead,
+retaining the old checkpoint if dispatch fails. Do not bypass pending doors,
+transports, recovery ownership or cancellation to obtain smoother movement.
+
+A delayed pool approach can cross POH template chunks after the outbound route
+was prepared. A first POH teleport edge anchored more than minimap reach from the
+current hosted-house template tile needs a fresh route, not repeated minimap
+clicks at the old template anchor. Ordinary facility approaches and non-house
+routes must not trigger this recovery. This is not evidence against the host.
+
+**Defensive check:** `Rs2WalkerContinuationLeadTest` and
+`Rs2WalkerHostedHouseAnchorTest`; `click_preparation_slow` separates selection,
+fallback and door-probe time from transport-inclusive startup timings.
+
+Pending/continuation door checks must consume the existing scan-scoped wall and
+game-object snapshots rather than rescan the scene for every route edge. Keep
+the original nested-impostor resolver and close-only/transport ownership rules;
+do not substitute a partially resolved definition cache for live door state.
+`Rs2WalkerPendingDoorSnapshotTest` exercises those preserved classifications.
+
+An issued minimap click is not proof of movement. Normal continuation must not
+undo a collision-rejected target via the smoothed-route fallback. A stationary
+checkpoint clear must fall through to normal door/recovery handling, not click
+the blocked inside tile again and refresh the movement timer indefinitely.
+Ross's closed entrance at (2614,3319,0) exposed this starvation loop; see
+`Rs2WalkerContinuationLeadTest` for the regression policy.
+
+The blocked-frontier `handlePendingDoorNearRawPath` caller needs the same scoped
+snapshot as the pre-click probe. Otherwise a local recovery can still rescan
+scene objects for every edge even though the ordinary continuation is batched.
+`click_prepare_pending_door_recovery` includes both probing and any real door
+interaction; correlate with `door_interaction_done` rather than treating the
+whole duration as scan CPU time.
+
+## 31. Bound the pre-path local shortcut by walking distance
+
+Whole-scene tile reachability does not establish a short local approach. Noella's
+destination was one tile away geometrically but required a 21-step computed
+route; the pre-path shortcut repeatedly clicked the endpoint and starved normal
+door-aware route execution. Require a bounded local collision path (straight-line
+distance plus four steps), and fall through when a dispatched click produces no
+position change or movement within its existing wait. Do not loosen arrival
+radius across the obstruction. Instance behavior remains separate.
+
+**Defensive check:** `Rs2WalkerDirectLocalApproachTest` covers the Noella detour,
+short corners, unknown/wrong-plane paths and accepted clicks without progress.
