@@ -2280,6 +2280,7 @@ public class Rs2Walker {
              */
             boolean segmentSkippedThisPass = false;
             for (int i = indexOfStartPoint; !doorOrTransportResult && i < path.size(); i++) {
+                long segmentPreparationStarted = System.nanoTime();
                 WorldPoint currentWorldPoint = path.get(i);
                 if (currentWorldPoint.getPlane() != currentPlayerPlane) {
                     continue;
@@ -2305,6 +2306,7 @@ public class Rs2Walker {
                     break;
                 }
                 boolean nearPath = isNearPath();
+                logClickPreparationStage("segment_near_path", segmentPreparationStarted, target, playerForPathCheck);
                 boolean nearPathByVariance = !nearPath && isNearPathByVariance(path, playerForPathCheck);
                 if (recentTransportWindow && !nearPath) {
                     WebWalkLog.tmark("post_transport_nearpath_gate",
@@ -2490,6 +2492,7 @@ public class Rs2Walker {
                     }
                 }
 
+                logClickPreparationStage("segment_handlers", segmentPreparationStarted, target, playerNearSeg);
                 boolean tileReachable = reachableTilesCache.containsKey(currentWorldPoint);
                 if (!tileReachable && !inInstance) {
                     WorldPoint playerLoc = Rs2Player.getWorldLocation();
@@ -2916,6 +2919,7 @@ public class Rs2Walker {
                     break;
                 }
                 nextWalkingDistance = path.size() <= 5 ? 0 : Rs2Random.between(9, 12);
+                logClickPreparationStage("segment_ready", segmentPreparationStarted, target, playerNearSeg);
                 WorldPoint playerLocNow = Rs2Player.getWorldLocation();
                 if (playerLocNow == null) {
                     // Player location is momentarily unavailable (loading screen / region change while
@@ -2931,6 +2935,8 @@ public class Rs2Walker {
                         playerLocNow,
                         RAW_TRANSPORT_DISPATCH_MAX_DISTANCE);
                 if (dist2d > nextWalkingDistance || approachPlannedTransportOrigin) {
+                    final long clickPreparationStarted = System.nanoTime();
+                    markStartupPhase("click_prepare_enter", target, "i=" + i);
                     tmarkPostTransport("post_transport_click_eligibility", target,
                             "i=" + i + " dist2d=" + dist2d + " threshold=" + nextWalkingDistance
                                     + (approachPlannedTransportOrigin ? " reason=transport_approach" : ""));
@@ -3073,6 +3079,8 @@ public class Rs2Walker {
 					}
 
                     WorldPoint posBefore = playerLoc;
+                    logClickPreparationStage("forward_selection", clickPreparationStarted, target, playerLoc);
+                    long clickStageStarted = System.nanoTime();
                     int rawAnchorIndex = rawIndexForSmoothedIndex(i, smoothedToRaw, rawPath);
                     // Prefer a collision-REACHABLE raw-route point. "Walkable" (tile not fully
                     // blocked) is not the same as "reachable from the player": a tile flush on the
@@ -3081,6 +3089,8 @@ public class Rs2Walker {
                     // gating excludes the wrong side outright. See movement.md #19.
                     WorldPoint rawRouteTarget = inInstance ? null
                             : selectRouteClickTarget(rawPath, playerLoc, MINIMAP_REACH_EUCLIDEAN - 1, rawAnchorIndex);
+                    logClickPreparationStage("raw_selection", clickStageStarted, target, playerLoc);
+                    clickStageStarted = System.nanoTime();
                     WorldPoint clickTarget;
                     String fallbackTag = "-";
                     if (rawRouteTarget != null && !rawRouteTarget.equals(playerLoc)) {
@@ -3105,9 +3115,13 @@ public class Rs2Walker {
                             }
                         }
                     }
-                    if (!inInstance && handlePendingDoorBeforeRouteClick(rawPath, path, i, targetIdx,
+                    logClickPreparationStage("fallback_selection", clickStageStarted, target, playerLoc);
+                    clickStageStarted = System.nanoTime();
+                    boolean pendingDoorHandled = !inInstance && handlePendingDoorBeforeRouteClick(rawPath, path, i, targetIdx,
                             smoothedToRaw, obstaclePolicy.segmentDoorTimeoutMs(), doorEdgesAttemptedThisTail,
-                            playerLoc)) {
+                            playerLoc);
+                    logClickPreparationStage("pending_door", clickStageStarted, target, playerLoc);
+                    if (pendingDoorHandled) {
                         doorOrTransportResult = true;
                         exitReason = "door-handled-before-minimap-click";
                         break;
@@ -3517,6 +3531,16 @@ public class Rs2Walker {
             walkFastLocal(LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), Objects.requireNonNull(interactablePoints.stream().min(Comparator.comparingInt(Rs2Player.getWorldLocation()::distanceTo))
                     .orElse(null))));
         }
+    }
+
+    private static void logClickPreparationStage(String stage, long startedNanos,
+                                                 WorldPoint goal, WorldPoint player) {
+        long elapsedMs = (System.nanoTime() - startedNanos) / 1_000_000L;
+        if (elapsedMs >= 250L) {
+            WebWalkLog.spInfo("click_preparation_slow | stage={} elapsedMs={} goal={} at={}",
+                    stage, elapsedMs, goal, player);
+        }
+        markStartupPhase("click_prepare_" + stage, goal, "stageMs=" + elapsedMs);
     }
 
     public static WorldPoint getPointWithWallDistance(WorldPoint target) {
