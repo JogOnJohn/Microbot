@@ -561,3 +561,16 @@ scene objects for every edge even though the ordinary continuation is batched.
 `click_prepare_pending_door_recovery` includes both probing and any real door
 interaction; correlate with `door_interaction_done` rather than treating the
 whole duration as scan CPU time.
+
+## 31. Bound the pre-path local shortcut by walking distance
+
+Whole-scene tile reachability does not establish a short local approach. Noella's
+destination was one tile away geometrically but required a 21-step computed
+route; the pre-path shortcut repeatedly clicked the endpoint and starved normal
+door-aware route execution. Require a bounded local collision path (straight-line
+distance plus four steps), and fall through when a dispatched click produces no
+position change or movement within its existing wait. Do not loosen arrival
+radius across the obstruction. Instance behavior remains separate.
+
+**Defensive check:** `Rs2WalkerDirectLocalApproachTest` covers the Noella detour,
+short corners, unknown/wrong-plane paths and accepted clicks without progress.

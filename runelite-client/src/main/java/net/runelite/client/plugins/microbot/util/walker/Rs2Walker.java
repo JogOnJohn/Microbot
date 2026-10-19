@@ -5187,9 +5187,16 @@ public class Rs2Walker {
             return null;
         }
 
-        if (!inInstance && (!Rs2Tile.isWalkable(target) || !Rs2Tile.isTileReachable(target))) {
-            localApproach.clear();
-            return null;
+        if (!inInstance) {
+            // Whole-scene reachability may require a long detour around a nearby wall/door.
+            // Such a target belongs to normal route execution, not this pre-path shortcut.
+            Integer localSteps = Rs2Tile.isWalkable(target)
+                    ? Rs2Tile.getReachableTilesFromTile(playerLoc, playerLoc.distanceTo(target) + 4).get(target)
+                    : null;
+            if (!directLocalPathWithinBudget(playerLoc, target, localSteps)) {
+                localApproach.clear();
+                return null;
+            }
         }
 
         if (!inInstance && localApproach.advancing(target, distance, playerLoc,
@@ -5231,7 +5238,21 @@ public class Rs2Walker {
             return WalkerState.ARRIVED;
         }
 
+        if (!inInstance && directLocalClickMadeNoProgress(before, afterClick, Rs2Player.isMoving())) {
+            localApproach.clear();
+            markStartupPhase("direct_local_no_progress", target, "fallthrough=route");
+            return null;
+        }
         return WalkerState.MOVING;
+    }
+
+    static boolean directLocalPathWithinBudget(WorldPoint player, WorldPoint target, Integer localSteps) {
+        return player != null && target != null && player.getPlane() == target.getPlane()
+                && localSteps != null && localSteps >= 0 && localSteps <= player.distanceTo(target) + 4;
+    }
+
+    static boolean directLocalClickMadeNoProgress(WorldPoint before, WorldPoint after, boolean moving) {
+        return !moving && (after == null || Objects.equals(before, after));
     }
 
     private static WalkerState tryDirectShortWalk(WorldPoint target,
