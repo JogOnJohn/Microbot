@@ -2088,12 +2088,15 @@ public class Rs2Walker {
             // recalc, the interim goes stale, and the next continuation click sustains the spiral — the
             // walker can run minutes in the wrong corridor without ever replanning. Off-path, do nothing
             // here: the player stops, the "moving" deferral ends, and OFFPATH_RECALC replans properly.
-            if (clearedInterimTarget
+            boolean approachingInterim = shouldPrepareRouteContinuation(routeState.interimTargetWp,
+                    plImmediate, Rs2Player.isMoving(), interimPreclickTiles());
+            if ((clearedInterimTarget || approachingInterim)
                     && isNearPath()
                     && !Rs2Player.isInteracting()
                     && !Rs2Player.isAnimating()
                     && !isDoorInteractionSettling()
                     && !isTransportInteractionSettling()
+                    && !isRecoveryMovementInFlight()
                     && tryIssueRouteContinuationClick(rawPath, path, target, distance)) {
                 walkerDiag("tail exempt exitReason=interim-close-route-click tailBefore=%d", processWalkTail);
                 processWalkTail--;
@@ -6962,6 +6965,13 @@ public class Rs2Walker {
                     "to=" + compactWorldPoint(candidate));
         }
         return clicked;
+    }
+
+    static boolean shouldPrepareRouteContinuation(WorldPoint interim, WorldPoint player,
+                                                   boolean moving, int leadTiles) {
+        return moving && interim != null && player != null
+                && interim.getPlane() == player.getPlane()
+                && player.distanceTo2D(interim) <= leadTiles;
     }
 
     private static int interimPreclickTiles() {
