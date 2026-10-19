@@ -5595,6 +5595,20 @@ public class Rs2Walker {
             return false;
         }
 
+        if (rawScanWallSnapshot == null && rawScanGameObjectSnapshot == null) {
+            long started = System.nanoTime();
+            try {
+                return withScopedDoorProbeSnapshot(playerLoc, HANDLER_RANGE + 2, new BooleanSupplier() {
+                    public boolean getAsBoolean() {
+                        return handlePendingDoorNearRawPath(rawPath, timeoutMs, attempted, playerLoc,
+                                backtrackEdges, lookaheadEdges);
+                    }
+                });
+            } finally {
+                logClickPreparationStage("pending_door_recovery", started, currentTarget, playerLoc);
+            }
+        }
+
         int rawStart = getClosestTileIndex(rawPath, playerLoc);
         if (rawStart < 0) {
             return false;

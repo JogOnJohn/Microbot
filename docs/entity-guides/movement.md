@@ -554,3 +554,10 @@ checkpoint clear must fall through to normal door/recovery handling, not click
 the blocked inside tile again and refresh the movement timer indefinitely.
 Ross's closed entrance at (2614,3319,0) exposed this starvation loop; see
 `Rs2WalkerContinuationLeadTest` for the regression policy.
+
+The blocked-frontier `handlePendingDoorNearRawPath` caller needs the same scoped
+snapshot as the pre-click probe. Otherwise a local recovery can still rescan
+scene objects for every edge even though the ordinary continuation is batched.
+`click_prepare_pending_door_recovery` includes both probing and any real door
+interaction; correlate with `door_interaction_done` rather than treating the
+whole duration as scan CPU time.
