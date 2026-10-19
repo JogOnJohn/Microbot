@@ -18,6 +18,16 @@ import static org.junit.Assert.assertNotNull;
 public class TransportResourceLoadTest
 {
 	@Test
+	public void varrockTabletsSelectExplicitDestinationRegardlessOfDefault()
+	{
+		Map<WorldPoint, Set<Transport>> catalog = Transport.loadAllFromResources();
+		assertTrue(containsDisplayInfo(catalog, "Varrock tablet: Varrock"));
+		assertTrue(containsDisplayInfo(catalog, "Varrock tablet: Grand Exchange"));
+		assertTrue(!containsDisplayInfo(catalog, "Varrock tablet"));
+		assertTrue(!containsDisplayInfo(catalog, "Varrock tablet: GE"));
+	}
+
+	@Test
 	public void resourceLoaderPreservesRowOrderAcrossReloads()
 	{
 		Map<WorldPoint, Set<Transport>> first = Transport.loadAllFromResources();
