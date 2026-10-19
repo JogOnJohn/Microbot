@@ -202,7 +202,7 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
 
         Microbot.status = action + " " + npcName;
         try {
-            if (Microbot.isCantReachTargetDetectionEnabled && Microbot.cantReachTarget) {
+            if (clickDispatchGuard.get() == null && Microbot.isCantReachTargetDetectionEnabled && Microbot.cantReachTarget) {
                 if (!hasLineOfSight()) {
                     if (Microbot.cantReachTargetRetries >= Rs2Random.between(3, 5)) {
                         Microbot.pauseAllScripts.compareAndSet(false, true);

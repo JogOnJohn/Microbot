@@ -122,6 +122,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         });
     }
 
+
     @Override
     public @NotNull LocalPoint getLocalLocation() {
         return tileObject.getLocalLocation();
@@ -368,5 +369,18 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         finally {
             if (previous == null) clickDispatchGuard.remove(); else clickDispatchGuard.set(previous);
         }
+    }
+
+    /** Live footprint for bounded interaction-edge checks. */
+    public net.runelite.api.coords.WorldArea getInteractionFootprint() {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            WorldPoint location = getWorldLocation();
+            if (location == null) return null;
+            if (tileObject instanceof GameObject) {
+                GameObject object = (GameObject) tileObject;
+                return new net.runelite.api.coords.WorldArea(location, object.sizeX(), object.sizeY());
+            }
+            return new net.runelite.api.coords.WorldArea(location, 1, 1);
+        }).orElse(null);
     }
 }

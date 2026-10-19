@@ -583,3 +583,9 @@ Keep readiness callbacks read-only; never emit input inside a cancellation/wait
 predicate. Cancel requests on plugin shutdown, and confirm effects rather than
 counting an accepted menu dispatch as success. A moving/closed-door target is
 revalidated at dispatch; do not cancel another plugin's route to click it.
+
+Furniture readiness additionally needs a reachable interaction edge around the
+live footprint. A mapped access tile can be reachable on the wrong side of an
+internal door; its presence alone cannot authorize the click. Keep animation
+waits bounded and release pending ownership before the plugin changes state on
+a completion chat message or final hotspot effect.

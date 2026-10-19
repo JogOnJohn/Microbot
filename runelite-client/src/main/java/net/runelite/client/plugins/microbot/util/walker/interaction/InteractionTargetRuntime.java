@@ -12,12 +12,14 @@ import net.runelite.api.NPC;
 import net.runelite.api.NPCComposition;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.coords.WorldArea;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
+import net.runelite.client.plugins.microbot.util.coords.Rs2WorldArea;
 import net.runelite.client.plugins.microbot.util.input.InputArbiter;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
@@ -76,6 +78,7 @@ public final class InteractionTargetRuntime {
         WorldPoint target = null;
         Shape shape = null;
         boolean action = false;
+        WorldArea footprint = null;
         if (request.kind == InteractionRequest.Kind.NPC) {
             Rs2NpcModel model = npc();
             NPC npc = model == null ? null : model.getNpc();
@@ -92,6 +95,7 @@ public final class InteractionTargetRuntime {
             Rs2TileObjectModel model = object();
             if (model != null && model.getWorldView() == c.getTopLevelWorldView()) {
                 target = model.getWorldLocation(); shape = model.getClickbox(); identity = model.getHash();
+                footprint = model.getInteractionFootprint();
                 ObjectComposition composition = model.getObjectComposition();
                 for (int i = 0; composition != null && composition.getImpostorIds() != null && i < 4; i++)
                     composition = composition.getImpostor();
@@ -107,11 +111,16 @@ public final class InteractionTargetRuntime {
                 Set<WorldPoint> reachable = Rs2Tile.getReachableTilesFromTile(player, 10).keySet();
                 ready = request.kind == InteractionRequest.Kind.NPC ? reachable.contains(target)
                         : request.access != null && request.access.getPlane() == player.getPlane()
-                        && reachable.contains(request.access);
+                        && reachable.contains(request.access)
+                        && objectEdgeReachable(footprint, reachable, c.getTopLevelWorldView());
             }
         }
         lastTick = c.getTickCount(); lastScene = scene;
-        return cached = new Snapshot(player, true, Rs2Player.isMoving(), ready, confirmed, identity);
+        // An ongoing object animation is useful progress, not permission to reclick.
+        // The independent eight-second effect deadline still bounds a stuck animation.
+        boolean active = Rs2Player.isMoving()
+                || request.kind == InteractionRequest.Kind.OBJECT && Rs2Player.isAnimating();
+        return cached = new Snapshot(player, true, active, ready, confirmed, identity);
     }
 
     private Rs2NpcModel npc() {
@@ -135,7 +144,9 @@ public final class InteractionTargetRuntime {
         };
         if (request.kind == InteractionRequest.Kind.NPC) {
             Rs2NpcModel model = Microbot.getClientThread().runOnClientThreadOptional(this::npc).orElse(null);
-            if (model == null || Microbot.cantReachTarget) return false;
+            // Guarded dispatch owns obstruction recovery; a global flag from an older
+            // action must not veto a freshly reachable target or trigger nested walking.
+            if (model == null) return false;
             return model.click(request.action, guard);
         }
         Rs2TileObjectModel model = Microbot.getClientThread().runOnClientThreadOptional(this::object).orElse(null);
@@ -144,6 +155,24 @@ public final class InteractionTargetRuntime {
 
     public static boolean visible(Shape shape, Rectangle viewport) {
         return shape != null && !shape.getBounds().isEmpty() && new Area(shape).intersects(viewport);
+    }
+
+    public static boolean objectEdgeReachable(WorldArea footprint, Set<WorldPoint> reachable,
+            net.runelite.api.WorldView view) {
+        if (footprint == null || footprint.getWidth() < 1 || footprint.getHeight() < 1
+                || footprint.getWidth() > 8 || footprint.getHeight() > 8 || view == null
+                || view.getCollisionMaps() == null || footprint.getPlane() < 0
+                || footprint.getPlane() >= view.getCollisionMaps().length
+                || view.getCollisionMaps()[footprint.getPlane()] == null
+                || footprint.getX() <= view.getBaseX() || footprint.getY() <= view.getBaseY()
+                || footprint.getX() + footprint.getWidth() >= view.getBaseX() + view.getSizeX()
+                || footprint.getY() + footprint.getHeight() >= view.getBaseY() + view.getSizeY()) return false;
+        Rs2WorldArea area = new Rs2WorldArea(footprint);
+        for (WorldPoint tile : reachable) {
+            if (area.isInMeleeDistance(tile.toWorldArea())
+                    && area.canMelee(view, new Rs2WorldArea(tile, 1, 1))) return true;
+        }
+        return false;
     }
     private static boolean hasAction(String[] actions, String action) {
         return actions != null && Arrays.stream(actions).anyMatch(action::equalsIgnoreCase);

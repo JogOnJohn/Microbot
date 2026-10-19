@@ -36,7 +36,10 @@ their existing execution/landing handling, not a nested interaction request.
 - Resolve by ID and expected location/area, world view, plane, action and actual
   viewport shape. NPC probes use the live entity, not its cached distance field.
 - Visibility is insufficient. A bounded local collision path must reach the
-  target/access. Closed crossings remain with normal door-aware routing.
+  target/access. Objects additionally require a reachable cardinal interaction
+  edge on their live footprint, with loaded collision data. A mapped approach
+  tile alone cannot establish that the furniture is on the same side of a door.
+  Closed crossings remain with normal door-aware routing.
 - Read-only probes are memoized per request/game tick/scene; dispatch revalidates
   after mouse approach and again at menu execution. NewMenuEntry guards are
   opt-in; legacy entries have no predicate and retain their existing path.
@@ -46,6 +49,9 @@ their existing execution/landing handling, not a nested interaction request.
 - One operation has a 120-second deadline and at most three accepted dispatch
   attempts. Each attempt waits at most eight seconds, with earlier recovery
   after stationary progress loss. Pauses/interruptions cancel instead of clicking.
+- Object animations defer stationary retry while the independent effect deadline
+  still bounds the attempt. Guarded NPC dispatch uses its own fresh collision
+  check and bounded recovery, not the global rejection flag from an older action.
 - Loading/instances are not accepted as a ready target scene. Ordinary W330
   travel still executes through the existing planner/transport machinery.
 - Probe timing is wall time including client-thread handoff, not pure CPU time.
@@ -59,6 +65,12 @@ interactionAwareFurniture settings, both off by default. Furniture adoption is
 limited to mapped access points. Deploy the paired client before enabling the
 settings, and restore the old Homes/client pair together for rollback. An older
 client with the same Microbot version string may not implement this custom API.
+
+Homes must poll an outstanding request before advancing its dialogue, and must
+not leave its work/hand-in state while that request remains pending. A completion
+chat message or final repaired hotspot can arrive between state-machine ticks;
+neither may bypass ownership release. The first poll binds the declared target,
+not request.destination(), which is null until binding succeeds.
 
 LEGACY and EXACT share this executor. Backend costs, W330 preferences, house
 policy, manual overlays and minimap behavior are not changed by these overloads.

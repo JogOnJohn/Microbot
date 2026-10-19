@@ -21,6 +21,31 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 public class InteractionTargetRuntimeTest {
+    @Test public void mappedAccessIsNotEnoughWithoutAReachableUnblockedObjectEdge() {
+        WorldView view = mock(WorldView.class);
+        when(view.getBaseX()).thenReturn(3200);
+        when(view.getBaseY()).thenReturn(3400);
+        when(view.getSizeX()).thenReturn(104);
+        when(view.getSizeY()).thenReturn(104);
+        CollisionData collision = mock(CollisionData.class);
+        int[][] flags = new int[104][104];
+        when(collision.getFlags()).thenReturn(flags);
+        when(view.getCollisionMaps()).thenReturn(new CollisionData[]{collision});
+        var object = new net.runelite.api.coords.WorldArea(new WorldPoint(3240, 3450, 0), 1, 1);
+        var access = new WorldPoint(3240, 3449, 0);
+        assertTrue(net.runelite.client.plugins.microbot.util.walker.interaction.InteractionTargetRuntime
+            .objectEdgeReachable(object, java.util.Set.of(access), view));
+        flags[40][49] = CollisionDataFlag.BLOCK_MOVEMENT_NORTH;
+        assertFalse(net.runelite.client.plugins.microbot.util.walker.interaction.InteractionTargetRuntime
+            .objectEdgeReachable(object, java.util.Set.of(access), view));
+        flags[40][49] = 0;
+        assertFalse(net.runelite.client.plugins.microbot.util.walker.interaction.InteractionTargetRuntime
+            .objectEdgeReachable(object, java.util.Set.of(access.dy(-3)), view));
+        when(view.getCollisionMaps()).thenReturn(null);
+        assertFalse(net.runelite.client.plugins.microbot.util.walker.interaction.InteractionTargetRuntime
+            .objectEdgeReachable(object, java.util.Set.of(access), view));
+    }
+
     @Test public void liveDoorChangeInvalidatesCachedReadinessBeforeDispatch() throws Exception {
         try (MockedStatic<Microbot> micro = mockStatic(Microbot.class);
              MockedStatic<Rs2Player> player = mockStatic(Rs2Player.class);
@@ -63,6 +88,14 @@ public class InteractionTargetRuntimeTest {
             assertTrue(request.runtime.probe(false).ready); // same-tick memoization is read-only
             assertFalse(request.runtime.dispatch(ready, () -> true)); // fresh collision at dispatch
             verify(model, never()).click(anyString(), any());
+            reachable.put(n, 2);
+            when(model.click(eq("Talk-to"), any())).thenReturn(true);
+            boolean previousCantReach = Microbot.cantReachTarget;
+            try {
+                Microbot.cantReachTarget = true;
+                assertTrue("A stale global rejection cannot veto fresh readiness",
+                    request.runtime.dispatch(ready, () -> true));
+            } finally { Microbot.cantReachTarget = previousCantReach; }
             when(view.isInstance()).thenReturn(true);
             assertTrue(request.runtime.probe(true).sceneReady);
             assertFalse(request.runtime.probe(true).ready);
