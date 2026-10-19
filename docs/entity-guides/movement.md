@@ -524,3 +524,20 @@ timeout; preserve the existing proximity and progress thresholds.
 
 **Defensive check:** `Rs2WalkerLifecycleRuntimeMarkerTest` simulates a cleared
 shared marker; `Rs2WalkerProximityWaitTest` covers absent and valid position samples.
+
+## 30. Separate continuation readiness and POH template-anchor recovery
+
+The normal five-tile checkpoint cleanup is not the moving player's continuation
+lead. Prepare a guarded replacement click at the existing walking/running lead,
+retaining the old checkpoint if dispatch fails. Do not bypass pending doors,
+transports, recovery ownership or cancellation to obtain smoother movement.
+
+A delayed pool approach can cross POH template chunks after the outbound route
+was prepared. A first POH teleport edge anchored more than minimap reach from the
+current hosted-house template tile needs a fresh route, not repeated minimap
+clicks at the old template anchor. Ordinary facility approaches and non-house
+routes must not trigger this recovery. This is not evidence against the host.
+
+**Defensive check:** `Rs2WalkerContinuationLeadTest` and
+`Rs2WalkerHostedHouseAnchorTest`; `click_preparation_slow` separates selection,
+fallback and door-probe time from transport-inclusive startup timings.

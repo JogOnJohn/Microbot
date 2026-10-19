@@ -1906,6 +1906,9 @@ public class Rs2Walker {
             markStartupPhase("path_snapshot", target, "raw=" + rawSize + " walk=" + walkSize);
             logPathTeleportsOnce(target, rawPath);
             final WalkLoopSnapshot walkLoop = WalkLoopSnapshot.capture();
+            if (reanchorStaleHostedHouseRoute(rawPath, walkLoop.playerLoc, target)) {
+                continue;
+            }
             final WorldPoint dst;
             if (path == null || path.isEmpty()) {
                 dst = walkLoop.playerLoc;
@@ -4380,6 +4383,10 @@ public class Rs2Walker {
         WorldPoint clickedTarget = null;
         if (clickTarget != null && !clickTarget.equals(playerLoc)) {
             clickTarget = RouteRecovery.clampToEuclideanRadius(playerLoc, clickTarget, maxEuclidean - 1);
+            // Early continuation must extend the existing click, not repeatedly refresh it.
+            if (!markRecoveryCooldown && Objects.equals(clickTarget, routeState.interimTargetWp)) {
+                return false;
+            }
             clickedTarget = clickMiniMapOrFallback(rawPath, clickTarget, playerLoc,
                     maxEuclidean - 1, rawPath == null || rawPath.isEmpty(), rawAnchorIndex);
             if (clickedTarget == null) {
@@ -6965,6 +6972,35 @@ public class Rs2Walker {
                     "to=" + compactWorldPoint(candidate));
         }
         return clicked;
+    }
+
+    private static boolean reanchorStaleHostedHouseRoute(List<WorldPoint> rawPath,
+                                                        WorldPoint player, WorldPoint goal) {
+        if (rawPath == null || rawPath.size() < 2 || player == null) return false;
+        WorldPoint origin = rawPath.get(0);
+        if (!hostedHouseAnchorDiscontinuous(origin, player)) return false;
+        Set<Transport> firstTransports = Rs2PathApi.getTransports().get(origin);
+        if (firstTransports == null) return false;
+        boolean startsWithHouseTeleport = false;
+        for (Transport transport : firstTransports) {
+            if (transport.getType() == TransportType.POH
+                    && Objects.equals(transport.getDestination(), rawPath.get(1))) {
+                startsWithHouseTeleport = true;
+                break;
+            }
+        }
+        // Template chunks in a POH are not spatially continuous. A delayed pool approach
+        // can cross a chunk after entry has already prepared the outbound transport.
+        if (!startsWithHouseTeleport || !World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse()
+                || isWalkCancelled(goal) || !restartPathfinding(player, goal)) return false;
+        clearInterimTarget("hosted-house-anchor-changed");
+        WebWalkLog.spInfo("hosted_house_reanchor | old={} current={} goal={}", origin, player, goal);
+        return true;
+    }
+
+    static boolean hostedHouseAnchorDiscontinuous(WorldPoint origin, WorldPoint player) {
+        return origin != null && player != null && origin.getPlane() == player.getPlane()
+                && origin.distanceTo2D(player) > NORMAL_MINIMAP_REACH_EUCLIDEAN;
     }
 
     static boolean shouldPrepareRouteContinuation(WorldPoint interim, WorldPoint player,
