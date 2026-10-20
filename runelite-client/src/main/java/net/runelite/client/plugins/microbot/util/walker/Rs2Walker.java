@@ -9281,7 +9281,8 @@ public class Rs2Walker {
                 }
                 Future<?> pathfinderFuture = Rs2PathApi.getPathfinderFuture();
                 if (pathfinderFuture != null && !pathfinderFuture.isDone()) {
-                    pathfinderFuture.cancel(true);
+                    // Route clearing must not poison an in-flight shared transport refresh.
+                    pathfinderFuture.cancel(false);
                 }
                 Rs2PathApi.setPathfinderFuture(null);
                 Rs2PathApi.setPathfinder(null);
