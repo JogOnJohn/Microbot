@@ -23,6 +23,13 @@ import static net.runelite.client.plugins.microbot.util.Global.sleep;
 @Slf4j
 public class VirtualMouse extends Mouse {
 
+    public static final int CLICK_HOLD_MIN_MS = 55;
+    public static final int CLICK_HOLD_MAX_MS = 140;
+    public static final int QUICK_CLICK_HOLD_MIN_MS = 30;
+    public static final int QUICK_CLICK_HOLD_MAX_MS = 65;
+    public static final int QUICK_CLICK_SETTLE_MIN_MS = 10;
+    public static final int QUICK_CLICK_SETTLE_MAX_MS = 25;
+
     private final ScheduledExecutorService scheduledExecutorService;
 
     @Inject
@@ -45,22 +52,34 @@ public class VirtualMouse extends Mouse {
     }
 
     private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick) {
+        handleClick(emit, point, rightClick, false, () -> { }, () -> true);
+    }
+
+    private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick, boolean quick, Runnable beforePress, java.util.function.BooleanSupplier valid) {
         int button = rightClick ? MouseEvent.BUTTON3 : MouseEvent.BUTTON1;
         // A human clicking where the pointer already is sends no fresh MOVED, so emit one only
         // when it is not there, which happens when NaturalMouse was skipped. No ENTERED/EXITED:
         // no human click sends those, and the EXITED wrote (-1,-1) into the tracked position.
         if (!PointerState.isAt(point.getX(), point.getY())) {
             emit.move(point.getX(), point.getY());
+            if (quick) {
+                sleep(Rs2Random.logNormalBounded(QUICK_CLICK_SETTLE_MIN_MS, QUICK_CLICK_SETTLE_MAX_MS));
+            }
         }
+        if (!valid.getAsBoolean()) return;
+        beforePress.run();
         emit.press(point.getX(), point.getY(), button);
+        sleep(quick
+                ? Rs2Random.logNormalBounded(QUICK_CLICK_HOLD_MIN_MS, QUICK_CLICK_HOLD_MAX_MS)
+                : Rs2Random.logNormalBounded(CLICK_HOLD_MIN_MS, CLICK_HOLD_MAX_MS));
         emit.release(point.getX(), point.getY(), button);
         emit.click(point.getX(), point.getY(), button);
         setLastClick(point);
     }
 
     private boolean shouldMoveNaturally(Point point) {
-        return point.getX() > 1
-                && point.getY() > 1
+        return point.getX() >= 0
+                && point.getY() >= 0
                 && Microbot.naturalMouse != null;
     }
 
@@ -91,34 +110,38 @@ public class VirtualMouse extends Mouse {
 
 
     public Mouse click(Point point, boolean rightClick, NewMenuEntry entry) {
+<<<<<<< HEAD
         if (point == null || entry != null && !entry.isDispatchValid()) return this;
+=======
+        return click(point, rightClick, entry, false);
+    }
+
+    @Override
+    public Mouse quickClick(Point point, NewMenuEntry entry) {
+        return click(point, false, entry, true);
+    }
+
+    private Mouse click(Point point, boolean rightClick, NewMenuEntry entry, boolean quick) {
+        if (point == null) return this;
+>>>>>>> codex/playable-sync-20261021
 
         runGesture(() -> InputLoop.run(emit -> {
             Point newPoint = point;
-            if (shouldMoveNaturally(point)) {
+            if (!quick && shouldMoveNaturally(point)) {
                 Microbot.naturalMouse.moveTo(point.getX(), point.getY());
 
                 if (Rs2UiHelper.hasActor(entry)) {
-                    Rectangle rectangle = Rs2UiHelper.getActorClickbox(entry.getActor());
-                    if (!Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
-                        newPoint = Rs2UiHelper.getClickingPoint(rectangle, true);
-                        Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
-                    }
+                    newPoint = retarget(Rs2UiHelper.getActorClickbox(entry.getActor()), newPoint);
                 }
 
                 if (Rs2UiHelper.isGameObject(entry)) {
-                    Rectangle rectangle = Rs2UiHelper.getObjectClickbox(entry.getGameObject());
-                    if (!Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
-                        newPoint = Rs2UiHelper.getClickingPoint(rectangle, true);
-                        Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
-
-                    }
+                    newPoint = retarget(Rs2UiHelper.getObjectClickbox(entry.getGameObject()), newPoint);
                 }
             }
 
             if (entry != null && !entry.isDispatchValid()) return;
-            Microbot.targetMenu = entry;
-            handleClick(emit, newPoint, rightClick);
+            handleClick(emit, newPoint, rightClick, quick, () -> Microbot.targetMenu = entry,
+                    () -> entry == null || entry.isDispatchValid());
         }));
 
         return this;
@@ -138,6 +161,19 @@ public class VirtualMouse extends Mouse {
     }
 
 
+    private static Point retarget(Rectangle clickbox, Point current) {
+        if (Rs2UiHelper.isFallbackRectangle(clickbox)) {
+            return current;
+        }
+        Rectangle visible = Rs2UiHelper.clipToCanvas(clickbox);
+        if (visible == null || visible.contains(Microbot.getMouse().getMousePosition())) {
+            return current;
+        }
+        Point target = Rs2UiHelper.getClickingPoint(visible, true, false);
+        Microbot.naturalMouse.moveTo(target.getX(), target.getY());
+        return target;
+    }
+
     public Mouse click(int x, int y) {
         return click(new Point(x, y), false);
     }
@@ -147,6 +183,9 @@ public class VirtualMouse extends Mouse {
     }
 
     public Mouse click(Rectangle rectangle) {
+        if (Rs2UiHelper.isFallbackRectangle(rectangle)) {
+            return this;
+        }
         return click(Rs2UiHelper.getClickingPoint(rectangle, true), false);
     }
 
@@ -173,6 +212,9 @@ public class VirtualMouse extends Mouse {
     // NaturalMouse steps through here, so this one check also stops a trajectory mid-curve.
     public Mouse move(Point point) {
         if (InputArbiter.isHuman()) {
+            return this;
+        }
+        if (AwtEmitter.heldMask() != 0 && !InputLoop.isInGesture()) {
             return this;
         }
         recordTrailPoint(point);
