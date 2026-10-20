@@ -71,6 +71,10 @@ public abstract class Mouse {
         return true;
     }
 
+    public Mouse quickClick(Point point, NewMenuEntry entry) {
+        return click(point, entry);
+    }
+
     public abstract Mouse click();
 
     public abstract Mouse move(Point point);
