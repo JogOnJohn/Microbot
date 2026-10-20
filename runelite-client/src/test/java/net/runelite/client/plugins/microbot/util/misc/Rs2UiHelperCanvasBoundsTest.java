@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.util.misc;
 
 import net.runelite.api.Client;
 import net.runelite.api.Point;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.input.PointerState;
 import org.junit.After;
@@ -17,10 +18,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 public class Rs2UiHelperCanvasBoundsTest {
 
 	private Object previousClient;
+	private Object previousClientThread;
 
 	@Before
 	public void before() throws Exception {
@@ -28,13 +31,24 @@ public class Rs2UiHelperCanvasBoundsTest {
 		when(client.getCanvasWidth()).thenReturn(800);
 		when(client.getCanvasHeight()).thenReturn(600);
 		previousClient = swapStatic("client", client);
+		ClientThread thread = mock(ClientThread.class);
+		when(thread.runOnClientThreadOptional(any())).thenAnswer(invocation ->
+			java.util.Optional.ofNullable(((java.util.concurrent.Callable<?>) invocation.getArgument(0)).call()));
+		previousClientThread = swapStatic("clientThread", thread);
 		PointerState.reset();
 	}
 
 	@After
 	public void after() throws Exception {
 		swapStatic("client", previousClient);
+		swapStatic("clientThread", previousClientThread);
 		PointerState.reset();
+	}
+
+	@Test
+	public void unavailableClientThreadSnapshotRejectsClipping() {
+		when(Microbot.getClientThread().runOnClientThreadOptional(any())).thenReturn(java.util.Optional.empty());
+		assertNull(Rs2UiHelper.clipToCanvas(new Rectangle(10, 10, 20, 20)));
 	}
 
 	@Test
