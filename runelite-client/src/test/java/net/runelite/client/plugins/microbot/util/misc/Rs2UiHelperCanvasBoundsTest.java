@@ -18,6 +18,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.ArgumentMatchers.any;
 
 public class Rs2UiHelperCanvasBoundsTest {
@@ -47,7 +48,7 @@ public class Rs2UiHelperCanvasBoundsTest {
 
 	@Test
 	public void unavailableClientThreadSnapshotRejectsClipping() {
-		when(Microbot.getClientThread().runOnClientThreadOptional(any())).thenReturn(java.util.Optional.empty());
+		doReturn(java.util.Optional.empty()).when(Microbot.getClientThread()).runOnClientThreadOptional(any());
 		assertNull(Rs2UiHelper.clipToCanvas(new Rectangle(10, 10, 20, 20)));
 	}
 
