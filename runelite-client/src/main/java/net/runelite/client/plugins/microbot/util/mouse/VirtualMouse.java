@@ -25,6 +25,8 @@ public class VirtualMouse extends Mouse {
 
     public static final int CLICK_HOLD_MIN_MS = 55;
     public static final int CLICK_HOLD_MAX_MS = 140;
+    public static final int QUICK_CLICK_HOLD_MIN_MS = 30;
+    public static final int QUICK_CLICK_HOLD_MAX_MS = 65;
 
     private final ScheduledExecutorService scheduledExecutorService;
 
@@ -48,6 +50,10 @@ public class VirtualMouse extends Mouse {
     }
 
     private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick) {
+        handleClick(emit, point, rightClick, false);
+    }
+
+    private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick, boolean quick) {
         int button = rightClick ? MouseEvent.BUTTON3 : MouseEvent.BUTTON1;
         // A human clicking where the pointer already is sends no fresh MOVED, so emit one only
         // when it is not there, which happens when NaturalMouse was skipped. No ENTERED/EXITED:
@@ -56,7 +62,9 @@ public class VirtualMouse extends Mouse {
             emit.move(point.getX(), point.getY());
         }
         emit.press(point.getX(), point.getY(), button);
-        sleep(Rs2Random.logNormalBounded(CLICK_HOLD_MIN_MS, CLICK_HOLD_MAX_MS));
+        sleep(quick
+                ? Rs2Random.logNormalBounded(QUICK_CLICK_HOLD_MIN_MS, QUICK_CLICK_HOLD_MAX_MS)
+                : Rs2Random.logNormalBounded(CLICK_HOLD_MIN_MS, CLICK_HOLD_MAX_MS));
         emit.release(point.getX(), point.getY(), button);
         emit.click(point.getX(), point.getY(), button);
         setLastClick(point);
@@ -95,6 +103,15 @@ public class VirtualMouse extends Mouse {
 
 
     public Mouse click(Point point, boolean rightClick, NewMenuEntry entry) {
+        return click(point, rightClick, entry, false);
+    }
+
+    @Override
+    public Mouse quickClick(Point point, NewMenuEntry entry) {
+        return click(point, false, entry, true);
+    }
+
+    private Mouse click(Point point, boolean rightClick, NewMenuEntry entry, boolean quick) {
         if (point == null) return this;
 
         runGesture(() -> InputLoop.run(emit -> {
@@ -112,7 +129,7 @@ public class VirtualMouse extends Mouse {
             }
 
             Microbot.targetMenu = entry;
-            handleClick(emit, newPoint, rightClick);
+            handleClick(emit, newPoint, rightClick, quick);
         }));
 
         return this;

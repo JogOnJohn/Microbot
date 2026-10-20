@@ -752,12 +752,20 @@ public class Microbot {
     }
 
     public static void doInvoke(NewMenuEntry entry, Rectangle rectangle) {
+        doInvoke(entry, rectangle, false);
+    }
+
+    public static void doInvokeQuick(NewMenuEntry entry, Rectangle rectangle) {
+        doInvoke(entry, rectangle, true);
+    }
+
+    private static void doInvoke(NewMenuEntry entry, Rectangle rectangle, boolean quick) {
         try {
             Rectangle visible = Rs2UiHelper.isFallbackRectangle(rectangle) ? null : Rs2UiHelper.clipToCanvas(rectangle);
             if (visible == null) {
-                click(new Rectangle(1, 1), entry);
+                click(new Rectangle(1, 1), entry, true, quick);
             } else {
-                click(visible, entry, false);
+                click(visible, entry, false, quick);
             }
         } catch (ArrayIndexOutOfBoundsException ex) {
             log.error("Error during doInvoke", ex);
@@ -781,14 +789,16 @@ public class Microbot {
     }
 
     public static void click(Rectangle rectangle, NewMenuEntry entry) {
-        click(rectangle, entry, true);
+        click(rectangle, entry, true, false);
     }
 
-    private static void click(Rectangle rectangle, NewMenuEntry entry, boolean resolveFallback) {
-        if (entry.getType() == MenuAction.WALK) {
-            mouse.click(new Point(entry.getParam0(), entry.getParam1()), entry);
+    private static void click(Rectangle rectangle, NewMenuEntry entry, boolean resolveFallback, boolean quick) {
+        Point point = entry.getType() == MenuAction.WALK
+                ? new Point(entry.getParam0(), entry.getParam1())
+                : Rs2UiHelper.getClickingPoint(rectangle, true, resolveFallback);
+        if (quick) {
+            mouse.quickClick(point, entry);
         } else {
-            Point point = Rs2UiHelper.getClickingPoint(rectangle, true, resolveFallback);
             mouse.click(point, entry);
         }
 

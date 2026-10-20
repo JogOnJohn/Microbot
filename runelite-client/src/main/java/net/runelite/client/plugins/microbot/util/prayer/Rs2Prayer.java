@@ -98,7 +98,7 @@ public class Rs2Prayer {
 				? getPrayerBounds(prayer)
 				: Rs2UiHelper.getDefaultRectangle();
 
-        Microbot.doInvoke(menuEntry, prayerBounds);
+        Microbot.doInvokeQuick(menuEntry, prayerBounds);
         // Microbot.getClient().menuAction(-1, prayer.getIndex(), MenuAction.CC_OP, 1, -1, "Activate", "Activate");
 	}
 
@@ -272,7 +272,7 @@ public class Rs2Prayer {
 				.itemId(-1)
 				.option("Quick-prayers");
 
-		Microbot.doInvoke(entry, withMouse || !Rs2Widget.isHidden(QUICK_PRAYER_ORB_COMPONENT_ID)
+		Microbot.doInvokeQuick(entry, withMouse || !Rs2Widget.isHidden(QUICK_PRAYER_ORB_COMPONENT_ID)
 				? getQuickPrayerOrbBounds()
 				: Rs2UiHelper.getDefaultRectangle());
 	}

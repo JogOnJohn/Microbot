@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.util.input;
 import net.runelite.api.Client;
 import net.runelite.api.Point;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.mouse.BotEventGuard;
 import net.runelite.client.plugins.microbot.util.mouse.VirtualMouse;
 import org.junit.After;
@@ -97,6 +98,7 @@ public class InputEmissionTest
 	{
 		swapStatic("client", previousClient);
 		swapStatic("naturalMouse", previousNaturalMouse);
+		Microbot.targetMenu = null;
 		PointerState.reset();
 		InputArbiter.resetForTest();
 		while (BotEventGuard.isSynthetic())
@@ -165,6 +167,20 @@ public class InputEmissionTest
 
 		long held = receivedAt.get(1) - receivedAt.get(0);
 		assertTrue("held " + held + "ms", held >= VirtualMouse.CLICK_HOLD_MIN_MS - 5);
+	}
+
+	@Test
+	public void aQuickClickIsStillAHeldTriad()
+	{
+		PointerState.setFromBot(100, 50);
+
+		new VirtualMouse().quickClick(new Point(100, 50), new NewMenuEntry());
+
+		assertEquals(ids(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED),
+			receivedIds());
+		long held = receivedAt.get(1) - receivedAt.get(0);
+		assertTrue("held " + held + "ms", held >= VirtualMouse.QUICK_CLICK_HOLD_MIN_MS - 5);
+		assertTrue(VirtualMouse.QUICK_CLICK_HOLD_MAX_MS < VirtualMouse.CLICK_HOLD_MAX_MS);
 	}
 
 	@Test
