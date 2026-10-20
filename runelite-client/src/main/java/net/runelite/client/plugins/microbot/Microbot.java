@@ -753,8 +753,12 @@ public class Microbot {
 
     public static void doInvoke(NewMenuEntry entry, Rectangle rectangle) {
         try {
-            Rectangle visible = Rs2UiHelper.clipToCanvas(rectangle);
-            click(visible != null ? visible : new Rectangle(1, 1), entry);
+            Rectangle visible = Rs2UiHelper.isFallbackRectangle(rectangle) ? null : Rs2UiHelper.clipToCanvas(rectangle);
+            if (visible == null) {
+                click(new Rectangle(1, 1), entry);
+            } else {
+                click(visible, entry, false);
+            }
         } catch (ArrayIndexOutOfBoundsException ex) {
             log.error("Error during doInvoke", ex);
             // Handle the error as needed
@@ -777,10 +781,14 @@ public class Microbot {
     }
 
     public static void click(Rectangle rectangle, NewMenuEntry entry) {
+        click(rectangle, entry, true);
+    }
+
+    private static void click(Rectangle rectangle, NewMenuEntry entry, boolean resolveFallback) {
         if (entry.getType() == MenuAction.WALK) {
             mouse.click(new Point(entry.getParam0(), entry.getParam1()), entry);
         } else {
-            Point point = Rs2UiHelper.getClickingPoint(rectangle, true);
+            Point point = Rs2UiHelper.getClickingPoint(rectangle, true, resolveFallback);
             mouse.click(point, entry);
         }
 

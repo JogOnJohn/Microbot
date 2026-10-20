@@ -67,6 +67,27 @@ public class Rs2UiHelperCanvasBoundsTest {
 	}
 
 	@Test
+	public void aTargetClippedToTheOriginIsClickedInsideItNotTreatedAsFallback() {
+		PointerState.setFromBot(700, 500);
+		Rectangle visible = Rs2UiHelper.clipToCanvas(new Rectangle(-30, -30, 60, 60));
+		assertEquals(new Rectangle(0, 0, 30, 30), visible);
+
+		for (int i = 0; i < 50; i++) {
+			Point point = Rs2UiHelper.getClickingPoint(visible, true, false);
+			assertTrue(point.toString(), point.getX() >= 0 && point.getX() <= 30 && point.getY() >= 0 && point.getY() <= 30);
+		}
+	}
+
+	@Test
+	public void theDefaultRectangleIsAlwaysTheFallbackSentinel() {
+		for (int i = 0; i < 20; i++) {
+			assertTrue(Rs2UiHelper.isFallbackRectangle(Rs2UiHelper.getDefaultRectangle()));
+		}
+		assertFalse(Rs2UiHelper.isFallbackRectangle(new Rectangle(40, 60, 32, 32)));
+		assertTrue(Rs2UiHelper.isFallbackRectangle(null));
+	}
+
+	@Test
 	public void aPointerParkedOffCanvasIsPulledJustInside() {
 		PointerState.setFromBot(-1, 250);
 		assertEquals(new Point(Rs2UiHelper.RESTING_POINT_MARGIN, 250), Rs2UiHelper.getClickingPoint(null, true));

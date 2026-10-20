@@ -103,20 +103,11 @@ public class VirtualMouse extends Mouse {
                 Microbot.naturalMouse.moveTo(point.getX(), point.getY());
 
                 if (Rs2UiHelper.hasActor(entry)) {
-                    Rectangle rectangle = Rs2UiHelper.getActorClickbox(entry.getActor());
-                    if (Rs2UiHelper.isRectangleWithinCanvas(rectangle) && !Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
-                        newPoint = Rs2UiHelper.getClickingPoint(rectangle, true);
-                        Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
-                    }
+                    newPoint = retarget(Rs2UiHelper.getActorClickbox(entry.getActor()), newPoint);
                 }
 
                 if (Rs2UiHelper.isGameObject(entry)) {
-                    Rectangle rectangle = Rs2UiHelper.getObjectClickbox(entry.getGameObject());
-                    if (Rs2UiHelper.isRectangleWithinCanvas(rectangle) && !Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
-                        newPoint = Rs2UiHelper.getClickingPoint(rectangle, true);
-                        Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
-
-                    }
+                    newPoint = retarget(Rs2UiHelper.getObjectClickbox(entry.getGameObject()), newPoint);
                 }
             }
 
@@ -127,6 +118,19 @@ public class VirtualMouse extends Mouse {
         return this;
     }
 
+
+    private static Point retarget(Rectangle clickbox, Point current) {
+        if (Rs2UiHelper.isFallbackRectangle(clickbox)) {
+            return current;
+        }
+        Rectangle visible = Rs2UiHelper.clipToCanvas(clickbox);
+        if (visible == null || visible.contains(Microbot.getMouse().getMousePosition())) {
+            return current;
+        }
+        Point target = Rs2UiHelper.getClickingPoint(visible, true, false);
+        Microbot.naturalMouse.moveTo(target.getX(), target.getY());
+        return target;
+    }
 
     public Mouse click(int x, int y) {
         return click(new Point(x, y), false);

@@ -13,7 +13,6 @@ import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.text.Rs2TextSanitizer;
 
 import java.awt.*;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -70,10 +69,18 @@ public class Rs2UiHelper {
         }
     }
 
+    public static boolean isFallbackRectangle(Rectangle rectangle) {
+        if (rectangle == null) return true;
+        if (rectangle.getX() == 1 && rectangle.getY() == 1) return true;
+        return rectangle.getX() == 0 && rectangle.getY() == 0;
+    }
+
     public static Point getClickingPoint(Rectangle rectangle, boolean randomize) {
-        if (rectangle == null) return getRestingPoint();
-        if (rectangle.getX() == 1 && rectangle.getY() == 1) return getRestingPoint();
-        if (rectangle.getX() == 0 && rectangle.getY() == 0) return getRestingPoint();
+        return getClickingPoint(rectangle, randomize, true);
+    }
+
+    public static Point getClickingPoint(Rectangle rectangle, boolean randomize, boolean resolveFallback) {
+        if (rectangle == null || (resolveFallback && isFallbackRectangle(rectangle))) return getRestingPoint();
 
         if (!randomize) return new Point((int) rectangle.getCenterX(), (int) rectangle.getCenterY());
 
@@ -198,8 +205,7 @@ public class Rs2UiHelper {
 	}
 
 	public static Rectangle getDefaultRectangle() {
-		int randomValue = ThreadLocalRandom.current().nextInt(3) - 1;
-		return new Rectangle(randomValue, randomValue, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight());
+		return new Rectangle(1, 1, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight());
 	}
 
 	/**
