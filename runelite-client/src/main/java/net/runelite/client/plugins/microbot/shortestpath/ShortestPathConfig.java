@@ -423,6 +423,31 @@ public interface ShortestPathConfig extends Config {
         return false;
     }
 
+    @ConfigItem(keyName = "pohPoolMode", name = "POH rejuvenation pool",
+            description = "Always: retain pool-first behaviour. Auto: use enabled restoration checks. Off: skip pool use and its load wait.",
+            position = 26, section = sectionSettings)
+    default PohPoolMode pohPoolMode() { return PohPoolMode.ALWAYS; }
+
+    @ConfigItem(keyName = "pohPoolPrayer", name = "Auto pool: missing prayer",
+            description = "Use the pool when prayer points are below the real Prayer level.",
+            position = 27, section = sectionSettings)
+    default boolean pohPoolPrayer() { return true; }
+
+    @ConfigItem(keyName = "pohPoolHealth", name = "Auto pool: health below 90%",
+            description = "Use the pool when current health is strictly below 90% of maximum health.",
+            position = 28, section = sectionSettings)
+    default boolean pohPoolHealth() { return true; }
+
+    @ConfigItem(keyName = "pohPoolEnergy", name = "Auto pool: run energy below 85%",
+            description = "Use the pool when run energy is strictly below 85%.",
+            position = 29, section = sectionSettings)
+    default boolean pohPoolEnergy() { return true; }
+
+    @ConfigItem(keyName = "pohPoolSpecial", name = "Auto pool: missing special attack",
+            description = "Use the pool when special attack energy is below 100%.",
+            position = 30, section = sectionSettings)
+    default boolean pohPoolSpecial() { return true; }
+
     @ConfigItem(keyName = "blockedWorld330Hosts", name = "Blocked W330 hosts",
             description = "Comma-separated host names. Confirmed unreachable houses are added automatically; remove a name to retry.",
             position = 25, section = sectionSettings)

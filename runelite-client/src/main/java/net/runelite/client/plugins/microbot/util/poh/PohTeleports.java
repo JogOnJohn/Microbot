@@ -142,6 +142,7 @@ public class PohTeleports {
     }
 
     public static boolean useOrnateRejuvenationPoolIfPresent() {
+        if (!shouldUseWalkerPool()) return false;
         long now = System.currentTimeMillis();
         long elapsed = now - lastOrnatePoolUseMs;
         if (elapsed >= 0 && elapsed < ORNATE_POOL_REUSE_COOLDOWN_MS) {
@@ -501,5 +502,26 @@ public class PohTeleports {
             }
             return null;
         }).orElse(null);
+    }
+    public static boolean shouldUseWalkerPool() {
+        var manager = Microbot.getConfigManager();
+        if (manager == null) return true;
+        var config = manager.getConfig(net.runelite.client.plugins.microbot.shortestpath.ShortestPathConfig.class);
+        var mode = config.pohPoolMode();
+        if (mode != net.runelite.client.plugins.microbot.shortestpath.PohPoolMode.AUTO)
+            return mode != net.runelite.client.plugins.microbot.shortestpath.PohPoolMode.OFF;
+        if (Microbot.getClientThread() == null) return false;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            var client = Microbot.getClient();
+            if (client == null || client.getGameState() != net.runelite.api.GameState.LOGGED_IN
+                    || client.getLocalPlayer() == null) return false;
+            return PohPoolPolicy.shouldUse(mode, config.pohPoolPrayer(), config.pohPoolHealth(),
+                    config.pohPoolEnergy(), config.pohPoolSpecial(),
+                    client.getBoostedSkillLevel(net.runelite.api.Skill.PRAYER),
+                    client.getRealSkillLevel(net.runelite.api.Skill.PRAYER),
+                    client.getBoostedSkillLevel(net.runelite.api.Skill.HITPOINTS),
+                    client.getRealSkillLevel(net.runelite.api.Skill.HITPOINTS), client.getEnergy(),
+                    client.getVarpValue(net.runelite.api.VarPlayer.SPECIAL_ATTACK_PERCENT));
+        }).orElse(false);
     }
 }

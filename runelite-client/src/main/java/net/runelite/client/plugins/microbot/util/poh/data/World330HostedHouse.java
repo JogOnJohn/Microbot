@@ -74,7 +74,7 @@ public enum World330HostedHouse implements PohTeleport {
                     Rs2Player.getWorldLocation());
             return false;
         }
-        if (!wasInHostedHouse) {
+        if (!wasInHostedHouse && PohTeleports.shouldUseWalkerPool()) {
             boolean poolLoaded = sleepUntil(PohTeleports::hasLoadedOrnateRejuvenationPool, 3000);
             log.info("[W330POH] post-entry ornate pool loaded={} player={}",
                     poolLoaded, Rs2Player.getWorldLocation());
