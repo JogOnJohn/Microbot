@@ -51,6 +51,7 @@ class TextureManager
 		Texture[] textures = textureProvider.getTextures();
 
 		int textureArrayId = glGenTextures();
+		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.TEXTURE, textureArrayId, "texture-array", 0);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 		if (GL.getCapabilities().glTexStorage3D != 0)
 		{
@@ -66,6 +67,13 @@ class TextureManager
 			}
 		}
 
+		long diagnosticBytes = 0;
+		for (int size = TEXTURE_SIZE; size > 0; size /= 2)
+		{
+			diagnosticBytes += (long) size * size * textures.length * Integer.BYTES;
+		}
+		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.TEXTURE, textureArrayId,
+			diagnosticBytes, "texture-array-storage", 0);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -118,6 +126,7 @@ class TextureManager
 	void freeTextureArray(int textureArrayId)
 	{
 		glDeleteTextures(textureArrayId);
+		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.TEXTURE, textureArrayId, "texture-array-free");
 	}
 
 	/**

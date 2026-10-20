@@ -85,14 +85,18 @@ class Zone
 		if (o != null)
 		{
 			vboO = o;
+			GpuMemoryDiagnostics.adopt(GpuMemoryDiagnostics.Kind.BUFFER, o.bufId, "zone-opaque", o.diagnosticOwner);
 			glVao = glGenVertexArrays();
+			GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, "zone-vao", o.diagnosticOwner);
 			setupVao(glVao, o.bufId);
 		}
 
 		if (a != null)
 		{
 			vboA = a;
+			GpuMemoryDiagnostics.adopt(GpuMemoryDiagnostics.Kind.BUFFER, a.bufId, "zone-alpha", a.diagnosticOwner);
 			glVaoA = glGenVertexArrays();
+			GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, "zone-alpha-vao", a.diagnosticOwner);
 			setupVao(glVaoA, a.bufId);
 		}
 	}
@@ -114,12 +118,14 @@ class Zone
 		if (glVao != 0)
 		{
 			glDeleteVertexArrays(glVao);
+			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, "zone-free");
 			glVao = 0;
 		}
 
 		if (glVaoA != 0)
 		{
 			glDeleteVertexArrays(glVaoA);
+			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, "zone-alpha-free");
 			glVaoA = 0;
 		}
 
@@ -485,11 +491,13 @@ class Zone
 	static void initBuffer()
 	{
 		elementBufferId = glGenBuffers();
+		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId, "alpha-elements", 0);
 	}
 
 	static void freeBuffer()
 	{
 		glDeleteBuffers(elementBufferId);
+		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId, "alpha-elements-free");
 		elementBufferId = 0;
 	}
 
@@ -677,7 +685,10 @@ class Zone
 			glUniform3i(uniBase, lastzx << 10, 0, lastzz << 10);
 			glBindVertexArray(lastVao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferId);
+			long diagnosticStart = GpuMemoryDiagnostics.startCall();
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, alphaElements, GL_STREAM_DRAW);
+			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId,
+				(long) alphaElements.remaining() * Integer.BYTES, "alpha-elements-stream", diagnosticStart);
 			glDepthMask(false);
 			glDrawElements(GL_TRIANGLES, alphaElements.limit(), GL_UNSIGNED_INT, 0L);
 			glDepthMask(true);

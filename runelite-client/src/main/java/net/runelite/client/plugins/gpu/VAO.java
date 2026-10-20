@@ -54,6 +54,7 @@ class VAO
 	void init()
 	{
 		vao = glGenVertexArrays();
+		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao", vbo.diagnosticOwner);
 		glBindVertexArray(vao);
 
 		vbo.init(GL_DYNAMIC_DRAW);
@@ -76,6 +77,7 @@ class VAO
 	{
 		vbo.destroy();
 		glDeleteVertexArrays(vao);
+		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao-free");
 		vao = 0;
 	}
 

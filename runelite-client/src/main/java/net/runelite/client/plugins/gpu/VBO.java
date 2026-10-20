@@ -30,6 +30,7 @@ import static org.lwjgl.opengl.GL33C.*;
 
 class VBO
 {
+	final long diagnosticOwner = GpuMemoryDiagnostics.owner();
 	final int size;
 	private int usage;
 	int bufId;
@@ -47,9 +48,13 @@ class VBO
 	{
 		this.usage = usage;
 		bufId = glGenBuffers();
+		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, bufId,
+			usage == GL_STATIC_DRAW ? "scene-vbo" : "dynamic-vbo", diagnosticOwner);
 
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
+		long diagnosticStart = GpuMemoryDiagnostics.startCall();
 		glBufferData(GL_ARRAY_BUFFER, size, usage);
+		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, bufId, size, "vbo-init", diagnosticStart);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
@@ -59,10 +64,12 @@ class VBO
 		{
 			glBindBuffer(GL_ARRAY_BUFFER, bufId);
 			glUnmapBuffer(GL_ARRAY_BUFFER);
+			GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-destroy-unmap", 0);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			mapped = false;
 		}
 		glDeleteBuffers(bufId);
+		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
 		bufId = 0;
 	}
 
@@ -70,6 +77,7 @@ class VBO
 	{
 		assert !mapped;
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
+		long diagnosticStart = GpuMemoryDiagnostics.startCall();
 		buffer = glMapBufferRange(GL_ARRAY_BUFFER, 0, size, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)), buffer);
 		if (buffer == null)
 		{
@@ -77,6 +85,7 @@ class VBO
 			throw new RuntimeException("unable to map GL buffer (bufId: " + bufId + " size: " + size + " renderer: " + glGetString(GL_RENDERER) + " version: " + glGetString(GL_VERSION) + " err: " + err + ")");
 		}
 		this.vb = buffer.asIntBuffer();
+		GpuMemoryDiagnostics.mapping(bufId, true, usage != GL_STATIC_DRAW, "vbo-map", diagnosticStart);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = true;
 	}
@@ -93,6 +102,7 @@ class VBO
 			glFlushMappedBufferRange(GL_ARRAY_BUFFER, 0, (long) len * Integer.BYTES);
 		}
 		glUnmapBuffer(GL_ARRAY_BUFFER);
+		GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-unmap", 0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = false;
 	}
