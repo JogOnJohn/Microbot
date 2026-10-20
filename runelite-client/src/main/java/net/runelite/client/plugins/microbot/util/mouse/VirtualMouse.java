@@ -27,6 +27,8 @@ public class VirtualMouse extends Mouse {
     public static final int CLICK_HOLD_MAX_MS = 140;
     public static final int QUICK_CLICK_HOLD_MIN_MS = 30;
     public static final int QUICK_CLICK_HOLD_MAX_MS = 65;
+    public static final int QUICK_CLICK_SETTLE_MIN_MS = 10;
+    public static final int QUICK_CLICK_SETTLE_MAX_MS = 25;
 
     private final ScheduledExecutorService scheduledExecutorService;
 
@@ -60,6 +62,9 @@ public class VirtualMouse extends Mouse {
         // no human click sends those, and the EXITED wrote (-1,-1) into the tracked position.
         if (!PointerState.isAt(point.getX(), point.getY())) {
             emit.move(point.getX(), point.getY());
+            if (quick) {
+                sleep(Rs2Random.logNormalBounded(QUICK_CLICK_SETTLE_MIN_MS, QUICK_CLICK_SETTLE_MAX_MS));
+            }
         }
         emit.press(point.getX(), point.getY(), button);
         sleep(quick

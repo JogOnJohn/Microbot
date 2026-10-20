@@ -185,8 +185,21 @@ public class InputEmissionTest
 		verify(naturalMouse, never()).moveTo(anyInt(), anyInt());
 		assertEquals(ids(MouseEvent.MOUSE_MOVED, MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED),
 			receivedIds());
+		long settle = receivedAt.get(1) - receivedAt.get(0);
+		assertTrue("settled " + settle + "ms", settle >= VirtualMouse.QUICK_CLICK_SETTLE_MIN_MS - 3);
 		long held = receivedAt.get(2) - receivedAt.get(1);
 		assertTrue("held " + held + "ms", held >= VirtualMouse.QUICK_CLICK_HOLD_MIN_MS - 5);
+	}
+
+	@Test
+	public void aQuickClickAlreadyOnTheTargetSendsNoMove()
+	{
+		PointerState.setFromBot(100, 50);
+
+		new VirtualMouse().quickClick(new Point(100, 50), new NewMenuEntry());
+
+		assertEquals(ids(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED),
+			receivedIds());
 	}
 
 	@Test
