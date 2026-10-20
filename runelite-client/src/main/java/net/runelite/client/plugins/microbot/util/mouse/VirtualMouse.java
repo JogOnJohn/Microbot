@@ -110,9 +110,6 @@ public class VirtualMouse extends Mouse {
 
 
     public Mouse click(Point point, boolean rightClick, NewMenuEntry entry) {
-<<<<<<< HEAD
-        if (point == null || entry != null && !entry.isDispatchValid()) return this;
-=======
         return click(point, rightClick, entry, false);
     }
 
@@ -122,8 +119,7 @@ public class VirtualMouse extends Mouse {
     }
 
     private Mouse click(Point point, boolean rightClick, NewMenuEntry entry, boolean quick) {
-        if (point == null) return this;
->>>>>>> codex/playable-sync-20261021
+        if (point == null || entry != null && !entry.isDispatchValid()) return this;
 
         runGesture(() -> InputLoop.run(emit -> {
             Point newPoint = point;
