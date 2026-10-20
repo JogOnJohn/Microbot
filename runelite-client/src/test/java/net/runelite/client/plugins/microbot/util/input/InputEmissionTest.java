@@ -209,6 +209,26 @@ public class InputEmissionTest
 	}
 
 	@Test
+	public void aCancelledEntryAfterMovementDoesNotPressOrArmTheMenu()
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		canvas.addMouseMotionListener(new java.awt.event.MouseMotionAdapter()
+		{
+			@Override
+			public void mouseMoved(MouseEvent event)
+			{
+				valid.set(false);
+			}
+		});
+		PointerState.setFromBot(10, 10);
+		Microbot.targetMenu = null;
+		new VirtualMouse().quickClick(new Point(100, 50), new NewMenuEntry().validWhen(valid::get));
+		assertEquals(ids(MouseEvent.MOUSE_MOVED), receivedIds());
+		assertNull(Microbot.targetMenu);
+		assertEquals(0, AwtEmitter.heldMask());
+	}
+
+	@Test
 	public void aQuickClickAlreadyOnTheTargetSendsNoMove()
 	{
 		PointerState.setFromBot(100, 50);
