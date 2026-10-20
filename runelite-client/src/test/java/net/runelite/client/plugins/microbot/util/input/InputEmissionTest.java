@@ -6,6 +6,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.mouse.BotEventGuard;
 import net.runelite.client.plugins.microbot.util.mouse.VirtualMouse;
+import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.NaturalMouse;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -21,7 +22,10 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -170,17 +174,31 @@ public class InputEmissionTest
 	}
 
 	@Test
-	public void aQuickClickIsStillAHeldTriad()
+	public void aQuickClickSkipsTheTravelButIsStillAHeldTriad() throws Exception
 	{
-		PointerState.setFromBot(100, 50);
+		NaturalMouse naturalMouse = mock(NaturalMouse.class);
+		swapStatic("naturalMouse", naturalMouse);
+		PointerState.setFromBot(10, 10);
 
 		new VirtualMouse().quickClick(new Point(100, 50), new NewMenuEntry());
 
-		assertEquals(ids(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED),
+		verify(naturalMouse, never()).moveTo(anyInt(), anyInt());
+		assertEquals(ids(MouseEvent.MOUSE_MOVED, MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED),
 			receivedIds());
-		long held = receivedAt.get(1) - receivedAt.get(0);
+		long held = receivedAt.get(2) - receivedAt.get(1);
 		assertTrue("held " + held + "ms", held >= VirtualMouse.QUICK_CLICK_HOLD_MIN_MS - 5);
-		assertTrue(VirtualMouse.QUICK_CLICK_HOLD_MAX_MS < VirtualMouse.CLICK_HOLD_MAX_MS);
+	}
+
+	@Test
+	public void aNormalEntryClickTravelsThere() throws Exception
+	{
+		NaturalMouse naturalMouse = mock(NaturalMouse.class);
+		swapStatic("naturalMouse", naturalMouse);
+		PointerState.setFromBot(10, 10);
+
+		new VirtualMouse().click(new Point(100, 50), new NewMenuEntry());
+
+		verify(naturalMouse).moveTo(100, 50);
 	}
 
 	@Test

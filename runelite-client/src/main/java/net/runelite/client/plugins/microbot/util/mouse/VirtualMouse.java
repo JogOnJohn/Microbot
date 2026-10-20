@@ -116,7 +116,7 @@ public class VirtualMouse extends Mouse {
 
         runGesture(() -> InputLoop.run(emit -> {
             Point newPoint = point;
-            if (shouldMoveNaturally(point)) {
+            if (!quick && shouldMoveNaturally(point)) {
                 Microbot.naturalMouse.moveTo(point.getX(), point.getY());
 
                 if (Rs2UiHelper.hasActor(entry)) {
