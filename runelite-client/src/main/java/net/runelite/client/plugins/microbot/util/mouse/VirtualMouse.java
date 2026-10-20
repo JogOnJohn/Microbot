@@ -63,8 +63,8 @@ public class VirtualMouse extends Mouse {
     }
 
     private boolean shouldMoveNaturally(Point point) {
-        return point.getX() > 1
-                && point.getY() > 1
+        return point.getX() >= 0
+                && point.getY() >= 0
                 && Microbot.naturalMouse != null;
     }
 
@@ -141,6 +141,9 @@ public class VirtualMouse extends Mouse {
     }
 
     public Mouse click(Rectangle rectangle) {
+        if (Rs2UiHelper.isFallbackRectangle(rectangle)) {
+            return this;
+        }
         return click(Rs2UiHelper.getClickingPoint(rectangle, true), false);
     }
 
@@ -167,6 +170,9 @@ public class VirtualMouse extends Mouse {
     // NaturalMouse steps through here, so this one check also stops a trajectory mid-curve.
     public Mouse move(Point point) {
         if (InputArbiter.isHuman()) {
+            return this;
+        }
+        if (AwtEmitter.heldMask() != 0 && !InputLoop.isInGesture()) {
             return this;
         }
         recordTrailPoint(point);

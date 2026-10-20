@@ -798,6 +798,9 @@ public class Microbot {
     }
 
     public static void click(Rectangle rectangle) {
+        if (Rs2UiHelper.isFallbackRectangle(rectangle)) {
+            return;
+        }
 
         Point point = Rs2UiHelper.getClickingPoint(rectangle, true);
         mouse.click(point);

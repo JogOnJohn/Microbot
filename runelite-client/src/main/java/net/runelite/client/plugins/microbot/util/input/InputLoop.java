@@ -50,6 +50,11 @@ public final class InputLoop
 	{
 	}
 
+	public static boolean isInGesture()
+	{
+		return IN_GESTURE.get();
+	}
+
 	public static Result run(Gesture gesture)
 	{
 		// An inner run would get its own Emit, so an inner abort would clear targetMenu and release
@@ -146,8 +151,8 @@ public final class InputLoop
 		public void press(int canvasX, int canvasY, int button)
 		{
 			checkpoint();
-			AwtEmitter.pressed(canvasX, canvasY, button);
 			heldButtons.add(button);
+			AwtEmitter.pressed(canvasX, canvasY, button);
 		}
 
 		public void release(int canvasX, int canvasY, int button)

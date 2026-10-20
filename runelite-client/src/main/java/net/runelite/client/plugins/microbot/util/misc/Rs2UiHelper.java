@@ -99,9 +99,27 @@ public class Rs2UiHelper {
         int width = canvasDimension(true);
         int height = canvasDimension(false);
         if (width <= 2 * RESTING_POINT_MARGIN || height <= 2 * RESTING_POINT_MARGIN) return at;
-        int x = Math.max(RESTING_POINT_MARGIN, Math.min(width - 1 - RESTING_POINT_MARGIN, at.getX()));
-        int y = Math.max(RESTING_POINT_MARGIN, Math.min(height - 1 - RESTING_POINT_MARGIN, at.getY()));
+        boolean outsideX = at.getX() < 0 || at.getX() >= width;
+        boolean outsideY = at.getY() < 0 || at.getY() >= height;
+        java.util.concurrent.ThreadLocalRandom random = java.util.concurrent.ThreadLocalRandom.current();
+        if (outsideX && outsideY) {
+            return new Point(clampToCanvas(width / 2.0 + random.nextGaussian() * width / 6.0, width),
+                    clampToCanvas(height / 2.0 + random.nextGaussian() * height / 6.0, height));
+        }
+        int x = outsideX ? inwardFromEdge(at.getX() < 0, width, random) : clampToCanvas(at.getX(), width);
+        int y = outsideY ? inwardFromEdge(at.getY() < 0, height, random) : clampToCanvas(at.getY(), height);
         return new Point(x, y);
+    }
+
+    static final double RESTING_POINT_INWARD_SIGMA_PX = 40;
+
+    private static int inwardFromEdge(boolean fromLowEdge, int size, java.util.Random random) {
+        double inward = Math.abs(random.nextGaussian()) * RESTING_POINT_INWARD_SIGMA_PX;
+        return clampToCanvas(fromLowEdge ? inward : size - 1 - inward, size);
+    }
+
+    private static int clampToCanvas(double value, int size) {
+        return (int) Math.max(RESTING_POINT_MARGIN, Math.min(size - 1 - RESTING_POINT_MARGIN, Math.round(value)));
     }
 
     private static int canvasDimension(boolean width) {

@@ -19,6 +19,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import org.intellij.lang.annotations.MagicConstant;
 
+import java.awt.Rectangle;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -1605,10 +1606,11 @@ public abstract class Rs2Tile implements Tile {
             return false;
         }
 
-        Point point = Rs2UiHelper.getClickingPoint(Rs2UiHelper.getTileClickbox(tile), true);
+        Rectangle clickbox = Rs2UiHelper.getTileClickbox(tile);
 
-        // If the point is 1,1 then the tile is not on screen and we should return false
-        if (point.getX() == 1 && point.getY() == 1) return false;
+        // A fallback clickbox means the tile is not on screen and we should return false
+        if (Rs2UiHelper.isFallbackRectangle(clickbox)) return false;
+        Point point = Rs2UiHelper.getClickingPoint(clickbox, true);
 
         Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
         return true;

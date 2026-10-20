@@ -152,7 +152,7 @@ public class Rs2Keyboard
 		{
 			dispatchKeyEvent(KeyEvent.KEY_TYPED, KeyEvent.VK_UNDEFINED, c);
 			Global.sleep(Rs2Random.logNormalBounded(KEY_HOLD_MIN_MS, KEY_HOLD_MAX_MS));
-			dispatchKeyEvent(KeyEvent.KEY_RELEASED, vk, CHAR_UNDEFINED);
+			dispatchKeyEvent(KeyEvent.KEY_RELEASED, vk, c);
 		}
 
 		if (pressShift)
@@ -324,7 +324,7 @@ public class Rs2Keyboard
 		Global.sleep(Rs2Random.logNormalBounded(KEY_HOLD_MIN_MS, KEY_HOLD_MAX_MS));
 		// Unconditional: the press went out, so the release owes the client its pair even if the
 		// human took over in between.
-		dispatchKeyEvent(KeyEvent.KEY_RELEASED, key, CHAR_UNDEFINED);
+		dispatchKeyEvent(KeyEvent.KEY_RELEASED, key, typed);
 	}
 
 	/**

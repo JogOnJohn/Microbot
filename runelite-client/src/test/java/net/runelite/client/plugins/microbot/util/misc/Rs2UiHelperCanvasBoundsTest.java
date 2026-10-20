@@ -88,12 +88,34 @@ public class Rs2UiHelperCanvasBoundsTest {
 	}
 
 	@Test
-	public void aPointerParkedOffCanvasIsPulledJustInside() {
-		PointerState.setFromBot(-1, 250);
-		assertEquals(new Point(Rs2UiHelper.RESTING_POINT_MARGIN, 250), Rs2UiHelper.getClickingPoint(null, true));
+	public void aPointerParkedOffAnEdgeComesBackInAlongThatEdge() {
+		java.util.Set<Integer> xs = new java.util.HashSet<>();
+		for (int i = 0; i < 100; i++) {
+			PointerState.setFromBot(-1, 250);
+			Point fromLeft = Rs2UiHelper.getClickingPoint(null, true);
+			assertEquals(250, fromLeft.getY());
+			assertTrue(fromLeft.toString(), fromLeft.getX() >= Rs2UiHelper.RESTING_POINT_MARGIN && fromLeft.getX() < 400);
+			xs.add(fromLeft.getX());
 
-		PointerState.setFromBot(400, 601);
-		assertEquals(new Point(400, 600 - 1 - Rs2UiHelper.RESTING_POINT_MARGIN), Rs2UiHelper.getClickingPoint(null, true));
+			PointerState.setFromBot(400, 601);
+			Point fromBottom = Rs2UiHelper.getClickingPoint(null, true);
+			assertEquals(400, fromBottom.getX());
+			assertTrue(fromBottom.toString(), fromBottom.getY() > 300 && fromBottom.getY() <= 600 - 1 - Rs2UiHelper.RESTING_POINT_MARGIN);
+		}
+		assertTrue("the re-entry depth must vary, not sit on the edge line: " + xs.size(), xs.size() > 10);
+	}
+
+	@Test
+	public void anUnsetPointerRestsAroundTheCentreNotInACorner() {
+		java.util.Set<Point> seen = new java.util.HashSet<>();
+		for (int i = 0; i < 100; i++) {
+			PointerState.reset();
+			Point point = Rs2UiHelper.getClickingPoint(null, true);
+			assertTrue(point.toString(), point.getX() >= Rs2UiHelper.RESTING_POINT_MARGIN && point.getX() <= 800 - 1 - Rs2UiHelper.RESTING_POINT_MARGIN);
+			assertTrue(point.toString(), point.getY() >= Rs2UiHelper.RESTING_POINT_MARGIN && point.getY() <= 600 - 1 - Rs2UiHelper.RESTING_POINT_MARGIN);
+			seen.add(point);
+		}
+		assertTrue(seen.size() > 50);
 	}
 
 	private static Object swapStatic(String name, Object value) throws Exception {

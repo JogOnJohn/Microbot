@@ -181,6 +181,32 @@ public class InputEmissionTest
 	}
 
 	@Test
+	public void aMoveFromOutsideTheGestureIsDroppedWhileAButtonIsHeld()
+	{
+		PointerState.setFromBot(100, 50);
+		AwtEmitter.pressed(100, 50, MouseEvent.BUTTON1);
+		received.clear();
+
+		new VirtualMouse().move(new Point(300, 200));
+
+		assertTrue(received.isEmpty());
+		AwtEmitter.released(100, 50, MouseEvent.BUTTON1);
+		new VirtualMouse().move(new Point(300, 200));
+		assertEquals(ids(MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_MOVED), receivedIds());
+	}
+
+	@Test
+	public void aReleaseClearsTheHeldButtonEvenWithoutACanvas()
+	{
+		AwtEmitter.pressed(100, 50, MouseEvent.BUTTON1);
+		when(client.getCanvas()).thenReturn(null);
+
+		AwtEmitter.released(100, 50, MouseEvent.BUTTON1);
+
+		assertEquals(0, AwtEmitter.heldMask());
+	}
+
+	@Test
 	public void motionWithAButtonDownIsADrag()
 	{
 		when(client.getCanvasWidth()).thenReturn(800);

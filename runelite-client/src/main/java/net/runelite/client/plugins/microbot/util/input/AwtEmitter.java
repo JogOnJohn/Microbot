@@ -88,14 +88,6 @@ public final class AwtEmitter
 
 	private static void button(int id, int canvasX, int canvasY, int button)
 	{
-		Canvas canvas = canvas();
-		if (canvas == null)
-		{
-			return;
-		}
-		enterIfOutside(canvas, canvasX, canvasY);
-		Point component = StretchMapper.toComponent(canvasX, canvasY);
-		recordPosition(canvasX, canvasY);
 		if (id == MouseEvent.MOUSE_PRESSED)
 		{
 			HELD_BUTTONS.add(button);
@@ -104,11 +96,19 @@ public final class AwtEmitter
 		{
 			HELD_BUTTONS.remove(button);
 		}
+		Canvas canvas = canvas();
+		if (canvas == null)
+		{
+			return;
+		}
+		enterIfOutside(canvas, canvasX, canvasY);
+		Point component = StretchMapper.toComponent(canvasX, canvasY);
+		recordPosition(canvasX, canvasY);
 		dispatch(canvas, new MouseEvent(canvas, id, System.currentTimeMillis(), heldMask(),
 			component.getX(), component.getY(), 1, false, button));
 	}
 
-	static int heldMask()
+	public static int heldMask()
 	{
 		int mask = 0;
 		for (Integer button : HELD_BUTTONS)

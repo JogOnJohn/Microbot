@@ -87,10 +87,10 @@ public class Rs2KeyboardEmissionTest
 		assertEquals(6, received.size());
 		assertKey(received.get(0), KeyEvent.KEY_PRESSED, KeyEvent.VK_A, 'a');
 		assertKey(received.get(1), KeyEvent.KEY_TYPED, KeyEvent.VK_UNDEFINED, 'a');
-		assertKey(received.get(2), KeyEvent.KEY_RELEASED, KeyEvent.VK_A, KeyEvent.CHAR_UNDEFINED);
+		assertKey(received.get(2), KeyEvent.KEY_RELEASED, KeyEvent.VK_A, 'a');
 		assertKey(received.get(3), KeyEvent.KEY_PRESSED, KeyEvent.VK_1, '1');
 		assertKey(received.get(4), KeyEvent.KEY_TYPED, KeyEvent.VK_UNDEFINED, '1');
-		assertKey(received.get(5), KeyEvent.KEY_RELEASED, KeyEvent.VK_1, KeyEvent.CHAR_UNDEFINED);
+		assertKey(received.get(5), KeyEvent.KEY_RELEASED, KeyEvent.VK_1, '1');
 	}
 
 	@Test
@@ -124,7 +124,7 @@ public class Rs2KeyboardEmissionTest
 		assertKey(received.get(0), KeyEvent.KEY_PRESSED, KeyEvent.VK_SHIFT, KeyEvent.CHAR_UNDEFINED);
 		assertKey(received.get(1), KeyEvent.KEY_PRESSED, KeyEvent.VK_B, 'B');
 		assertKey(received.get(2), KeyEvent.KEY_TYPED, KeyEvent.VK_UNDEFINED, 'B');
-		assertKey(received.get(3), KeyEvent.KEY_RELEASED, KeyEvent.VK_B, KeyEvent.CHAR_UNDEFINED);
+		assertKey(received.get(3), KeyEvent.KEY_RELEASED, KeyEvent.VK_B, 'B');
 		assertKey(received.get(4), KeyEvent.KEY_RELEASED, KeyEvent.VK_SHIFT, KeyEvent.CHAR_UNDEFINED);
 
 		for (int i = 0; i < 4; i++)
