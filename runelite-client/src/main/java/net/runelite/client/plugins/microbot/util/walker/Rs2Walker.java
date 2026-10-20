@@ -13547,20 +13547,28 @@ public class Rs2Walker {
                 boolean cancelled = !request.active() || Thread.currentThread().isInterrupted()
                         || InputArbiter.isHuman() || Microbot.pauseAllScripts.get();
                 var decision = request.lifecycle.update(System.nanoTime() / 1_000_000,
-                        snapshot.position, snapshot.sceneReady, snapshot.moving, snapshot.ready,
+                        snapshot.position, snapshot.sceneReady && !snapshot.inputBlocked, snapshot.moving, snapshot.ready,
                         snapshot.sceneReady && snapshot.position != null
                                 && snapshot.position.getPlane() == request.anchor.getPlane()
                                 && snapshot.position.distanceTo(request.anchor) <= 16
                                 && (snapshot.confirmed || request.lifecycle.attempts() > 0 && request.effectObserved()), cancelled);
                 switch (decision) {
                     case SUCCEEDED:
-                        WebWalkLog.spInfo("interaction_done | op={} kind={} target={} attempts={} probes={} hits={} probeMs={}",
+                        WebWalkLog.spInfo("interaction_done | op={} kind={} target={} attempts={} probes={} hits={} probeMs={} clientWallUs={} clientCpuUs={} cpuSamples={} maxClientUs={} clientP95UpperUs={} targetQueries={} collisionProbes={}",
                                 request.id, request.kind, request.entityId, request.lifecycle.attempts(),
-                                request.runtime.probes, request.runtime.cacheHits, request.runtime.probeNanos / 1_000_000);
+                                request.runtime.probes, request.runtime.cacheHits, request.runtime.probeNanos / 1_000_000,
+                                request.runtime.clientReadNanos / 1000,
+                                request.runtime.cpuSamples == 0 ? -1 : request.runtime.clientCpuNanos / 1000,
+                                request.runtime.cpuSamples, request.runtime.maxClientReadNanos / 1000,
+                                request.runtime.clientP95UpperMicros(), request.runtime.targetQueries,
+                                request.runtime.collisionProbes);
                         releaseInteraction(request);
                         return InteractionResult.SUCCEEDED;
                     case CANCELLED:
                     case FAILED:
+                        WebWalkLog.spInfo("interaction_end | op={} kind={} target={} result={} reason={} attempts={}",
+                                request.id, request.kind, request.entityId, decision,
+                                request.lifecycle.reason(), request.lifecycle.attempts());
                         releaseInteraction(request);
                         return decision == InteractionLifecycle.Decision.CANCELLED
                                 ? InteractionResult.CANCELLED

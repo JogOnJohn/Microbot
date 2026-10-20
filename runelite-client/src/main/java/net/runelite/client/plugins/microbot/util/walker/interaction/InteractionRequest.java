@@ -52,6 +52,6 @@ public final class InteractionRequest {
 
     public boolean effectObserved() { return effect.getAsBoolean(); }
     public WorldPoint destination() { return goal; }
-    public boolean active() { return lifecycle.active(); }
+    public boolean active() { return lifecycle.activeAt(System.nanoTime() / 1_000_000); }
     public void cancel() { lifecycle.cancel(); }
 }

@@ -28,11 +28,16 @@ import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 public final class InteractionTargetRuntime {
     public static final class Snapshot {
         public final WorldPoint position;
-        public final boolean sceneReady, moving, ready, confirmed;
+        public final boolean sceneReady, moving, ready, confirmed, inputBlocked;
         public final long identity;
         Snapshot(WorldPoint p, boolean scene, boolean moving, boolean ready, boolean confirmed, long identity) {
+            this(p, scene, moving, ready, confirmed, identity, false);
+        }
+        Snapshot(WorldPoint p, boolean scene, boolean moving, boolean ready, boolean confirmed, long identity,
+                boolean inputBlocked) {
             this.position = p; this.sceneReady = scene; this.moving = moving;
             this.ready = ready; this.confirmed = confirmed; this.identity = identity;
+            this.inputBlocked = inputBlocked;
         }
     }
     private final InteractionRequest request;
@@ -41,6 +46,13 @@ public final class InteractionTargetRuntime {
     private Snapshot cached;
     public long probeNanos;
     public int probes, cacheHits;
+    public long clientReadNanos, clientCpuNanos, maxClientReadNanos;
+    public int clientReadSamples, cpuSamples, targetQueries, collisionProbes;
+    private static final java.lang.management.ThreadMXBean THREADS =
+            java.lang.management.ManagementFactory.getThreadMXBean();
+    private static final long[] READ_BUCKET_NS = {250_000, 500_000, 1_000_000, 2_000_000,
+            5_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000, Long.MAX_VALUE};
+    private final long[] clientReadBuckets = new long[READ_BUCKET_NS.length];
 
     public InteractionTargetRuntime(InteractionRequest request) { this.request = request; }
 
@@ -48,9 +60,45 @@ public final class InteractionTargetRuntime {
         if (Microbot.getClientThread() == null) return new Snapshot(null, false, false, false, false, 0);
         long start = System.nanoTime();
         try {
-            return Microbot.getClientThread().runOnClientThreadOptional(() -> read(force))
+            return Microbot.getClientThread().runOnClientThreadOptional(() -> readTimed(force))
                     .orElse(new Snapshot(null, false, false, false, false, 0));
         } finally { probeNanos += System.nanoTime() - start; }
+    }
+
+    private Snapshot readTimed(boolean force) {
+        long start = System.nanoTime(), cpu = cpuTime();
+        try { return read(force); }
+        finally {
+            long elapsed = System.nanoTime() - start;
+            clientReadNanos += elapsed;
+            maxClientReadNanos = Math.max(maxClientReadNanos, elapsed);
+            clientReadSamples++;
+            for (int i = 0; i < READ_BUCKET_NS.length; i++) {
+                if (elapsed <= READ_BUCKET_NS[i]) { clientReadBuckets[i]++; break; }
+            }
+            long endCpu = cpuTime();
+            if (cpu >= 0 && endCpu >= cpu) { clientCpuNanos += endCpu - cpu; cpuSamples++; }
+        }
+    }
+
+    private static long cpuTime() {
+        try {
+            return THREADS.isCurrentThreadCpuTimeSupported() && THREADS.isThreadCpuTimeEnabled()
+                    ? THREADS.getCurrentThreadCpuTime() : -1;
+        } catch (UnsupportedOperationException | SecurityException ignored) {
+            return -1;
+        }
+    }
+
+    /** Histogram upper bound, not an exact percentile; samples include cache hits. */
+    public long clientP95UpperMicros() {
+        long rank = (clientReadSamples * 95L + 99) / 100, seen = 0;
+        if (rank == 0) return 0;
+        for (int i = 0; i < clientReadBuckets.length; i++) {
+            seen += clientReadBuckets[i];
+            if (seen >= rank) return Math.min(READ_BUCKET_NS[i], maxClientReadNanos) / 1000;
+        }
+        return maxClientReadNanos / 1000;
     }
 
     private Snapshot read(boolean force) {
@@ -72,6 +120,8 @@ public final class InteractionTargetRuntime {
         }
         probes++;
         WorldPoint player = Rs2Player.getWorldLocation();
+        boolean dialogueOpen = Rs2Dialogue.isInDialogue();
+        boolean inputBlocked = dialogueOpen || c.isWidgetSelected();
         boolean confirmed = false;
         long identity = 0;
         boolean ready = false;
@@ -89,7 +139,7 @@ public final class InteractionTargetRuntime {
                 identity = System.identityHashCode(npc);
             }
             Widget name = c.getWidget(WidgetInfo.DIALOG_NPC_NAME);
-            confirmed = Rs2Dialogue.isInDialogue() && name != null && !name.isHidden() && request.name.equalsIgnoreCase(
+            confirmed = dialogueOpen && name != null && !name.isHidden() && request.name.equalsIgnoreCase(
                     name.getText().replaceAll("<[^>]*>", "").trim());
         } else {
             Rs2TileObjectModel model = object();
@@ -103,11 +153,12 @@ public final class InteractionTargetRuntime {
             }
         }
         if (player != null && target != null && player.getPlane() == target.getPlane()
-                && player.distanceTo(target) <= 8 && action && !c.isWidgetSelected()
-                && !Rs2Dialogue.isInDialogue() && !InputArbiter.isHuman() && !Microbot.pauseAllScripts.get()) {
+                && player.distanceTo(target) <= 8 && action && !inputBlocked
+                && !InputArbiter.isHuman() && !Microbot.pauseAllScripts.get()) {
             Rectangle viewport = new Rectangle(c.getViewportXOffset(), c.getViewportYOffset(),
                     c.getViewportWidth(), c.getViewportHeight());
             if (visible(shape, viewport)) {
+                collisionProbes++;
                 Set<WorldPoint> reachable = Rs2Tile.getReachableTilesFromTile(player, 10).keySet();
                 ready = request.kind == InteractionRequest.Kind.NPC ? reachable.contains(target)
                         : request.access != null && request.access.getPlane() == player.getPlane()
@@ -120,16 +171,18 @@ public final class InteractionTargetRuntime {
         // The independent eight-second effect deadline still bounds a stuck animation.
         boolean active = Rs2Player.isMoving()
                 || request.kind == InteractionRequest.Kind.OBJECT && Rs2Player.isAnimating();
-        return cached = new Snapshot(player, true, active, ready, confirmed, identity);
+        return cached = new Snapshot(player, true, active, ready, confirmed, identity, inputBlocked);
     }
 
     private Rs2NpcModel npc() {
+        targetQueries++;
         return Microbot.getRs2NpcCache().query().withId(request.entityId)
                 .where(n -> n.getWorldLocation() != null && n.getWorldLocation().getPlane() == request.anchor.getPlane()
                         && n.getWorldLocation().distanceTo(request.anchor) <= 16).nearest();
     }
 
     private Rs2TileObjectModel object() {
+        targetQueries++;
         return Microbot.getRs2TileObjectCache().query().withId(request.entityId)
                 .where(o -> request.anchor.equals(o.getWorldLocation())).first();
     }

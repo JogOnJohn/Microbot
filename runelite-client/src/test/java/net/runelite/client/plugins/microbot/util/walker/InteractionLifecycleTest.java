@@ -8,6 +8,31 @@ import static org.junit.Assert.*;
 import static net.runelite.client.plugins.microbot.util.walker.interaction.InteractionLifecycle.Decision.*;
 
 public class InteractionLifecycleTest {
+    @Test public void inFlightGuardExpiresWithoutAnotherControllerPoll() {
+        InteractionLifecycle s = new InteractionLifecycle();
+        s.update(100, p, true, false, false, false, false);
+        assertTrue(s.activeAt(120099));
+        assertFalse(s.activeAt(120100));
+        assertEquals("operation-deadline", s.reason());
+        assertEquals(FAILED, s.update(120101, p, true, false, true, true, true));
+        s.cancel();
+        assertEquals(FAILED, s.update(120102, p, true, false, true, true, true));
+    }
+    @Test public void cancellationCannotRewriteAnObservedSuccess() {
+        InteractionLifecycle s = new InteractionLifecycle();
+        s.update(0, p, true, false, true, false, false);
+        s.dispatched(0);
+        assertEquals(SUCCEEDED, s.update(600, p, true, false, false, true, false));
+        s.cancel();
+        assertEquals(SUCCEEDED, s.update(700, p, true, false, false, false, true));
+    }
+    @Test public void blockedUiWaitsWithoutCountingExistingDialogueAsNewSuccess() {
+        InteractionLifecycle s = new InteractionLifecycle();
+        assertEquals(WAIT, s.update(0, p, false, false, false, true, false));
+        assertEquals(DISPATCH, s.update(600, p, true, false, true, false, false));
+        s.dispatched(600);
+        assertEquals(SUCCEEDED, s.update(1200, p, false, false, false, true, false));
+    }
     private final WorldPoint p = new WorldPoint(3000, 3300, 0);
     @Test public void readyDispatchIsNotSuccessAndDuplicatePollsDoNotClick() {
         InteractionLifecycle s = new InteractionLifecycle();

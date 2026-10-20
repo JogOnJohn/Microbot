@@ -17,13 +17,14 @@ public final class InteractionLifecycle {
     private int attempts;
     private boolean awaiting;
     private Decision terminal;
+    private String reason = "in-progress";
 
     public synchronized Decision update(long now, WorldPoint position, boolean sceneReady,
             boolean moving, boolean ready, boolean confirmed, boolean cancelled) {
         if (terminal != null) return terminal;
-        if (cancelled) return terminal = Decision.CANCELLED;
+        if (cancelled) { reason = "cancelled"; return terminal = Decision.CANCELLED; }
         if (!initialized) { initialized = true; started = lastProgress = now; lastPosition = position; }
-        if (now < started || now - started >= OPERATION_MS) return terminal = Decision.FAILED;
+        if (!activeAt(now)) return terminal;
         if (attempts > 0 && confirmed) return terminal = Decision.SUCCEEDED;
         if (!sceneReady) return Decision.WAIT;
         if (position != null && !position.equals(lastPosition)) {
@@ -34,7 +35,7 @@ public final class InteractionLifecycle {
             if (now - dispatched < EFFECT_MS && (moving || now - lastProgress < 2_400)) return Decision.WAIT;
             awaiting = false;
             retryAfter = now + RETRY_MS;
-            if (attempts >= 3) return terminal = Decision.FAILED;
+            if (attempts >= 3) { reason = "effect-attempts-exhausted"; return terminal = Decision.FAILED; }
             return Decision.APPROACH;
         }
         if (now < retryAfter) return Decision.WAIT;
@@ -48,7 +49,17 @@ public final class InteractionLifecycle {
     }
 
     public synchronized void rejected(long now) { retryAfter = now + RETRY_MS; }
-    public synchronized void cancel() { terminal = Decision.CANCELLED; }
+    public synchronized void cancel() {
+        if (terminal == null) { terminal = Decision.CANCELLED; reason = "cancelled"; }
+    }
+    public synchronized boolean activeAt(long now) {
+        if (terminal == null && initialized && (now < started || now - started >= OPERATION_MS)) {
+            terminal = Decision.FAILED;
+            reason = "operation-deadline";
+        }
+        return terminal == null;
+    }
+    public synchronized String reason() { return reason; }
     public synchronized boolean active() { return terminal == null; }
     public synchronized boolean awaiting() { return awaiting; }
     public synchronized int attempts() { return attempts; }
