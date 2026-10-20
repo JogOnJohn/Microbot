@@ -49,17 +49,24 @@ their existing execution/landing handling, not a nested interaction request.
 - One operation has a 120-second deadline and at most three accepted dispatch
   attempts. Each attempt waits at most eight seconds, with earlier recovery
   after stationary progress loss. Pauses/interruptions cancel instead of clicking.
-  The operation deadline is checked at controller polls; an existing approach or
-  transport call retains its own bounded waits. This is not a preemptive timeout
+  The operation deadline is checked at controller polls and guarded in-flight
+  input/readiness checks; an existing transport call retains its own bounded
+  waits. Expiration prevents further owned input. This is not a preemptive timeout
   or a guarantee that an already-issued server action has been cancelled.
 - Object animations defer stationary retry while the independent effect deadline
   still bounds the attempt. Guarded NPC dispatch uses its own fresh collision
   check and bounded recovery, not the global rejection flag from an older action.
 - Loading/instances are not accepted as a ready target scene. Ordinary W330
   travel still executes through the existing planner/transport machinery.
-- Probe timing is wall time including client-thread handoff, not pure CPU time.
-  interaction_dispatch and interaction_done log operation-local summaries. No
-  readiness predicate performs input or a second pathfinder search.
+- Unrelated open dialogue or a selected widget blocks approach/dispatch, but a
+  newly observed intended interaction effect can still complete a pending request.
+- interaction_done reports probe wall time including client-thread handoff, plus
+  separate clientWallUs, clientCpuUs (only where CPU timing is already enabled),
+  cpuSamples, maxClientUs, clientP95UpperUs, targetQueries and collisionProbes.
+  The p95 value is a fixed-bucket upper bound, includes memoized reads and is not
+  an exact percentile. Missing CPU timing is not zero measured CPU work.
+  interaction_end reports terminal reason and attempts for failed/cancelled work.
+  No readiness predicate performs input or a second pathfinder search.
 
 ## Rollout
 
