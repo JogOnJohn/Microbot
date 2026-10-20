@@ -87,3 +87,17 @@ development PR can propose those generic pieces first, adapting only the narrow
 walker hook points. The custom POH/data-sync policy need not be included. No
 upstream PR is promised without validation against that branch's threading and
 input contracts; local correctness takes priority over reducing a future diff.
+
+## POH pool policy
+
+Web Walker exposes Always/Auto/Off separately from interaction-aware walking.
+Always retains the prior pool-first behavior and reuse cooldown. Auto checks
+enabled restoration conditions (missing prayer, health below 90%, run below
+85%, missing special attack); Off and healthy Auto skip the pool load wait and
+selection. These settings do not change W330 route eligibility or priority.
+
+The 2026-10-20 six-house cohort exercised three EXACT and three LEGACY houses,
+six NPC hand-ins and eight mapped furniture effects without interaction retries.
+Subsequent Barbara access and pool-policy changes have offline coverage only.
+Nearby graph stairs remain on the existing transport executor; an on-screen
+ladder is not automatically an interaction request in this pilot.
