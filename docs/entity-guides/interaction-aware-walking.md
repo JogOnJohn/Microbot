@@ -116,3 +116,11 @@ interrupting shared configuration refresh: interrupted client-thread reads can
 otherwise cache empty fallback inventory/facility values for the next request.
 The existing request-identity checks still suppress obsolete search results.
 This bounded pilot is not the full controlled/matched efficiency acceptance set.
+
+The 15:19 recurrence exposed two additional cancellation sites in the walker
+lifecycle and route-clear paths. cffd917aef applies non-interrupting cancellation
+there too, and suppresses stale/interrupted post-refresh searches, fallback and
+cave comparisons. Six regression tests exercise these actual walker entry points;
+the plugin-only cancellation tests did not cover them. Full suite: 2,449 passed,
+six skipped. A focused W330/EXACT Tau journey then completed after a hosted-house
+jewellery-box teleport. This does not replace the broader live acceptance matrix.
