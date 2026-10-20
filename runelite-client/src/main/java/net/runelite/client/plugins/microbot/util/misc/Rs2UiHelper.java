@@ -45,8 +45,7 @@ public class Rs2UiHelper {
         if (rectangle == null) {
             return null;
         }
-        Rectangle visible = rectangle.intersection(new Rectangle(0, 0,
-                Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
+        Rectangle visible = rectangle.intersection(canvasBounds());
         return visible.isEmpty() ? null : visible;
     }
 
@@ -96,8 +95,9 @@ public class Rs2UiHelper {
 
     static Point getRestingPoint() {
         Point at = PointerState.get();
-        int width = canvasDimension(true);
-        int height = canvasDimension(false);
+        Rectangle bounds = canvasBounds();
+        int width = bounds.width;
+        int height = bounds.height;
         if (width <= 2 * RESTING_POINT_MARGIN || height <= 2 * RESTING_POINT_MARGIN) return at;
         boolean outsideX = at.getX() < 0 || at.getX() >= width;
         boolean outsideY = at.getY() < 0 || at.getY() >= height;
@@ -122,13 +122,15 @@ public class Rs2UiHelper {
         return (int) Math.max(RESTING_POINT_MARGIN, Math.min(size - 1 - RESTING_POINT_MARGIN, Math.round(value)));
     }
 
-    private static int canvasDimension(boolean width) {
+    private static Rectangle canvasBounds() {
         try {
             Client client = Microbot.getClient();
-            if (client == null) return 0;
-            return width ? client.getCanvasWidth() : client.getCanvasHeight();
+            if (client == null || Microbot.getClientThread() == null) return new Rectangle();
+            return Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    new Rectangle(0, 0, client.getCanvasWidth(), client.getCanvasHeight()))
+                    .orElseGet(Rectangle::new);
         } catch (Exception ex) {
-            return 0;
+            return new Rectangle();
         }
     }
 
