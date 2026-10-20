@@ -7,6 +7,7 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.client.RuneLiteProperties;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.input.PointerState;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.text.Rs2TextSanitizer;
@@ -36,8 +37,18 @@ public class Rs2UiHelper {
         int canvasHeight = Microbot.getClient().getCanvasHeight();
         int canvasWidth = Microbot.getClient().getCanvasWidth();
 
-        return rectangle.getX() + rectangle.getWidth() <= (double) canvasWidth &&
+        return rectangle.getX() >= 0 && rectangle.getY() >= 0 &&
+                rectangle.getX() + rectangle.getWidth() <= (double) canvasWidth &&
                 rectangle.getY() + rectangle.getHeight() <= (double) canvasHeight;
+    }
+
+    public static Rectangle clipToCanvas(Rectangle rectangle) {
+        if (rectangle == null) {
+            return null;
+        }
+        Rectangle visible = rectangle.intersection(new Rectangle(0, 0,
+                Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
+        return visible.isEmpty() ? null : visible;
     }
 
     public static boolean isRectangleWithinRectangle(Rectangle main, Rectangle sub) {
@@ -60,9 +71,9 @@ public class Rs2UiHelper {
     }
 
     public static Point getClickingPoint(Rectangle rectangle, boolean randomize) {
-        if (rectangle == null) return new Point(1, 1);
-        if (rectangle.getX() == 1 && rectangle.getY() == 1) return new Point(1, 1);
-        if (rectangle.getX() == 0 && rectangle.getY() == 0) return new Point(1, 1);
+        if (rectangle == null) return getRestingPoint();
+        if (rectangle.getX() == 1 && rectangle.getY() == 1) return getRestingPoint();
+        if (rectangle.getX() == 0 && rectangle.getY() == 0) return getRestingPoint();
 
         if (!randomize) return new Point((int) rectangle.getCenterX(), (int) rectangle.getCenterY());
 
@@ -72,6 +83,28 @@ public class Rs2UiHelper {
             return Rs2Random.randomPointEx(new Point(mousePos.x, mousePos.y), rectangle, force);
         } else
             return Rs2Random.randomPointEx(Microbot.getMouse().getLastClick(), rectangle, force);
+    }
+
+    static final int RESTING_POINT_MARGIN = 2;
+
+    static Point getRestingPoint() {
+        Point at = PointerState.get();
+        int width = canvasDimension(true);
+        int height = canvasDimension(false);
+        if (width <= 2 * RESTING_POINT_MARGIN || height <= 2 * RESTING_POINT_MARGIN) return at;
+        int x = Math.max(RESTING_POINT_MARGIN, Math.min(width - 1 - RESTING_POINT_MARGIN, at.getX()));
+        int y = Math.max(RESTING_POINT_MARGIN, Math.min(height - 1 - RESTING_POINT_MARGIN, at.getY()));
+        return new Point(x, y);
+    }
+
+    private static int canvasDimension(boolean width) {
+        try {
+            Client client = Microbot.getClient();
+            if (client == null) return 0;
+            return width ? client.getCanvasWidth() : client.getCanvasHeight();
+        } catch (Exception ex) {
+            return 0;
+        }
     }
 
     //check if mouse is already within the rectangle

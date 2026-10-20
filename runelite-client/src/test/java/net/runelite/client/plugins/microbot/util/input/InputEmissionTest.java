@@ -11,6 +11,7 @@ import org.junit.Test;
 
 import java.awt.Canvas;
 import java.awt.Dimension;
+import java.awt.event.InputEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.lang.reflect.Field;
@@ -31,6 +32,7 @@ public class InputEmissionTest
 	private Client client;
 	private Canvas canvas;
 	private final List<MouseEvent> received = new ArrayList<>();
+	private final List<Long> receivedAt = new ArrayList<>();
 	private final List<Boolean> syntheticDuringDispatch = new ArrayList<>();
 
 	private Object previousClient;
@@ -67,6 +69,12 @@ public class InputEmissionTest
 			{
 				record(e);
 			}
+
+			@Override
+			public void mouseDragged(MouseEvent e)
+			{
+				record(e);
+			}
 		});
 
 		client = mock(Client.class);
@@ -81,6 +89,7 @@ public class InputEmissionTest
 		PointerState.reset();
 		// Static, so a prior test left in HUMAN would abort every click here.
 		InputArbiter.resetForTest();
+		AwtEmitter.resetHeldButtonsForTest();
 	}
 
 	@After
@@ -145,6 +154,46 @@ public class InputEmissionTest
 		{
 			assertEquals(MouseEvent.BUTTON3, event.getButton());
 		}
+	}
+
+	@Test
+	public void theButtonIsHeldDownForAHumanDuration()
+	{
+		PointerState.setFromBot(100, 50);
+
+		new VirtualMouse().click(new Point(100, 50), false);
+
+		long held = receivedAt.get(1) - receivedAt.get(0);
+		assertTrue("held " + held + "ms", held >= VirtualMouse.CLICK_HOLD_MIN_MS - 5);
+	}
+
+	@Test
+	public void onlyThePressCarriesItsButtonAsDown()
+	{
+		PointerState.setFromBot(100, 50);
+
+		new VirtualMouse().click(new Point(100, 50), true);
+
+		assertEquals(InputEvent.BUTTON3_DOWN_MASK, received.get(0).getModifiersEx());
+		assertEquals(0, received.get(1).getModifiersEx());
+		assertEquals(0, received.get(2).getModifiersEx());
+		assertEquals(0, AwtEmitter.heldMask());
+	}
+
+	@Test
+	public void motionWithAButtonDownIsADrag()
+	{
+		when(client.getCanvasWidth()).thenReturn(800);
+		when(client.getCanvasHeight()).thenReturn(600);
+		PointerState.setFromBot(100, 50);
+
+		new VirtualMouse().drag(new Point(100, 50), new Point(300, 200));
+
+		assertEquals(ids(MouseEvent.MOUSE_MOVED, MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_DRAGGED, MouseEvent.MOUSE_RELEASED),
+			receivedIds());
+		assertEquals(0, received.get(0).getModifiersEx());
+		assertEquals(InputEvent.BUTTON1_DOWN_MASK, received.get(2).getModifiersEx());
+		assertEquals(0, received.get(3).getModifiersEx());
 	}
 
 	@Test
@@ -235,6 +284,7 @@ public class InputEmissionTest
 	private void record(MouseEvent event)
 	{
 		received.add(event);
+		receivedAt.add(System.currentTimeMillis());
 		syntheticDuringDispatch.add(BotEventGuard.isSynthetic());
 	}
 

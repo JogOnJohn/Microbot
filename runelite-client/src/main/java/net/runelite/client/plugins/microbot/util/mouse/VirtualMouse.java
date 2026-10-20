@@ -23,6 +23,9 @@ import static net.runelite.client.plugins.microbot.util.Global.sleep;
 @Slf4j
 public class VirtualMouse extends Mouse {
 
+    public static final int CLICK_HOLD_MIN_MS = 55;
+    public static final int CLICK_HOLD_MAX_MS = 140;
+
     private final ScheduledExecutorService scheduledExecutorService;
 
     @Inject
@@ -53,6 +56,7 @@ public class VirtualMouse extends Mouse {
             emit.move(point.getX(), point.getY());
         }
         emit.press(point.getX(), point.getY(), button);
+        sleep(Rs2Random.logNormalBounded(CLICK_HOLD_MIN_MS, CLICK_HOLD_MAX_MS));
         emit.release(point.getX(), point.getY(), button);
         emit.click(point.getX(), point.getY(), button);
         setLastClick(point);
@@ -100,7 +104,7 @@ public class VirtualMouse extends Mouse {
 
                 if (Rs2UiHelper.hasActor(entry)) {
                     Rectangle rectangle = Rs2UiHelper.getActorClickbox(entry.getActor());
-                    if (!Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
+                    if (Rs2UiHelper.isRectangleWithinCanvas(rectangle) && !Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
                         newPoint = Rs2UiHelper.getClickingPoint(rectangle, true);
                         Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
                     }
@@ -108,7 +112,7 @@ public class VirtualMouse extends Mouse {
 
                 if (Rs2UiHelper.isGameObject(entry)) {
                     Rectangle rectangle = Rs2UiHelper.getObjectClickbox(entry.getGameObject());
-                    if (!Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
+                    if (Rs2UiHelper.isRectangleWithinCanvas(rectangle) && !Rs2UiHelper.isMouseWithinRectangle(rectangle)) {
                         newPoint = Rs2UiHelper.getClickingPoint(rectangle, true);
                         Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
 

@@ -753,11 +753,8 @@ public class Microbot {
 
     public static void doInvoke(NewMenuEntry entry, Rectangle rectangle) {
         try {
-            if (Rs2UiHelper.isRectangleWithinCanvas(rectangle)) {
-                click(rectangle, entry);
-            } else {
-                click(new Rectangle(1, 1), entry);
-            }
+            Rectangle visible = Rs2UiHelper.clipToCanvas(rectangle);
+            click(visible != null ? visible : new Rectangle(1, 1), entry);
         } catch (ArrayIndexOutOfBoundsException ex) {
             log.error("Error during doInvoke", ex);
             // Handle the error as needed
