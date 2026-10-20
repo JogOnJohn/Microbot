@@ -108,3 +108,11 @@ six NPC hand-ins and eight mapped furniture effects without interaction retries.
 Subsequent Barbara access and pool-policy changes have offline coverage only.
 Nearby graph stairs remain on the existing transport executor; an on-screen
 ladder is not automatically an interaction request in this pilot.
+
+The later d56349e3ea build with Homes 1.0.21 passed five more houses (two EXACT,
+three LEGACY), including both Barbara bed effects and five NPC hand-ins, all on
+the first attempt. Route replacement now cancels the obsolete search without
+interrupting shared configuration refresh: interrupted client-thread reads can
+otherwise cache empty fallback inventory/facility values for the next request.
+The existing request-identity checks still suppress obsolete search results.
+This bounded pilot is not the full controlled/matched efficiency acceptance set.
