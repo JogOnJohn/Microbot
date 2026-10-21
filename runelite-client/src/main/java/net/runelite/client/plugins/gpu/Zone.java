@@ -487,11 +487,9 @@ class Zone
 	private static int lastzx, lastzz;
 
 	private static int elementBufferId;
-	private static final GpuAlphaIndexStorage elementStorage = new GpuAlphaIndexStorage(alphaElements.capacity());
 
 	static void initBuffer()
 	{
-		elementStorage.reset();
 		elementBufferId = glGenBuffers();
 		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId, "alpha-elements", 0);
 	}
@@ -501,7 +499,6 @@ class Zone
 		glDeleteBuffers(elementBufferId);
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId, "alpha-elements-free");
 		elementBufferId = 0;
-		elementStorage.reset();
 	}
 
 	static class AlphaModelComparator implements Comparator<AlphaModel>
@@ -689,26 +686,9 @@ class Zone
 			glBindVertexArray(lastVao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferId);
 			long diagnosticStart = GpuMemoryDiagnostics.startCall();
-			if (GpuAlphaIndexStorage.REUSE)
-			{
-				if (elementStorage.needsAllocation(alphaElements.remaining()))
-				{
-					glBufferData(GL_ELEMENT_ARRAY_BUFFER, elementStorage.capacityBytes, GL_STREAM_DRAW);
-					elementStorage.allocated();
-					GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId,
-						elementStorage.capacityBytes, "alpha-elements-reuse-capacity", diagnosticStart);
-				}
-				diagnosticStart = GpuMemoryDiagnostics.startCall();
-				glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0L, alphaElements);
-				GpuMemoryDiagnostics.event("upload", GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId,
-					"alpha-elements-reuse-upload", (long) alphaElements.remaining() * Integer.BYTES, diagnosticStart);
-			}
-			else
-			{
-				glBufferData(GL_ELEMENT_ARRAY_BUFFER, alphaElements, GL_STREAM_DRAW);
-				GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId,
-					(long) alphaElements.remaining() * Integer.BYTES, "alpha-elements-stream", diagnosticStart);
-			}
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, alphaElements, GL_STREAM_DRAW);
+			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId,
+				(long) alphaElements.remaining() * Integer.BYTES, "alpha-elements-stream", diagnosticStart);
 			glDepthMask(false);
 			glDrawElements(GL_TRIANGLES, alphaElements.limit(), GL_UNSIGNED_INT, 0L);
 			glDepthMask(true);
