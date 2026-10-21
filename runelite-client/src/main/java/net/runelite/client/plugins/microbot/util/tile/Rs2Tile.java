@@ -607,7 +607,9 @@ public abstract class Rs2Tile implements Tile {
         if (tileObject == null) return false;
 
         final WorldPoint playerLoc = Rs2Player.getWorldLocation();
-        if (playerLoc == null || tileObject.getPlane() != playerLoc.getPlane()) return false;
+        if (playerLoc == null) return false;
+        int objectPlane = Microbot.getClientThread().runOnClientThreadOptional(tileObject::getPlane).orElse(-1);
+        if (objectPlane != playerLoc.getPlane()) return false;
 
         final LocalPoint objectLocal = tileObject.getLocalLocation();
         if (objectLocal == null || !objectLocal.isInScene()) return false;
