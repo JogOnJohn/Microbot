@@ -997,7 +997,7 @@ net.runelite.client.plugins.microbot.util.player.Rs2Player#logout(): void  ->  n
 net.runelite.client.plugins.microbot.util.player.Rs2Player#logout(): void  ->  net.runelite.api.Client#getCanvasWidth(): int
 net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer#setQuickPrayers(Rs2PrayerEnum[]): boolean  ->  net.runelite.api.Client#getCanvasHeight(): int
 net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer#setQuickPrayers(Rs2PrayerEnum[]): boolean  ->  net.runelite.api.Client#getCanvasWidth(): int
-net.runelite.client.plugins.microbot.util.tile.Rs2Tile#lambda$isBankBoothInternal$33(WorldPoint, GameObject): boolean  ->  net.runelite.api.GameObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.tile.Rs2Tile#lambda$isBankBoothInternal$34(WorldPoint, GameObject): boolean  ->  net.runelite.api.GameObject#getWorldLocation(): WorldPoint
 net.runelite.client.plugins.microbot.util.walker.Rs2Walker#walkFastCanvas(WorldPoint, boolean): boolean  ->  net.runelite.api.Client#getCanvasHeight(): int
 net.runelite.client.plugins.microbot.util.walker.Rs2Walker#walkFastCanvas(WorldPoint, boolean): boolean  ->  net.runelite.api.Client#getCanvasWidth(): int
 net.runelite.client.plugins.microbot.util.walker.Rs2Walker#walkFastCanvasOnScreenOnly(WorldPoint, boolean): boolean  ->  net.runelite.api.Client#getCanvasHeight(): int
