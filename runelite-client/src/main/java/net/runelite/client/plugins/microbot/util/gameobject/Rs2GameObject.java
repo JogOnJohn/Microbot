@@ -1937,7 +1937,9 @@ public class Rs2GameObject {
         if (tileObject == null) return false;
         if (tileObject instanceof GameObject) {
             GameObject gameObject = (GameObject) tileObject;
-            WorldPoint worldPoint = WorldPoint.fromScene(Microbot.getClient(), gameObject.getSceneMinLocation().getX(), gameObject.getSceneMinLocation().getY(), gameObject.getPlane());
+            Integer plane = Microbot.getClientThread().runOnClientThreadOptional(gameObject::getPlane).orElse(null);
+            if (plane == null) return false;
+            WorldPoint worldPoint = WorldPoint.fromScene(Microbot.getClient(), gameObject.getSceneMinLocation().getX(), gameObject.getSceneMinLocation().getY(), plane);
             return new WorldArea(
                     worldPoint,
                     gameObject.sizeX(),
@@ -1998,7 +2000,9 @@ public class Rs2GameObject {
 
         if (tileObject instanceof GameObject) {
             GameObject gameObject = (GameObject) tileObject;
-            WorldPoint worldPoint = WorldPoint.fromScene(Microbot.getClient(), gameObject.getSceneMinLocation().getX(), gameObject.getSceneMinLocation().getY(), gameObject.getPlane());
+            Integer plane = Microbot.getClientThread().runOnClientThreadOptional(gameObject::getPlane).orElse(null);
+            if (plane == null) return false;
+            WorldPoint worldPoint = WorldPoint.fromScene(Microbot.getClient(), gameObject.getSceneMinLocation().getX(), gameObject.getSceneMinLocation().getY(), plane);
 
             if (Microbot.getClient().isInInstancedRegion()) {
                 var localPoint = LocalPoint.fromWorld(Microbot.getClient(), worldPoint);
