@@ -146,10 +146,15 @@ public class InventorySetupsAmmoHandler
 		return InventorySetupsRunePouchType.NONE;
 	}
 
+	private boolean varbitsReadable()
+	{
+		return client.getGameState() == GameState.LOGGED_IN;
+	}
+
 	public List<InventorySetupsItem> getRunePouchDataIfInContainer(final List<InventorySetupsItem> container)
 	{
 		InventorySetupsRunePouchType runePouchType = getRunePouchTypeFromContainer(container);
-		return runePouchType != InventorySetupsRunePouchType.NONE && client.getGameState() == GameState.LOGGED_IN
+		return runePouchType != InventorySetupsRunePouchType.NONE && varbitsReadable()
 			? getRunePouchData(runePouchType) : null;
 	}
 
@@ -185,7 +190,7 @@ public class InventorySetupsAmmoHandler
 
 	public List<InventorySetupsItem> getBoltPouchDataIfInContainer(final List<InventorySetupsItem> container)
 	{
-		return containerContainsBoltPouch(container) ? getBoltPouchData() : null;
+		return containerContainsBoltPouch(container) && varbitsReadable() ? getBoltPouchData() : null;
 	}
 
 	// Must be run on client thread!

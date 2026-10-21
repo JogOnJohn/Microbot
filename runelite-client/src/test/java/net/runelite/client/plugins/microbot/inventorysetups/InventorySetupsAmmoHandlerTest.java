@@ -49,4 +49,18 @@ public class InventorySetupsAmmoHandlerTest
 		assertEquals(InventorySetupsRunePouchType.NORMAL.getSize(), runePouch.size());
 		verify(client, atLeastOnce()).getVarbitValue(anyInt());
 	}
+
+	@Test
+	public void boltPouchDataIfInContainerIsNullBeforeLoggedIn() throws Exception
+	{
+		final MInventorySetupsPlugin plugin = mock(MInventorySetupsPlugin.class);
+		when(plugin.containerContainsItem(anyInt(), anyList(), anyBoolean(), anyBoolean())).thenReturn(true);
+		final Client client = mock(Client.class);
+		when(client.getGameState()).thenReturn(GameState.LOADING);
+		final InventorySetupsAmmoHandler handler = new InventorySetupsAmmoHandler(plugin, client, mock(ItemManager.class),
+			mock(InventorySetupsPluginPanel.class), mock(MInventorySetupsConfig.class));
+
+		assertNull(handler.getBoltPouchDataIfInContainer(Collections.emptyList()));
+		verify(client, never()).getVarbitValue(anyInt());
+	}
 }
