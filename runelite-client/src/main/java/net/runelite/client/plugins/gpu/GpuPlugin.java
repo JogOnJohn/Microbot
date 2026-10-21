@@ -686,7 +686,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		});
 		vboUiBuf.rewind();
 		glBindBuffer(GL_ARRAY_BUFFER, vboUiHandle);
-		glBufferData(GL_ARRAY_BUFFER, vboUiBuf, GL_STATIC_DRAW);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_VBO_STORE, vboUiHandle, (long) vboUiBuf.remaining() * Float.BYTES);
+			boolean returned = false;
+			try
+			{
+				glBufferData(GL_ARRAY_BUFFER, vboUiBuf, GL_STATIC_DRAW);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle,
 			(long) vboUiBuf.remaining() * Float.BYTES, "interface-vbo-init", 0);
 
@@ -815,7 +827,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		rboColorBuffer = glGenRenderbuffers();
 		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboColorBuffer, "aa-color", 0);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboColorBuffer);
-		glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_RGBA, width, height);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.AA_COLOR_STORE, 0, (long) width * height * 4 * aaSamples);
+				boolean returned = false;
+				try
+				{
+					glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_RGBA, width, height);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboColorBuffer,
 			(long) width * height * Integer.BYTES * Math.max(aaSamples, 1), "aa-color-storage", 0);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rboColorBuffer);
@@ -824,7 +848,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		rboDepthBuffer = glGenRenderbuffers();
 		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboDepthBuffer, "aa-depth", 0);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboDepthBuffer);
-		glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_DEPTH_COMPONENT32F, width, height);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.AA_DEPTH_STORE, 0, (long) width * height * 4 * aaSamples);
+				boolean returned = false;
+				try
+				{
+					glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_DEPTH_COMPONENT32F, width, height);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboDepthBuffer,
 			(long) width * height * Integer.BYTES * Math.max(aaSamples, 1), "aa-depth-storage", 0);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepthBuffer);
@@ -920,7 +956,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 		glBindBuffer(GL_UNIFORM_BUFFER, glUniformBuffer.glBufferId);
 		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		glBufferData(GL_UNIFORM_BUFFER, uniformBuffer.getBuffer(), GL_DYNAMIC_DRAW);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UNIFORM_STORE, glUniformBuffer.glBufferId, uniformBuffer.getBuffer().remaining() * 4L);
+			boolean returned = false;
+			try
+			{
+				glBufferData(GL_UNIFORM_BUFFER, uniformBuffer.getBuffer(), GL_DYNAMIC_DRAW);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, glUniformBuffer.glBufferId,
 			(long) uniformBuffer.getBuffer().remaining() * Float.BYTES, "uniform-stream", diagnosticStart);
 		glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -1130,8 +1178,18 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		int defaultFbo = awtContext.getFramebuffer(false);
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, fboScene);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, defaultFbo);
-		glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
-			GL_COLOR_BUFFER_BIT, GL_NEAREST);
+		long gpuBlit = GpuCallJournal.begin(GpuCallJournal.Site.BLIT, fboScene, (long) width * height * 4);
+		boolean blitReturned = false;
+		try
+		{
+			glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
+				GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			blitReturned = true;
+		}
+		finally
+		{
+			GpuCallJournal.end(gpuBlit, blitReturned);
+		}
 
 		// Reset
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, defaultFbo);
@@ -1472,7 +1530,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			lastCanvasHeight = canvasHeight;
 
 			glBindTexture(GL_TEXTURE_2D, interfaceTexture);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_TEXTURE_STORE, interfaceTexture, (long) canvasWidth * canvasHeight * 4);
+				boolean returned = false;
+				try
+				{
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.TEXTURE, interfaceTexture,
 				(long) canvasWidth * canvasHeight * Integer.BYTES, "interface-resize", 0);
 			glBindTexture(GL_TEXTURE_2D, 0);
@@ -1485,17 +1555,52 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, interfacePbo);
 		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		glBufferData(GL_PIXEL_UNPACK_BUFFER, (long) width * height * Integer.BYTES, GL_STREAM_DRAW);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.PBO_STORE, interfacePbo, (long) width * height * 4);
+			boolean returned = false;
+			try
+			{
+				glBufferData(GL_PIXEL_UNPACK_BUFFER, (long) width * height * Integer.BYTES, GL_STREAM_DRAW);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, interfacePbo,
 			(long) width * height * Integer.BYTES, "interface-pbo-stream", diagnosticStart);
-		ByteBuffer interfaceBuf = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+		ByteBuffer interfaceBuf;
+		long gpuMap = GpuCallJournal.begin(GpuCallJournal.Site.PBO_MAP, interfacePbo, (long) width * height * 4);
+		boolean mapReturned = false;
+		try
+		{
+			interfaceBuf = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+			mapReturned = true;
+		}
+		finally
+		{
+			GpuCallJournal.end(gpuMap, mapReturned);
+		}
 		if (interfaceBuf != null)
 		{
 			GpuMemoryDiagnostics.mapping(interfacePbo, true, false, "interface-pbo-map", 0);
 			interfaceBuf
 				.asIntBuffer()
 				.put(pixels, 0, width * height);
-			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.PBO_UNMAP, interfacePbo, (long) width * height * 4);
+				boolean returned = false;
+				try
+				{
+					glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			GpuMemoryDiagnostics.mapping(interfacePbo, false, false, "interface-pbo-unmap", 0);
 		}
 		else
@@ -1504,7 +1609,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			return;
 		}
 		glBindTexture(GL_TEXTURE_2D, interfaceTexture);
-		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_TEXTURE_UPLOAD, interfaceTexture, (long) width * height * 4);
+			boolean returned = false;
+			try
+			{
+				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
@@ -1553,7 +1670,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 		try
 		{
-			awtContext.swapBuffers();
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.SWAP, 0, 0);
+				boolean returned = false;
+				try
+				{
+					awtContext.swapBuffers();
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 		}
 		catch (RuntimeException ex)
 		{
@@ -1634,7 +1763,19 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 		// Texture on UI
 		glBindVertexArray(vaoUiHandle);
-		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_DRAW, vaoUiHandle, 4);
+			boolean returned = false;
+			try
+			{
+				glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 
 		// Reset
 		glBindTexture(GL_TEXTURE_2D, 0);

@@ -53,7 +53,19 @@ class VBO
 
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
 		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		glBufferData(GL_ARRAY_BUFFER, size, usage);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_STORE, bufId, size);
+			boolean returned = false;
+			try
+			{
+				glBufferData(GL_ARRAY_BUFFER, size, usage);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, bufId, size, "vbo-init", diagnosticStart);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
@@ -63,12 +75,36 @@ class VBO
 		if (mapped)
 		{
 			glBindBuffer(GL_ARRAY_BUFFER, bufId);
-			glUnmapBuffer(GL_ARRAY_BUFFER);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_UNMAP, bufId, size);
+				boolean returned = false;
+				try
+				{
+					glUnmapBuffer(GL_ARRAY_BUFFER);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-destroy-unmap", 0);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			mapped = false;
 		}
-		glDeleteBuffers(bufId);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_DELETE, bufId, size);
+			boolean returned = false;
+			try
+			{
+				glDeleteBuffers(bufId);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
 		bufId = 0;
 	}
@@ -78,7 +114,19 @@ class VBO
 		assert !mapped;
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
 		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		buffer = glMapBufferRange(GL_ARRAY_BUFFER, 0, size, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)), buffer);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_MAP, bufId, size);
+			boolean returned = false;
+			try
+			{
+				buffer = glMapBufferRange(GL_ARRAY_BUFFER, 0, size, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)), buffer);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		if (buffer == null)
 		{
 			int err = glGetError();
@@ -99,9 +147,33 @@ class VBO
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
 		if (usage != GL_STATIC_DRAW)
 		{
-			glFlushMappedBufferRange(GL_ARRAY_BUFFER, 0, (long) len * Integer.BYTES);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_FLUSH, bufId, (long) len * Integer.BYTES);
+				boolean returned = false;
+				try
+				{
+					glFlushMappedBufferRange(GL_ARRAY_BUFFER, 0, (long) len * Integer.BYTES);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 		}
-		glUnmapBuffer(GL_ARRAY_BUFFER);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_UNMAP, bufId, size);
+			boolean returned = false;
+			try
+			{
+				glUnmapBuffer(GL_ARRAY_BUFFER);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-unmap", 0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = false;

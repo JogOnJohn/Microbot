@@ -55,14 +55,38 @@ class TextureManager
 		glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 		if (GL.getCapabilities().glTexStorage3D != 0)
 		{
-			glTexStorage3D(GL_TEXTURE_2D_ARRAY, 8, GL_RGBA8, TEXTURE_SIZE, TEXTURE_SIZE, textures.length);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_ARRAY_STORE, textureArrayId, (long) TEXTURE_SIZE * TEXTURE_SIZE * textures.length * 4);
+				boolean returned = false;
+				try
+				{
+					glTexStorage3D(GL_TEXTURE_2D_ARRAY, 8, GL_RGBA8, TEXTURE_SIZE, TEXTURE_SIZE, textures.length);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 		}
 		else
 		{
 			int size = TEXTURE_SIZE;
 			for (int i = 0; i < 8; i++)
 			{
-				glTexImage3D(GL_TEXTURE_2D_ARRAY, i, GL_RGBA8, size, size, textures.length, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+				{
+					long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_ARRAY_IMAGE, textureArrayId, (long) size * size * textures.length * 4);
+					boolean returned = false;
+					try
+					{
+						glTexImage3D(GL_TEXTURE_2D_ARRAY, i, GL_RGBA8, size, size, textures.length, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+						returned = true;
+					}
+					finally
+					{
+						GpuCallJournal.end(gpuCall, returned);
+					}
+				}
 				size /= 2;
 			}
 		}
@@ -89,7 +113,19 @@ class TextureManager
 
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+		{
+			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_MIPMAP, textureArrayId, 0);
+			boolean returned = false;
+			try
+			{
+				glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+				returned = true;
+			}
+			finally
+			{
+				GpuCallJournal.end(gpuCall, returned);
+			}
+		}
 		glActiveTexture(GL_TEXTURE0);
 
 		return textureArrayId;
@@ -192,8 +228,19 @@ class TextureManager
 				ByteBuffer pixelBuffer = ByteBuffer.allocateDirect(pixels.length);
 				pixelBuffer.put(pixels);
 				pixelBuffer.flip();
-				glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, textureId, TEXTURE_SIZE, TEXTURE_SIZE,
-					1, GL_RGBA, GL_UNSIGNED_BYTE, pixelBuffer);
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_UPLOAD,
+					textureArrayId, pixelBuffer.remaining());
+				boolean returned = false;
+				try
+				{
+					glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, textureId, TEXTURE_SIZE, TEXTURE_SIZE,
+						1, GL_RGBA, GL_UNSIGNED_BYTE, pixelBuffer);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
 			}
 		}
 

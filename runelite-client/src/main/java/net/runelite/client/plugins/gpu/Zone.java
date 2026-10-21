@@ -274,7 +274,19 @@ class Zone
 		{
 			glUniform3i(uniBase, zx << 10, 0, zz << 10);
 			glBindVertexArray(glVao);
-			glMultiDrawArrays(GL_TRIANGLES, drawOff, drawEnd);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.OPAQUE_DRAW, glVao, drawEnd.remaining());
+				boolean returned = false;
+				try
+				{
+					glMultiDrawArrays(GL_TRIANGLES, drawOff, drawEnd);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 		}
 	}
 
@@ -674,7 +686,19 @@ class Zone
 			glUniform3i(uniBase, 0, 0, 0);
 			glBindVertexArray(lastVao);
 			glDepthMask(false);
-			glMultiDrawArrays(GL_TRIANGLES, drawOff, drawEnd);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.DYNAMIC_ALPHA_DRAW, lastVao, drawEnd.remaining());
+				boolean returned = false;
+				try
+				{
+					glMultiDrawArrays(GL_TRIANGLES, drawOff, drawEnd);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			glDepthMask(true);
 			drawOff.clear();
 			drawEnd.clear();
@@ -686,11 +710,35 @@ class Zone
 			glBindVertexArray(lastVao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferId);
 			long diagnosticStart = GpuMemoryDiagnostics.startCall();
-			glBufferData(GL_ELEMENT_ARRAY_BUFFER, alphaElements, GL_STREAM_DRAW);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.ALPHA_STORE, elementBufferId, (long) alphaElements.remaining() * Integer.BYTES);
+				boolean returned = false;
+				try
+				{
+					glBufferData(GL_ELEMENT_ARRAY_BUFFER, alphaElements, GL_STREAM_DRAW);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, elementBufferId,
 				(long) alphaElements.remaining() * Integer.BYTES, "alpha-elements-stream", diagnosticStart);
 			glDepthMask(false);
-			glDrawElements(GL_TRIANGLES, alphaElements.limit(), GL_UNSIGNED_INT, 0L);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.ALPHA_DRAW, elementBufferId, alphaElements.limit());
+				boolean returned = false;
+				try
+				{
+					glDrawElements(GL_TRIANGLES, alphaElements.limit(), GL_UNSIGNED_INT, 0L);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			glDepthMask(true);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 			alphaElements.clear();
@@ -702,7 +750,19 @@ class Zone
 			glUniform3i(uniBase, lastzx << 10, 0, lastzz << 10);
 			glBindVertexArray(lastVao);
 			glDepthMask(false);
-			glMultiDrawArrays(GL_TRIANGLES, drawOff, drawEnd);
+			{
+				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.STATIC_ALPHA_DRAW, lastVao, drawEnd.remaining());
+				boolean returned = false;
+				try
+				{
+					glMultiDrawArrays(GL_TRIANGLES, drawOff, drawEnd);
+					returned = true;
+				}
+				finally
+				{
+					GpuCallJournal.end(gpuCall, returned);
+				}
+			}
 			glDepthMask(true);
 			drawOff.clear();
 			drawEnd.clear();
