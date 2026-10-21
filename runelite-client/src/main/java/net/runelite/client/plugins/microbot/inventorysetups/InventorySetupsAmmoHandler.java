@@ -5,6 +5,7 @@ import net.runelite.client.plugins.microbot.inventorysetups.ui.InventorySetupsRu
 import net.runelite.client.plugins.microbot.inventorysetups.ui.InventorySetupsSlot;
 import net.runelite.api.Client;
 import net.runelite.api.EnumComposition;
+import net.runelite.api.GameState;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.game.ItemManager;
@@ -148,7 +149,8 @@ public class InventorySetupsAmmoHandler
 	public List<InventorySetupsItem> getRunePouchDataIfInContainer(final List<InventorySetupsItem> container)
 	{
 		InventorySetupsRunePouchType runePouchType = getRunePouchTypeFromContainer(container);
-		return runePouchType != InventorySetupsRunePouchType.NONE ? getRunePouchData(runePouchType) : null;
+		return runePouchType != InventorySetupsRunePouchType.NONE && client.getGameState() == GameState.LOGGED_IN
+			? getRunePouchData(runePouchType) : null;
 	}
 
 	// Must be run on client thread!
