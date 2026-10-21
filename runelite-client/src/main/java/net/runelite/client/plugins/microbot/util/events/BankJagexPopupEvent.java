@@ -13,11 +13,10 @@ public class BankJagexPopupEvent implements BlockingEvent {
 
     static final String NOT_NOW_TEXT = "Not now";
 
-    private final CachedClientCheck visible = new CachedClientCheck(() -> findNotNowButton(Microbot.getClient()) != null);
 
     @Override
     public boolean validate() {
-        return visible.get();
+        return ClientThreadProbe.isVisible(() -> findNotNowButton(Microbot.getClient()) != null);
     }
 
     @Override
