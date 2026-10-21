@@ -13,9 +13,11 @@ public class BankTutorialEvent implements BlockingEvent {
 
     static final String CLOSE_TEXT = "Close";
 
+    private final CachedClientCheck visible = new CachedClientCheck(() -> findCloseButton(Microbot.getClient()) != null);
+
     @Override
     public boolean validate() {
-        return findCloseButton() != null;
+        return visible.get();
     }
 
     @Override

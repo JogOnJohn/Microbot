@@ -17,9 +17,11 @@ public class MembershipPromptEvent implements BlockingEvent {
             {InterfaceID.MembershipBenefitsPromptHop.UNIVERSE, InterfaceID.MembershipBenefitsPromptHop.CLOSE_BUTTON},
     };
 
+    private final CachedClientCheck visible = new CachedClientCheck(() -> findCloseButton(Microbot.getClient()) != null);
+
     @Override
     public boolean validate() {
-        return findCloseButton() != null;
+        return visible.get();
     }
 
     @Override
