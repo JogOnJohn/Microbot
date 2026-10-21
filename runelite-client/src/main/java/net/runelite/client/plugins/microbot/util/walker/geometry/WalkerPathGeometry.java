@@ -15,6 +15,32 @@ import java.util.function.Predicate;
  * stay in {@code Rs2Walker} and delegate here.
  */
 public final class WalkerPathGeometry {
+    /** Clamp a click to a reachable entrance, including when progress snapped past a closed door. */
+    public static WorldPoint clampBeforeClosedDoor(List<WorldPoint> route, WorldPoint player,
+                                                   WorldPoint target, int radius, int backtrack,
+                                                   java.util.function.IntPredicate closedEdge,
+                                                   Predicate<WorldPoint> reachable) {
+        if (route == null || route.size() < 2 || player == null || target == null
+                || player.getPlane() != target.getPlane()) {
+            return target;
+        }
+        int closest = getClosestTileIndex(route, player, null);
+        int end = getClosestTileIndex(route, target, null);
+        for (int i = Math.max(0, closest - backtrack);
+             i < route.size() - 1 && i < end && i < closest + 40; i++) {
+            WorldPoint from = route.get(i), to = route.get(i + 1);
+            if (from == null || to == null || from.getPlane() != player.getPlane()
+                    || to.getPlane() != player.getPlane() || from.distanceTo2D(to) != 1
+                    || from.distanceTo2D(player) > radius || !closedEdge.test(i)) {
+                continue;
+            }
+            if (reachable.test(from) && !reachable.test(to)) {
+                return from;
+            }
+        }
+        return target;
+    }
+
 
     private WalkerPathGeometry() {
     }

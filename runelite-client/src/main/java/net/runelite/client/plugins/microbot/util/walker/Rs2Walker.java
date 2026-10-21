@@ -3953,6 +3953,41 @@ public class Rs2Walker {
         if (target == null || playerLoc == null || target.equals(playerLoc)) {
             return null;
         }
+        if (!WalkerSceneReadiness.inInstance() && rawPath != null && rawPath.size() > 1) {
+            final WorldPoint requested = target;
+            final WorldPoint[] guarded = {target};
+            java.util.concurrent.atomic.AtomicReference<Map<WorldPoint, Integer>> reachable =
+                    new java.util.concurrent.atomic.AtomicReference<>();
+            withScopedDoorProbeSnapshot(playerLoc, maxEuclidean + 2, new BooleanSupplier() {
+                public boolean getAsBoolean() {
+                    guarded[0] = WalkerPathGeometry.clampBeforeClosedDoor(rawPath, playerLoc, requested,
+                            maxEuclidean, HANDLER_RANGE,
+                            new java.util.function.IntPredicate() {
+                                public boolean test(int edge) {
+                                    return (!isCatalogBackedTransportSegment(rawPath, edge)
+                                            || isDoorLikeCatalogTransportSegment(rawPath, edge))
+                                            && hasUnresolvedDoorLikeSceneObjectOnSegment(rawPath.get(edge),
+                                                    rawPath.get(edge + 1), playerLoc, maxEuclidean + 2);
+                                }
+                            },
+                            new Predicate<WorldPoint>() {
+                                public boolean test(WorldPoint tile) {
+                                    if (reachable.get() == null) {
+                                        reachable.set(Rs2Tile.getReachableTilesFromTile(playerLoc, maxEuclidean + 2));
+                                    }
+                                    return reachable.get().containsKey(tile);
+                                }
+                            });
+                    return false;
+                }
+            });
+            if (!requested.equals(guarded[0])) {
+                WebWalkLog.spInfo("closed_door_approach | requested={} approach={} player={}",
+                        compactWorldPoint(requested), compactWorldPoint(guarded[0]), compactWorldPoint(playerLoc));
+                // Do not let an off-clip fallback undo the confirmed blocked-crossing clamp.
+                return !guarded[0].equals(playerLoc) && walkMiniMap(guarded[0]) ? guarded[0] : null;
+            }
+        }
         if (walkMiniMap(target)) {
             return target;
         }
@@ -5578,8 +5613,9 @@ public class Rs2Walker {
             return false;
         }
 
-        int from = Math.max(0, Math.min(rawStart, rawTarget) - 2);
+        int from = Math.max(0, Math.min(rawStart, rawTarget) - HANDLER_RANGE);
         int toExclusive = Math.min(rawPath.size() - 1, Math.max(rawStart, rawTarget) + 1);
+        Map<WorldPoint, Integer> backtrackReachable = null;
         for (int ri = from; ri < toExclusive && ri < rawPath.size() - 1; ri++) {
             WorldPoint a = rawPath.get(ri);
             WorldPoint b = rawPath.get(ri + 1);
@@ -5597,6 +5633,14 @@ public class Rs2Walker {
             }
             if (!hasDoorLikeSceneObjectOnSegment(a, b, playerLoc, HANDLER_RANGE)) {
                 continue;
+            }
+            if (ri < rawStart - 2) {
+                if (backtrackReachable == null) {
+                    backtrackReachable = getClosestIndexReachableTiles(playerLoc);
+                }
+                if (backtrackReachable.containsKey(b)) {
+                    continue; // Already on the far side: do not reopen a door behind us.
+                }
             }
             if (handleDoorsWithTimeout(rawPath, ri, timeoutMs, attempted, true)) {
                 return true;

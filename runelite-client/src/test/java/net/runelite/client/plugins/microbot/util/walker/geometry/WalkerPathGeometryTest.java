@@ -38,6 +38,52 @@ public class WalkerPathGeometryTest {
     // --- rawPathForwardAnchorIndex ------------------------------------------------------------------
 
     @Test
+    public void distantClosedDoorCapsClickBeyondInteractionRange() {
+        List<WorldPoint> path = straightRun(3200, 3200, 24);
+        assertEquals(path.get(18), WalkerPathGeometry.clampBeforeClosedDoor(path, path.get(0),
+                path.get(22), 23, 13, edge -> edge == 18, tile -> tile.getX() <= 3218));
+    }
+
+    @Test
+    public void wrongSideWallCanRecoverDoorBehindClosestRouteIndex() {
+        List<WorldPoint> path = straightRun(3200, 3200, 24);
+        assertEquals(path.get(18), WalkerPathGeometry.clampBeforeClosedDoor(path, wp(3222, 3202),
+                path.get(22), 23, 13, edge -> edge == 18, tile -> tile.getX() <= 3218));
+    }
+
+    @Test
+    public void alreadyAcrossClosedDoorDoesNotSendPlayerBack() {
+        List<WorldPoint> path = straightRun(3200, 3200, 24);
+        assertEquals(path.get(22), WalkerPathGeometry.clampBeforeClosedDoor(path, path.get(20),
+                path.get(22), 23, 13, edge -> edge == 18, tile -> tile.getX() >= 3219));
+    }
+
+    @Test
+    public void openRouteKeepsLongClickWithoutReachabilitySearch() {
+        List<WorldPoint> path = straightRun(3200, 3200, 24);
+        assertEquals(path.get(22), WalkerPathGeometry.clampBeforeClosedDoor(path, path.get(0),
+                path.get(22), 23, 13, edge -> false,
+                tile -> { throw new AssertionError("No BFS needed without a closed door"); }));
+    }
+
+    @Test
+    public void standingAtDoorHoldsPositionInsteadOfClickingThrough() {
+        List<WorldPoint> path = straightRun(3200, 3200, 24);
+        assertEquals(path.get(18), WalkerPathGeometry.clampBeforeClosedDoor(path, path.get(18),
+                path.get(22), 23, 13, edge -> edge == 18, tile -> tile.getX() <= 3218));
+    }
+
+    @Test
+    public void doorBeyondClickAndTransportJumpDoNotClamp() {
+        List<WorldPoint> path = straightRun(3200, 3200, 24);
+        assertEquals(path.get(10), WalkerPathGeometry.clampBeforeClosedDoor(path, path.get(0),
+                path.get(10), 23, 13, edge -> edge == 18, tile -> true));
+        List<WorldPoint> jump = List.of(wp(3200, 3200), wp(3210, 3200));
+        assertEquals(jump.get(1), WalkerPathGeometry.clampBeforeClosedDoor(jump, jump.get(0),
+                jump.get(1), 23, 13, edge -> true, tile -> false));
+    }
+
+    @Test
     public void anchorForwardIndexPicksClosestWithinWindowAndNeverGoesBackward() {
         List<WorldPoint> path = straightRun(3200, 3200, 60);
         WorldPoint player = wp(3210, 3200); // physically closest to index 10

@@ -589,3 +589,27 @@ live footprint. A mapped access tile can be reachable on the wrong side of an
 internal door; its presence alone cannot authorize the click. Keep animation
 waits bounded and release pending ownership before the plugin changes state on
 a completion chat message or final hotspot effect.
+
+## 33. Clamp fallback clicks before confirmed closed crossings
+
+A forward target can lie beyond the bounded reachability search while its door
+is still outside interaction range. Detect the closed crossing separately from
+dispatching the interaction, and approach its reachable near side first. Apply
+the clamp at the shared minimap dispatch boundary so smoothed-route, wall-nudge
+and recovery fallbacks cannot restore a rejected indoor click. If already at
+that entrance, yield to door handling rather than refreshing the same checkpoint.
+
+**Why this matters:** Noella's indoor click from the Ardougne landing sent the
+player around the north wall. A later primary selection correctly rejected the
+indoor tile, but fallback selection clicked it again. Progress snapping to the
+endpoint could also leave the real door behind the recovery scan's short window.
+
+**Pattern to follow:** use one scoped scene snapshot, bounded route lookback,
+confirmed closed-door classification and a lazy player-origin reachability map.
+Do not reopen backtracked doors after their far side is already reachable, scan
+entire scenes per route edge, change instance coordinates or assume unknown
+collision means a closed door. Retain long clicks on unobstructed routes.
+
+**Defensive check:** `WalkerPathGeometryTest` covers distant entrances, wrong-side
+endpoint anchors, already-crossed doors, long open approaches, standing at the
+entrance and transport jumps.
