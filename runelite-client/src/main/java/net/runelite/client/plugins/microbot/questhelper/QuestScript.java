@@ -62,7 +62,7 @@ import org.slf4j.event.Level;
 import net.runelite.api.coords.WorldArea;
 
 public class QuestScript extends Script {
-    public static double version = 0.3;
+    public static double version = 0.4;
 
     private static final long MISSING_REQUIREMENT_NOTIFY_INTERVAL_MS = 10_000L;
     private static final Map<Integer, Long> lastMissingRequirementNotice = new HashMap<>();
@@ -90,6 +90,8 @@ public class QuestScript extends Script {
     private final Set<Integer> everHeldItemRequirementIds = new HashSet<>();
 
     QuestStep dialogueStartedStep = null;
+
+    private final MultiNpcTargetTracker multiNpcTarget = new MultiNpcTargetTracker();
 
     /**
      * Epoch millis at which the post-dialogue cooldown expires. While
@@ -253,6 +255,7 @@ public class QuestScript extends Script {
                     } else {
                         if (dialogueStartedStep != null) {
                             dialogueCooldownEndsAt = System.currentTimeMillis() + Rs2Random.between(4000, 7000);
+                            multiNpcTarget.release();
                         }
                         dialogueStartedStep = null;
                     }
@@ -1275,6 +1278,7 @@ public class QuestScript extends Script {
 	@Override
 	public void shutdown() {
 		super.shutdown();
+		multiNpcTarget.release();
 		reset();
 	}
 
@@ -1316,12 +1320,9 @@ public class QuestScript extends Script {
         Rs2NpcModel npc = npcs.stream().findFirst().orElse(null);
 
         if (step.isAllowMultipleHighlights()) {
-            npc = npcs.stream()
-                    .filter(x -> !npcsHandled.contains(x.getIndex()))
-                    .findFirst()
-                    .orElseGet(() -> npcs.stream()
-                            .min(Comparator.comparing(x -> Rs2Player.getWorldLocation().distanceTo(x.getWorldLocation())))
-                            .orElse(null));
+            npc = multiNpcTarget.select(step, npcs, Rs2NpcModel::getIndex, npcsHandled,
+                    Comparator.comparing(x -> Rs2Player.getWorldLocation().distanceTo(x.getWorldLocation())),
+                    System.currentTimeMillis());
         }
 
         // canReach() pathfinds through closed doors (the walker opens them en route), so canReach==true
@@ -1382,6 +1383,9 @@ public class QuestScript extends Script {
                         + "' location=" + npc.getWorldLocation()
                         + " player=" + Rs2Player.getWorldLocation());
                 npc.click(option);
+                if (step.isAllowMultipleHighlights()) {
+                    multiNpcTarget.commit(step, npc.getIndex(), System.currentTimeMillis());
+                }
             }
 
             if (step.isAllowMultipleHighlights()) {
