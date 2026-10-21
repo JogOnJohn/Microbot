@@ -610,9 +610,11 @@ public abstract class Rs2Tile implements Tile {
         // Object geometry is in the live scene, not the POH template used by routing.
         final WorldPoint playerLoc = Microbot.getClientThread().runOnClientThreadOptional(() -> {
             var player = Microbot.getClient().getLocalPlayer();
-            return player == null ? null : player.getWorldLocation();
+            if (player == null) return null;
+            WorldPoint location = player.getWorldLocation();
+            return location != null && tileObject.getPlane() == location.getPlane() ? location : null;
         }).orElse(null);
-        if (playerLoc == null || tileObject.getPlane() != playerLoc.getPlane()) return false;
+        if (playerLoc == null) return false;
 
         final LocalPoint objectLocal = tileObject.getLocalLocation();
         if (objectLocal == null || !objectLocal.isInScene()) return false;
