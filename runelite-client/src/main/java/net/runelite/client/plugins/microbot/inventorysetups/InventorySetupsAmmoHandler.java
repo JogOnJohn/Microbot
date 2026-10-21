@@ -231,7 +231,7 @@ public class InventorySetupsAmmoHandler
 
 	public List<InventorySetupsItem> getQuiverDataIfInSetup(final List<InventorySetupsItem> inv, final List<InventorySetupsItem> eq)
 	{
-		return setupContainsQuiver(inv, eq) ? getQuiverData() : null;
+		return varbitsReadable() && setupContainsQuiver(inv, eq) ? getQuiverData() : null;
 	}
 
 	// Must be run on client thread!
@@ -345,6 +345,10 @@ public class InventorySetupsAmmoHandler
 
 	public void updateSpecialContainersInSetup(final InventorySetup setup, final List<InventorySetupsItem> inv, final List<InventorySetupsItem> eqp)
 	{
+		if (!varbitsReadable())
+		{
+			return;
+		}
 		List<InventorySetupsItem> runePouchData = getRunePouchDataIfInContainer(inv);
 		List<InventorySetupsItem> boltPouchData = getBoltPouchDataIfInContainer(inv);
 		List<InventorySetupsItem> quiverData = getQuiverDataIfInSetup(inv, eqp);

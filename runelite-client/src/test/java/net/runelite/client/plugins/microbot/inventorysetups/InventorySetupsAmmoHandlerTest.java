@@ -63,4 +63,38 @@ public class InventorySetupsAmmoHandlerTest
 		assertNull(handler.getBoltPouchDataIfInContainer(Collections.emptyList()));
 		verify(client, never()).getVarbitValue(anyInt());
 	}
+
+	@Test
+	public void quiverDataIfInSetupIsNullBeforeLoggedIn() throws Exception
+	{
+		final MInventorySetupsPlugin plugin = mock(MInventorySetupsPlugin.class);
+		when(plugin.containerContainsItemFromSet(anySet(), anyList(), anyBoolean(), anyBoolean())).thenReturn(true);
+		final Client client = mock(Client.class);
+		when(client.getGameState()).thenReturn(GameState.LOADING);
+		final InventorySetupsAmmoHandler handler = new InventorySetupsAmmoHandler(plugin, client, mock(ItemManager.class),
+			mock(InventorySetupsPluginPanel.class), mock(MInventorySetupsConfig.class));
+
+		assertNull(handler.getQuiverDataIfInSetup(Collections.emptyList(), Collections.emptyList()));
+		verify(client, never()).getVarpValue(anyInt());
+	}
+
+	@Test
+	public void specialContainersKeepSavedPouchesBeforeLoggedIn() throws Exception
+	{
+		final MInventorySetupsPlugin plugin = mock(MInventorySetupsPlugin.class);
+		when(plugin.containerContainsItemFromSet(anySet(), anyList(), anyBoolean(), anyBoolean())).thenReturn(true);
+		when(plugin.containerContainsItem(anyInt(), anyList(), anyBoolean(), anyBoolean())).thenReturn(true);
+		final Client client = mock(Client.class);
+		when(client.getGameState()).thenReturn(GameState.LOADING);
+		final InventorySetupsAmmoHandler handler = new InventorySetupsAmmoHandler(plugin, client, mock(ItemManager.class),
+			mock(InventorySetupsPluginPanel.class), mock(MInventorySetupsConfig.class));
+		final InventorySetup setup = mock(InventorySetup.class);
+
+		handler.updateSpecialContainersInSetup(setup, Collections.emptyList(), Collections.emptyList());
+		verify(setup, never()).updateRunePouch(anyList());
+		verify(setup, never()).updateBoltPouch(anyList());
+		verify(setup, never()).updateQuiver(anyList());
+		verify(client, never()).getVarbitValue(anyInt());
+		verify(client, never()).getVarpValue(anyInt());
+	}
 }
