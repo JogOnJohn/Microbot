@@ -75,7 +75,7 @@ public class Rs2TileObjectModel implements TileObject {
 
     @Override
     public int getPlane() {
-        return tileObject.getPlane();
+        return Microbot.getClientThread().runOnClientThreadOptional(tileObject::getPlane).orElse(-1);
     }
 
     @Override
