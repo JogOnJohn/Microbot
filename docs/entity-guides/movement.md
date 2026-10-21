@@ -1,5 +1,14 @@
 # Movement Gotchas
 
+## Loaded blocked targets must stay rejected through dispatch
+
+A reachability-aware selector can reject an indoor target while a wall-nudge or
+retry restores it afterward. Gate the final minimap dispatcher too: for a loaded
+unreachable target, choose a collision-reachable raw-route rejoin point instead.
+If none exists, dispatch no click and let obstacle recovery run. Never restore
+the rejected target through off-clip or directional fallback. Preserve instance
+and unloaded-target policy. Noella's north-wall approach exposed this retry loop.
+
 ## Interaction completion and loaded landings
 
 An ordinary arrival may complete while the walking pose still reports movement.

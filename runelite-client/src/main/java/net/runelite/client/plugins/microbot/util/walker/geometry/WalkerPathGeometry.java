@@ -15,6 +15,20 @@ import java.util.function.Predicate;
  * stay in {@code Rs2Walker} and delegate here.
  */
 public final class WalkerPathGeometry {
+    /** Final dispatch gate: a fallback must not restore a loaded target rejected by live collision. */
+    public static WorldPoint reachableDispatchTarget(List<WorldPoint> route, WorldPoint player,
+                                                     WorldPoint requested, int radius, int anchor,
+                                                     Map<WorldPoint, Integer> reachable,
+                                                     boolean targetLoaded, int forwardSearchTiles) {
+        if (!targetLoaded || reachable == null || reachable.isEmpty() || requested == null
+                || player == null || requested.getPlane() != player.getPlane()
+                || reachable.containsKey(requested)) {
+            return requested;
+        }
+        return findReachableRejoinRawPathPoint(route, player, radius, anchor, reachable::containsKey,
+                forwardSearchTiles, () -> getClosestTileIndex(route, player, reachable));
+    }
+
     /** Clamp a click to a reachable entrance, including when progress snapped past a closed door. */
     public static WorldPoint clampBeforeClosedDoor(List<WorldPoint> route, WorldPoint player,
                                                    WorldPoint target, int radius, int backtrack,

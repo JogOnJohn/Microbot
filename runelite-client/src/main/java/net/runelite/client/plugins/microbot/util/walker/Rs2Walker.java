@@ -3988,6 +3988,20 @@ public class Rs2Walker {
                 return !guarded[0].equals(playerLoc) && walkMiniMap(guarded[0]) ? guarded[0] : null;
             }
         }
+        if (!WalkerSceneReadiness.inInstance() && rawPath != null && !rawPath.isEmpty()
+                && sceneTileStatus(target) == SceneTileStatus.LOADED) {
+            Map<WorldPoint, Integer> reachable = Rs2Tile.getReachableTilesFromTile(playerLoc,
+                    Math.max(2, maxEuclidean * 2));
+            WorldPoint safeTarget = WalkerPathGeometry.reachableDispatchTarget(rawPath, playerLoc, target,
+                    maxEuclidean, rawAnchorIndex, reachable, true, ROUTE_PROGRESS_FORWARD_SEARCH_TILES);
+            if (!target.equals(safeTarget)) {
+                WebWalkLog.spInfo("blocked_click_rejoin | rejected={} approach={} player={}",
+                        compactWorldPoint(target), compactWorldPoint(safeTarget), compactWorldPoint(playerLoc));
+                // This return also gates retry/off-clip paths; none may restore the rejected tile.
+                return safeTarget != null && !safeTarget.equals(playerLoc) && walkMiniMap(safeTarget)
+                        ? safeTarget : null;
+            }
+        }
         if (walkMiniMap(target)) {
             return target;
         }

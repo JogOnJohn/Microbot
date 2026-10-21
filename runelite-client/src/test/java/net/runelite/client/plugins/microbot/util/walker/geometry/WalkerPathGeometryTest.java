@@ -19,6 +19,49 @@ import static org.junit.Assert.assertTrue;
  * as a lambda, so we also assert it stays lazy (invoked only when no anchor is known).
  */
 public class WalkerPathGeometryTest {
+    @Test
+    public void blockedIndoorTargetRejoinsReachableEntranceInsteadOfRetryingWall() {
+        WorldPoint player = wp(2659, 3323), inside = wp(2659, 3322), entrance = wp(2652, 3320);
+        List<WorldPoint> route = List.of(wp(2652, 3319), entrance, wp(2653, 3320), inside);
+        java.util.Map<WorldPoint, Integer> reachable = java.util.Map.of(player, 0,
+                route.get(0), 11, entrance, 10);
+        assertEquals(entrance, WalkerPathGeometry.reachableDispatchTarget(route, player, inside,
+                16, 3, reachable, true, 40));
+        // The same target on a retry must still resolve to the approach, never the indoor tile.
+        assertEquals(entrance, WalkerPathGeometry.reachableDispatchTarget(route, player, inside,
+                16, -1, reachable, true, 40));
+    }
+
+    @Test
+    public void blockedTargetWithoutReachableRouteDoesNotClick() {
+        WorldPoint player = wp(2659, 3323), inside = wp(2659, 3322);
+        assertNull(WalkerPathGeometry.reachableDispatchTarget(List.of(player, inside), player,
+                inside, 16, 1, java.util.Map.of(player, 0), true, 40));
+    }
+
+    @Test
+    public void openDoorMakesOriginalIndoorTargetEligibleAgain() {
+        WorldPoint player = wp(2659, 3323), inside = wp(2659, 3322);
+        assertEquals(inside, WalkerPathGeometry.reachableDispatchTarget(List.of(player, inside), player,
+                inside, 16, 1, java.util.Map.of(player, 0, inside, 12), true, 40));
+    }
+
+    @Test
+    public void unloadedTargetsAndUnknownCollisionKeepExistingPolicy() {
+        WorldPoint player = wp(2659, 3323), target = wp(2680, 3322);
+        assertEquals(target, WalkerPathGeometry.reachableDispatchTarget(List.of(player, target), player,
+                target, 16, 1, java.util.Map.of(player, 0), false, 40));
+        assertEquals(target, WalkerPathGeometry.reachableDispatchTarget(List.of(player, target), player,
+                target, 16, 1, java.util.Map.of(), true, 40));
+    }
+
+    @Test
+    public void rejoinCannotUseAnotherPlaneOrAnOutOfRangePoint() {
+        WorldPoint player = wp(2659, 3323), inside = wp(2659, 3322);
+        WorldPoint upstairs = new WorldPoint(2658, 3322, 1), far = wp(2600, 3320);
+        assertNull(WalkerPathGeometry.reachableDispatchTarget(List.of(far, upstairs, inside), player,
+                inside, 16, 2, java.util.Map.of(player, 0, far, 59, upstairs, 1), true, 40));
+    }
 
     private static final int FORWARD_SEARCH_TILES = 40;
 
