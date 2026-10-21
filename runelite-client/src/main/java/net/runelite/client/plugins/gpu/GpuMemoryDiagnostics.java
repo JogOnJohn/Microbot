@@ -38,15 +38,17 @@ final class GpuMemoryDiagnostics
 
     static final class Ledger
     {
+        static final int MAX_RESOURCES = 16384;
         final Map<Long, Resource> resources = new HashMap<>();
         long generation, scene, frames, nextOwner;
-        long creates, deletes, stores, trafficBytes, maps, unmaps, invalidations, anomalies;
+        long creates, deletes, stores, trafficBytes, maps, unmaps, invalidations, anomalies, overflow;
 
         static long key(Kind kind, int id) { return ((long) kind.ordinal() << 32) | (id & 0xffffffffL); }
         synchronized long owner() { return ++nextOwner; }
         synchronized void create(Kind kind, int id, String site, long owner)
         {
             if (id <= 0) { anomalies++; return; }
+            if (resources.size() >= MAX_RESOURCES && !resources.containsKey(key(kind, id))) { overflow++; return; }
             if (resources.put(key(kind, id), new Resource(kind, id, generation, site, owner)) != null) anomalies++;
             creates++;
         }
@@ -99,7 +101,7 @@ final class GpuMemoryDiagnostics
                 + " creates=" + creates + " deletes=" + deletes + " stores=" + stores
                 + " requestedTrafficBytes=" + trafficBytes + " maps=" + maps + " unmaps=" + unmaps
                 + " mappedObjects=" + mapped + " invalidations=" + invalidations
-                + " anomalies=" + anomalies + " bySite=" + bySite;
+                + " anomalies=" + anomalies + " overflow=" + overflow + " bySite=" + bySite;
         }
     }
 
@@ -137,16 +139,19 @@ final class GpuMemoryDiagnostics
     {
         if (!ENABLED) return;
         LEDGER.create(kind, id, site, owner); event("create", kind, id, site, 0, 0);
+        GpuResourceAudit.created(kind, id, owner, site);
     }
     static void adopt(Kind kind, int id, String site, long owner)
     {
         if (!ENABLED) return;
         LEDGER.adopt(kind, id, site, owner); event("adopt", kind, id, site, 0, 0);
+        GpuResourceAudit.adopt(kind, id, owner);
     }
     static void store(Kind kind, int id, long bytes, String site, long start)
     {
         if (!ENABLED) return;
         LEDGER.store(kind, id, bytes); event("store", kind, id, site, bytes, start);
+        GpuResourceAudit.store(kind, id, bytes);
     }
     static void mapping(int id, boolean mapped, boolean invalidated, String site, long start)
     {
@@ -158,11 +163,13 @@ final class GpuMemoryDiagnostics
     {
         if (!ENABLED) return;
         event("delete-request", kind, id, site, 0, 0); LEDGER.delete(kind, id);
+        GpuResourceAudit.deleted(kind, id, site);
     }
     static void contextCreated()
     {
         if (!ENABLED) return;
         synchronized (LEDGER) { LEDGER.generation++; }
+        GpuResourceAudit.contextCreated();
         checkpoint("context-created");
     }
     static void contextDestroyed()
@@ -170,11 +177,13 @@ final class GpuMemoryDiagnostics
         if (!ENABLED) return;
         checkpoint("context-destroyed-before-ledger-clear");
         synchronized (LEDGER) { LEDGER.resources.clear(); }
+        GpuResourceAudit.contextDestroyed();
     }
     static void scene(String phase, int worldView)
     {
         if (!ENABLED) return;
         synchronized (LEDGER) { LEDGER.scene++; }
+        GpuResourceAudit.scene();
         checkpoint(phase + ":wv=" + worldView);
     }
     static void checkpoint(String phase)

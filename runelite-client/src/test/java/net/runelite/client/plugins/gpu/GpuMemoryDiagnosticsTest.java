@@ -6,6 +6,15 @@ import static org.junit.Assert.*;
 
 public class GpuMemoryDiagnosticsTest
 {
+    @Test public void liveAccountingHasAnExplicitCapacityLimit()
+    {
+        var ledger = new GpuMemoryDiagnostics.Ledger();
+        for (int i = 1; i <= GpuMemoryDiagnostics.Ledger.MAX_RESOURCES + 5; i++)
+            ledger.create(BUFFER, i, "capacity-test", i);
+        assertEquals(GpuMemoryDiagnostics.Ledger.MAX_RESOURCES, ledger.resources.size());
+        assertEquals(5, ledger.overflow);
+        assertTrue(ledger.summary().contains("overflow=5"));
+    }
     @Test public void storageReplacementCountsTrafficWithoutInventingResidentBytes()
     {
         var ledger = new GpuMemoryDiagnostics.Ledger();

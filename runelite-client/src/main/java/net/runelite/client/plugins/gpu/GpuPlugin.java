@@ -474,6 +474,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			if (awtContext != null)
 			{
 				GpuMemoryDiagnostics.checkpoint("before-context-destroy");
+				GpuResourceAudit.checkpoint("before-context-destroy", true);
 				awtContext.destroy();
 				GpuMemoryDiagnostics.contextDestroyed();
 				awtContext = null;
@@ -704,10 +705,12 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 		// position attribute
 		glVertexAttribPointer(0, 3, GL_FLOAT, false, 5 * Float.BYTES, 0);
+		GpuResourceAudit.attribute(0, vboUiHandle, "interface-position");
 		glEnableVertexAttribArray(0);
 
 		// texture coord attribute
 		glVertexAttribPointer(1, 2, GL_FLOAT, false, 5 * Float.BYTES, 3 * Float.BYTES);
+		GpuResourceAudit.attribute(1, vboUiHandle, "interface-texture");
 		glEnableVertexAttribArray(1);
 
 		// unbind VAO/VBO
@@ -717,10 +720,12 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 	private void shutdownVao()
 	{
+		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
 		glDeleteBuffers(vboUiHandle);
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
 		vboUiHandle = 0;
 
+		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao-free");
 		glDeleteVertexArrays(vaoUiHandle);
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao-free");
 		vaoUiHandle = 0;
@@ -2298,6 +2303,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		}
 
 		checkGLErrors();
+		GpuResourceAudit.checkpoint("scene-swap-complete", false);
 	}
 
 	private void swapSub(Scene scene)
@@ -2323,6 +2329,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			}
 		}
 		log.debug("WorldView ready: {}", scene.getWorldViewId());
+		GpuResourceAudit.checkpoint("sub-scene-swap-complete", false);
 	}
 
 	private int getScaledValue(final double scale, final int value)
@@ -2360,6 +2367,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			{
 				return;
 			}
+			GpuResourceAudit.glError(err);
 
 			String errStr;
 			switch (err)

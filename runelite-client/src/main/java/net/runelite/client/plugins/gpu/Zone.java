@@ -63,6 +63,7 @@ class Zone
 
 	int sizeO, sizeA;
 	VBO vboO, vboA;
+	final long diagnosticOwner = GpuMemoryDiagnostics.owner();
 
 	boolean initialized; // whether the zone vao and vbos are ready
 	boolean cull; // whether the zone is queued for deletion
@@ -88,6 +89,8 @@ class Zone
 			GpuMemoryDiagnostics.adopt(GpuMemoryDiagnostics.Kind.BUFFER, o.bufId, "zone-opaque", o.diagnosticOwner);
 			glVao = glGenVertexArrays();
 			GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, "zone-vao", o.diagnosticOwner);
+			GpuResourceAudit.adopt(GpuMemoryDiagnostics.Kind.BUFFER, o.bufId, diagnosticOwner);
+			GpuResourceAudit.adopt(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, diagnosticOwner);
 			setupVao(glVao, o.bufId);
 		}
 
@@ -97,6 +100,8 @@ class Zone
 			GpuMemoryDiagnostics.adopt(GpuMemoryDiagnostics.Kind.BUFFER, a.bufId, "zone-alpha", a.diagnosticOwner);
 			glVaoA = glGenVertexArrays();
 			GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, "zone-alpha-vao", a.diagnosticOwner);
+			GpuResourceAudit.adopt(GpuMemoryDiagnostics.Kind.BUFFER, a.bufId, diagnosticOwner);
+			GpuResourceAudit.adopt(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, diagnosticOwner);
 			setupVao(glVaoA, a.bufId);
 		}
 	}
@@ -117,6 +122,7 @@ class Zone
 
 		if (glVao != 0)
 		{
+			GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, "zone-free");
 			glDeleteVertexArrays(glVao);
 			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, "zone-free");
 			glVao = 0;
@@ -124,6 +130,7 @@ class Zone
 
 		if (glVaoA != 0)
 		{
+			GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, "zone-alpha-free");
 			glDeleteVertexArrays(glVaoA);
 			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, "zone-alpha-free");
 			glVaoA = 0;
@@ -132,6 +139,7 @@ class Zone
 		// don't add permanent alphamodels to the cache as permanent alphamodels are always allocated
 		// to avoid having to synchronize the cache
 		alphaModels.clear();
+		GpuResourceAudit.ownerReleased(diagnosticOwner, "zone-free");
 	}
 
 	void unmap()
@@ -163,12 +171,15 @@ class Zone
 
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 4, GL_SHORT, false, VERT_SIZE, 0);
+		GpuResourceAudit.attribute(0, buffer, "zone-position");
 
 		glEnableVertexAttribArray(1);
 		glVertexAttribIPointer(1, 1, GL_INT, VERT_SIZE, 8);
+		GpuResourceAudit.attribute(1, buffer, "zone-color");
 
 		glEnableVertexAttribArray(2);
 		glVertexAttribIPointer(2, 4, GL_SHORT, VERT_SIZE, 12);
+		GpuResourceAudit.attribute(2, buffer, "zone-texture");
 
 		glBindVertexArray(0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -709,6 +720,7 @@ class Zone
 			glUniform3i(uniBase, lastzx << 10, 0, lastzz << 10);
 			glBindVertexArray(lastVao);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementBufferId);
+			GpuResourceAudit.element(lastVao, elementBufferId);
 			long diagnosticStart = GpuMemoryDiagnostics.startCall();
 			{
 				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.ALPHA_STORE, elementBufferId, (long) alphaElements.remaining() * Integer.BYTES);
@@ -741,6 +753,7 @@ class Zone
 			}
 			glDepthMask(true);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+			GpuResourceAudit.element(lastVao, 0);
 			alphaElements.clear();
 		}
 		else if (lastDrawMode == STATIC_UNSORTED)

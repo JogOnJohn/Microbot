@@ -72,6 +72,7 @@ class VBO
 
 	void destroy()
 	{
+		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
 		if (mapped)
 		{
 			glBindBuffer(GL_ARRAY_BUFFER, bufId);
