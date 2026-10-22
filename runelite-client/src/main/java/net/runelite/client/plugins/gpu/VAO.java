@@ -78,11 +78,11 @@ class VAO
 
 	void destroy()
 	{
-		vbo.destroy();
 		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao-free");
 		glDeleteVertexArrays(vao);
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao-free");
 		vao = 0;
+		vbo.destroy();
 		GpuResourceAudit.ownerReleased(vbo.diagnosticOwner, "dynamic-vao-free");
 	}
 

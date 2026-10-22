@@ -96,6 +96,28 @@ helper). These limits do not cap renderer resources or process memory.
 This is not a global Java heap reachability scan or validation of GPU completion.
 No changes to buffer lifetimes are justified merely by balanced counters.
 
+## VAO-first teardown trial (2026-10-22)
+
+Baseline: `0c358d5ba8`. Zone, dynamic VAO and UI teardown now delete their
+vertex arrays before their associated buffers. This releases container references
+before requesting buffer deletion; the previous order was legal OpenGL, so this
+is a driver-retention workaround candidate, not a confirmed specification fix.
+Mapping/unmapping, context ownership, storage sizes and synchronization are unchanged.
+
+The native/JFR correlation identified retained committed pages associated with
+scene VBO allocation after recorded buffer and VAO deletion. Native arena reuse
+means this is not proof that the original GL payload remains allocated. Preserve
+the ownership audit and native/process measurements for the trial. Compare memory
+growth across repeated scene loads; short-term drops alone do not prove success.
+The ledger test exercises reference release, not real driver deallocation.
+
+Rollback: revert the isolated VAO-first commit, or run the preserved baseline JAR
+`microbot-2.6.36-runtime-ownership-0c358d5ba8.jar` after closing the trial client.
+VMware `Snapshot 1` (2026-10-22 13:25 AEDT) includes saved-state and memory files.
+Restoring it also restores guest disk/memory state, but not host source or
+server-side game progress. Do not restore while intending to preserve newer
+guest logs without first exporting those logs.
+
 ## Validation and removal
 
 Pure ledger tests cover deletion ordering, multiple VAO references, current-VAO

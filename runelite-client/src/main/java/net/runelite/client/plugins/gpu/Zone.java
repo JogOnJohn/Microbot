@@ -108,18 +108,7 @@ class Zone
 
 	void free()
 	{
-		if (vboO != null)
-		{
-			vboO.destroy();
-			vboO = null;
-		}
-
-		if (vboA != null)
-		{
-			vboA.destroy();
-			vboA = null;
-		}
-
+		// Release container references before deleting their buffer storage.
 		if (glVao != 0)
 		{
 			GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVao, "zone-free");
@@ -134,6 +123,18 @@ class Zone
 			glDeleteVertexArrays(glVaoA);
 			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, glVaoA, "zone-alpha-free");
 			glVaoA = 0;
+		}
+
+		if (vboO != null)
+		{
+			vboO.destroy();
+			vboO = null;
+		}
+
+		if (vboA != null)
+		{
+			vboA.destroy();
+			vboA = null;
 		}
 
 		// don't add permanent alphamodels to the cache as permanent alphamodels are always allocated

@@ -720,15 +720,15 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 	private void shutdownVao()
 	{
-		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
-		glDeleteBuffers(vboUiHandle);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
-		vboUiHandle = 0;
-
 		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao-free");
 		glDeleteVertexArrays(vaoUiHandle);
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao-free");
 		vaoUiHandle = 0;
+
+		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
+		glDeleteBuffers(vboUiHandle);
+		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
+		vboUiHandle = 0;
 	}
 
 	private void initBuffers()

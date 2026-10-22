@@ -8,6 +8,27 @@ public class GpuResourceAuditTest
 {
     private GpuResourceAudit.Ledger ledger() { return new GpuResourceAudit.Ledger(32, 4); }
 
+    @Test public void vaoFirstDeletionReleasesReferencesWithoutPendingBuffers()
+    {
+        var l = ledger();
+        l.create(BUFFER, 1, 10, 7, "buffer");
+        l.create(VERTEX_ARRAY, 2, 10, 7, "opaque");
+        l.create(VERTEX_ARRAY, 3, 10, 7, "alpha");
+        l.reference(2, 0, 1); l.reference(2, 1, 1);
+        l.reference(3, 0, 1);
+        var buffer = l.get(BUFFER, 1);
+        l.delete(VERTEX_ARRAY, 2);
+        assertEquals(1, l.references(buffer));
+        l.delete(VERTEX_ARRAY, 3);
+        assertEquals(0, l.references(buffer));
+        assertTrue(l.pending.isEmpty());
+        l.delete(BUFFER, 1);
+        assertTrue(l.pending.isEmpty());
+        assertEquals(0, l.resolvedReferences);
+        assertEquals(0, l.owned(7));
+        assertEquals(0, l.violations);
+    }
+
     @Test public void bufferDeletionIsPendingUntilAllVaoReferencesAreReleased()
     {
         var l = ledger();
