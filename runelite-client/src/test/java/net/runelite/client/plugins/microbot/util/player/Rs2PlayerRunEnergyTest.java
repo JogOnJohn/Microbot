@@ -39,6 +39,7 @@ public class Rs2PlayerRunEnergyTest {
         replace("client", client);
         replace("clientThread", clientThread);
         replace("mouse", mouse);
+        replace("enableAutoRunOn", true);
         oldThreshold = Microbot.runEnergyThreshold;
         Microbot.runEnergyThreshold = 1000;
         Field attempted = Rs2Player.class.getDeclaredField("runToggleAttempted");
@@ -77,6 +78,23 @@ public class Rs2PlayerRunEnergyTest {
             field.set(null, entry.getValue());
         }
         Microbot.runEnergyThreshold = oldThreshold;
+    }
+
+    @Test
+    public void autoRunOptionOffBlocksEnablingWithoutReadingClient() {
+        Microbot.enableAutoRunOn = false;
+        assertFalse(Rs2Player.toggleRunEnergy(true));
+        verifyNoInteractions(client, clientThread, mouse, orb);
+    }
+
+    @Test
+    public void autoRunOptionOffStillAllowsDisabling() {
+        Microbot.enableAutoRunOn = false;
+        when(client.getVarpValue(173)).thenReturn(1);
+        doAnswer(i -> { when(client.getVarpValue(173)).thenReturn(0); return mouse; })
+                .when(mouse).click(any(Point.class));
+        assertTrue(Rs2Player.toggleRunEnergy(false));
+        verify(mouse).click(new Point(560, 120));
     }
 
     @Test
