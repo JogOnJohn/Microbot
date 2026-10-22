@@ -39,7 +39,8 @@ import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.IntFunction;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -98,7 +99,7 @@ import org.lwjgl.system.Configuration;
 	loadInSafeMode = false
 )
 @Slf4j
-public class GpuPlugin extends Plugin implements DrawCallbacks
+public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.client.plugins.PluginStopBarrier
 {
 	static final int MAX_DISTANCE = 184;
 	static final int MAX_FOG_DEPTH = 100;
@@ -248,6 +249,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 
 	private SceneContext root;
 	private SceneContext[] subs;
+	private StaticVboPool staticVboPool;
+	private final SceneUploadLifecycle sceneUploads = new SceneUploadLifecycle();
+	private volatile boolean shutdownPending;
+	private volatile CompletableFuture<Void> shutdownComplete = CompletableFuture.completedFuture(null);
 	private Zone[][] nextZones;
 	private Map<Integer, Integer> nextRoofChanges;
 
@@ -280,21 +285,31 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	@Override
 	protected void startUp()
 	{
-		root = new SceneContext(NUM_ZONES, NUM_ZONES);
-		subs = new SceneContext[MAX_WORLDVIEWS];
-		int numThreads = config.numThreads();
-		rts = new RenderThread[numThreads + 1];
-		for (int i = 0; i < rts.length; ++i)
-		{
-			var rt = rts[i] = new RenderThread();
-			rt.modelUploader = new ModelUploader();
-		}
-		clientUploader = new SceneUploader(renderCallbackManager);
-		mapUploader = new SceneUploader(renderCallbackManager);
+		long generation = sceneUploads.requestStart();
 		clientThread.invoke(() ->
 		{
+			if (!sceneUploads.currentStart(generation))
+			{
+				return true;
+			}
+			if (shutdownPending)
+			{
+				return false;
+			}
 			try
 			{
+				sceneUploads.reset();
+				root = new SceneContext(NUM_ZONES, NUM_ZONES);
+				subs = new SceneContext[MAX_WORLDVIEWS];
+				int numThreads = config.numThreads();
+				rts = new RenderThread[numThreads + 1];
+				for (int i = 0; i < rts.length; ++i)
+				{
+					var rt = rts[i] = new RenderThread();
+					rt.modelUploader = new ModelUploader();
+				}
+				clientUploader = new SceneUploader(renderCallbackManager);
+				mapUploader = new SceneUploader(renderCallbackManager);
 				fboScene = -1;
 				lastAnisotropicFilteringLevel = -1;
 
@@ -333,6 +348,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				}
 
 				lwjglInitted = true;
+				if (Boolean.getBoolean(StaticVboPool.PROPERTY))
+				{
+					staticVboPool = StaticVboPool.create(glCapabilities);
+				}
 
 				checkGLErrors();
 				if (log.isDebugEnabled() && glCapabilities.glDebugMessageControl != 0)
@@ -445,52 +464,136 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	@Override
 	protected void shutDown()
 	{
+		CompletableFuture<Void> completion;
+		synchronized (sceneUploads)
+		{
+			if (!shutdownPending)
+			{
+				shutdownPending = true;
+				shutdownComplete = new CompletableFuture<>();
+			}
+			sceneUploads.close();
+			completion = shutdownComplete;
+		}
 		GpuMemoryDiagnostics.checkpoint("shutdown-requested");
 		clientThread.invoke(() ->
 		{
-			GpuMemoryDiagnostics.checkpoint("shutdown-client-thread-entered");
-			client.setGpuFlags(0);
-			client.setDrawCallbacks(null);
-			client.setUnlockedFps(false);
-			client.setExpandedMapLoading(0);
-
-			if (lwjglInitted)
+			try
 			{
-				if (textureArrayId != -1)
+				boolean done = finishShutdown();
+				if (done)
 				{
-					textureManager.freeTextureArray(textureArrayId);
-					textureArrayId = -1;
+					completion.complete(null);
 				}
-
-				root.free();
-
-				shutdownInterfaceTexture();
-				shutdownProgram();
-				shutdownVao();
-				shutdownBuffers();
-				shutdownFbo();
+				return done;
 			}
-
-			if (awtContext != null)
+			catch (RuntimeException | Error error)
 			{
-				GpuMemoryDiagnostics.checkpoint("before-context-destroy");
-				GpuResourceAudit.checkpoint("before-context-destroy", true);
-				awtContext.destroy();
-				GpuMemoryDiagnostics.contextDestroyed();
-				awtContext = null;
+				completion.completeExceptionally(error);
+				throw error;
 			}
-
-			if (debugCallback != null)
-			{
-				debugCallback.free();
-				debugCallback = null;
-			}
-
-			glCapabilities = null;
-
-			// force main buffer provider rebuild to turn off alpha channel
-			client.resizeCanvas();
 		});
+		// PluginManager runs on the EDT and may start a conflicting renderer next.
+		if (!clientThread.isClientThread())
+		{
+			SceneUploadLifecycle.awaitRendererStop(completion);
+		}
+	}
+
+	@Override
+	public void awaitStopCompletion()
+	{
+		CompletableFuture<Void> completion = shutdownComplete;
+		if (clientThread.isClientThread() && !completion.isDone())
+		{
+			throw new IllegalStateException("GPU teardown is still pending on the client thread");
+		}
+		SceneUploadLifecycle.awaitRendererStop(completion);
+	}
+
+	private boolean finishShutdown()
+	{
+		if (!shutdownPending)
+		{
+			return true;
+		}
+		if (glCapabilities != null && GL.getCapabilities() != glCapabilities)
+		{
+			throw new IllegalStateException("GPU teardown attempted in another GL context");
+		}
+		client.setGpuFlags(0);
+		client.setDrawCallbacks(null);
+		client.setUnlockedFps(false);
+		client.setExpandedMapLoading(0);
+		if (!sceneUploads.drained())
+		{
+			return false;
+		}
+		GpuMemoryDiagnostics.checkpoint("shutdown-client-thread-entered");
+
+		if (lwjglInitted)
+		{
+			if (textureArrayId != -1)
+			{
+				textureManager.freeTextureArray(textureArrayId);
+				textureArrayId = -1;
+			}
+
+			// Drain cached stores first; subsequent zone releases then delete directly.
+			if (staticVboPool != null)
+			{
+				staticVboPool.close();
+			}
+			root.free();
+			for (SceneContext sub : subs)
+			{
+				if (sub != null)
+				{
+					sub.free();
+				}
+			}
+			if (nextZones != null)
+			{
+				for (Zone[] row : nextZones)
+				{
+					for (Zone zone : row)
+					{
+						zone.free();
+					}
+				}
+				nextZones = null;
+			}
+			staticVboPool = null;
+
+			shutdownInterfaceTexture();
+			shutdownProgram();
+			shutdownVao();
+			shutdownBuffers();
+			shutdownFbo();
+		}
+
+		if (awtContext != null)
+		{
+			GpuMemoryDiagnostics.checkpoint("before-context-destroy");
+			GpuResourceAudit.checkpoint("before-context-destroy", true);
+			awtContext.destroy();
+			GpuMemoryDiagnostics.contextDestroyed();
+			awtContext = null;
+		}
+
+		if (debugCallback != null)
+		{
+			debugCallback.free();
+			debugCallback = null;
+		}
+
+		glCapabilities = null;
+		lwjglInitted = false;
+		shutdownPending = false;
+
+		// force main buffer provider rebuild to turn off alpha channel
+		client.resizeCanvas();
+		return true;
 	}
 
 	@Provides
@@ -1497,24 +1600,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				Scene scene = wv.getScene();
 				clientUploader.zoneSize(scene, zone, x, z);
 
-				VBO o = null, a = null;
-				int sz = zone.sizeO * Zone.VERT_SIZE * 3;
-				if (sz > 0)
-				{
-					o = new VBO(sz);
-					o.init(GL_STATIC_DRAW);
-					o.map();
-				}
-
-				sz = zone.sizeA * Zone.VERT_SIZE * 3;
-				if (sz > 0)
-				{
-					a = new VBO(sz);
-					a.init(GL_STATIC_DRAW);
-					a.map();
-				}
-
-				zone.init(o, a);
+				allocateZone(zone);
 
 				clientUploader.uploadZone(scene, zone, x, z);
 
@@ -1635,6 +1721,10 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	public void draw(int overlayColor)
 	{
 		GpuMemoryDiagnostics.frame();
+		if (staticVboPool != null)
+		{
+			staticVboPool.reportIfDue();
+		}
 		final GameState gameState = client.getGameState();
 		if (gameState == GameState.STARTING)
 		{
@@ -1854,6 +1944,22 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 	@Override
 	public void loadScene(WorldView worldView, Scene scene)
 	{
+		if (!sceneUploads.begin())
+		{
+			return;
+		}
+		try
+		{
+			loadSceneStorage(worldView, scene);
+		}
+		finally
+		{
+			sceneUploads.end();
+		}
+	}
+
+	private void loadSceneStorage(WorldView worldView, Scene scene)
+	{
 		GpuMemoryDiagnostics.scene("scene-load", worldView.getId());
 		if (scene.getWorldViewId() != WorldView.TOPLEVEL)
 		{
@@ -1866,8 +1972,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			log.debug("Double zone load!");
 			// The previous scene load just gets dropped, this is uncommon and requires a back to back map build packet
 			// while having the first load take more than a full server cycle to complete
-			CountDownLatch latch = new CountDownLatch(1);
-			clientThread.invoke(() ->
+			runSceneGl(() ->
 			{
 				for (int x = 0; x < NUM_ZONES; ++x)
 				{
@@ -1884,16 +1989,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 						}
 					}
 				}
-				latch.countDown();
 			});
-			try
-			{
-				latch.await();
-			}
-			catch (InterruptedException e)
-			{
-				throw new RuntimeException(e);
-			}
 			nextZones = null;
 			nextRoofChanges = null;
 		}
@@ -2061,70 +2157,108 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 			lena, (lena * Zone.VERT_SIZE * 3) / 1024);
 
 		// allocate buffers for zones which require upload
-		CountDownLatch latch = new CountDownLatch(1);
-		clientThread.invoke(() ->
+		try
 		{
+			runSceneGl(() ->
+			{
+				for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE >> 3; ++x)
+				{
+					for (int z = 0; z < Constants.EXTENDED_SCENE_SIZE >> 3; ++z)
+					{
+						Zone zone = newZones[x][z];
+
+						if (zone.initialized)
+						{
+							continue;
+						}
+
+						allocateZone(zone);
+					}
+				}
+
+			});
+
+			// upload zones
+			sw = Stopwatch.createStarted();
 			for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE >> 3; ++x)
 			{
 				for (int z = 0; z < Constants.EXTENDED_SCENE_SIZE >> 3; ++z)
 				{
 					Zone zone = newZones[x][z];
 
-					if (zone.initialized)
+					if (!zone.initialized)
 					{
-						continue;
+						mapUploader.uploadZone(scene, zone, x, z);
 					}
-
-					VBO o = null, a = null;
-					int sz = zone.sizeO * Zone.VERT_SIZE * 3;
-					if (sz > 0)
-					{
-						o = new VBO(sz);
-						o.init(GL_STATIC_DRAW);
-						o.map();
-					}
-
-					sz = zone.sizeA * Zone.VERT_SIZE * 3;
-					if (sz > 0)
-					{
-						a = new VBO(sz);
-						a.init(GL_STATIC_DRAW);
-						a.map();
-					}
-
-					zone.init(o, a);
 				}
 			}
+			log.debug("Scene upload time {}", sw);
 
-			latch.countDown();
-		});
-		try
-		{
-			latch.await();
+			nextZones = newZones;
+			nextRoofChanges = roofChanges;
 		}
-		catch (InterruptedException e)
+		catch (RuntimeException | Error error)
 		{
-			throw new RuntimeException(e);
+			runSceneGl(() -> freeUnpublishedZones(newZones));
+			throw error;
 		}
+	}
 
-		// upload zones
-		sw = Stopwatch.createStarted();
-		for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE >> 3; ++x)
+	static void freeUnpublishedZones(Zone[][] zones)
+	{
+		for (Zone[] row : zones)
 		{
-			for (int z = 0; z < Constants.EXTENDED_SCENE_SIZE >> 3; ++z)
+			for (Zone zone : row)
 			{
-				Zone zone = newZones[x][z];
-
 				if (!zone.initialized)
 				{
-					mapUploader.uploadZone(scene, zone, x, z);
+					zone.free();
 				}
 			}
 		}
-		log.debug("Scene upload time {}", sw);
+	}
 
-		nextZones = newZones;
-		nextRoofChanges = roofChanges;
+	private void allocateZone(Zone zone)
+	{
+		allocateZone(zone, size ->
+		{
+			VBO vbo = new VBO(size, staticVboPool);
+			try
+			{
+				vbo.init(GL_STATIC_DRAW);
+				vbo.map();
+				return vbo;
+			}
+			catch (RuntimeException | Error error)
+			{
+				vbo.destroy();
+				throw error;
+			}
+		});
+	}
+
+	static void allocateZone(Zone zone, IntFunction<VBO> factory)
+	{
+		VBO opaque = null, alpha = null;
+		try
+		{
+			if (zone.sizeO > 0)
+			{
+				opaque = factory.apply(zone.sizeO * Zone.VERT_SIZE * 3);
+			}
+			if (zone.sizeA > 0)
+			{
+				alpha = factory.apply(zone.sizeA * Zone.VERT_SIZE * 3);
+			}
+			zone.init(opaque, alpha);
+		}
+		catch (RuntimeException | Error error)
+		{
+			zone.free();
+			if (opaque != null) opaque.destroy();
+			if (alpha != null) alpha.destroy();
+			throw error;
+		}
 	}
 
 	private static boolean canReuse(Zone[][] zones, int zx, int zz)
@@ -2157,7 +2291,48 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		return true;
 	}
 
+	private void runSceneGl(Runnable action)
+	{
+		if (clientThread.isClientThread())
+		{
+			action.run();
+		}
+		else
+		{
+			SceneUploadLifecycle.dispatchAndWait(clientThread::invoke, action);
+		}
+	}
+
 	private void loadSubScene(WorldView worldView, Scene scene)
+	{
+		if (!sceneUploads.begin())
+		{
+			return;
+		}
+		try
+		{
+			loadSubSceneStorage(worldView, scene);
+		}
+		catch (RuntimeException | Error error)
+		{
+			runSceneGl(() ->
+			{
+				SceneContext failed = subs[scene.getWorldViewId()];
+				if (failed != null)
+				{
+					failed.free();
+					subs[scene.getWorldViewId()] = null;
+				}
+			});
+			throw error;
+		}
+		finally
+		{
+			sceneUploads.end();
+		}
+	}
+
+	private void loadSubSceneStorage(WorldView worldView, Scene scene)
 	{
 		int worldViewId = scene.getWorldViewId();
 		assert worldViewId != -1;
@@ -2184,8 +2359,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 		}
 
 		// allocate buffers for zones which require upload
-		CountDownLatch latch = new CountDownLatch(1);
-		clientThread.invoke(() ->
+		runSceneGl(() ->
 		{
 			for (int x = 0; x < ctx.sizeX; ++x)
 			{
@@ -2193,37 +2367,11 @@ public class GpuPlugin extends Plugin implements DrawCallbacks
 				{
 					Zone zone = ctx.zones[x][z];
 
-					VBO o = null, a = null;
-					int sz = zone.sizeO * Zone.VERT_SIZE * 3;
-					if (sz > 0)
-					{
-						o = new VBO(sz);
-						o.init(GL_STATIC_DRAW);
-						o.map();
-					}
-
-					sz = zone.sizeA * Zone.VERT_SIZE * 3;
-					if (sz > 0)
-					{
-						a = new VBO(sz);
-						a.init(GL_STATIC_DRAW);
-						a.map();
-					}
-
-					zone.init(o, a);
+					allocateZone(zone);
 				}
 			}
 
-			latch.countDown();
 		});
-		try
-		{
-			latch.await();
-		}
-		catch (InterruptedException e)
-		{
-			throw new RuntimeException(e);
-		}
 
 		for (int x = 0; x < ctx.sizeX; ++x)
 		{

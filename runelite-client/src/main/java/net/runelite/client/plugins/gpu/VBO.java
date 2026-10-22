@@ -32,6 +32,8 @@ class VBO
 {
 	final long diagnosticOwner = GpuMemoryDiagnostics.owner();
 	final int size;
+	private final StaticVboPool pool;
+	private StaticVboPool.Storage storage;
 	private int usage;
 	int bufId;
 	private ByteBuffer buffer;
@@ -41,19 +43,39 @@ class VBO
 
 	VBO(int size)
 	{
+		this(size, null);
+	}
+
+	VBO(int size, StaticVboPool pool)
+	{
 		this.size = size;
+		this.pool = pool;
 	}
 
 	void init(int usage)
 	{
 		this.usage = usage;
-		bufId = glGenBuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, bufId,
-			usage == GL_STATIC_DRAW ? "scene-vbo" : "dynamic-vbo", diagnosticOwner);
-
-		glBindBuffer(GL_ARRAY_BUFFER, bufId);
-		long diagnosticStart = GpuMemoryDiagnostics.startCall();
+		if (pool != null && usage == GL_STATIC_DRAW)
 		{
+			storage = pool.acquire(size);
+			bufId = storage.id;
+			GpuMemoryDiagnostics.adopt(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "scene-vbo", diagnosticOwner);
+		}
+		else
+		{
+			bufId = createBuffer(size, usage, diagnosticOwner);
+		}
+	}
+
+	static int createBuffer(int size, int usage, long diagnosticOwner)
+	{
+		int bufId = glGenBuffers();
+		try
+		{
+			GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, bufId,
+				usage == GL_STATIC_DRAW ? "scene-vbo" : "dynamic-vbo", diagnosticOwner);
+			glBindBuffer(GL_ARRAY_BUFFER, bufId);
+			long diagnosticStart = GpuMemoryDiagnostics.startCall();
 			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_STORE, bufId, size);
 			boolean returned = false;
 			try
@@ -65,14 +87,26 @@ class VBO
 			{
 				GpuCallJournal.end(gpuCall, returned);
 			}
+			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, bufId, size, "vbo-init", diagnosticStart);
+			return bufId;
 		}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, bufId, size, "vbo-init", diagnosticStart);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		catch (RuntimeException | Error error)
+		{
+			deleteBuffer(bufId, size);
+			throw error;
+		}
+		finally
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
 	}
 
 	void destroy()
 	{
-		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
+		if (bufId == 0)
+		{
+			return;
+		}
 		if (mapped)
 		{
 			glBindBuffer(GL_ARRAY_BUFFER, bufId);
@@ -93,6 +127,25 @@ class VBO
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			mapped = false;
 		}
+		// Mapped Java views must not survive a storage handoff to another zone.
+		vb = null;
+		buffer = null;
+		len = 0;
+		if (storage != null)
+		{
+			pool.release(storage);
+			storage = null;
+		}
+		else
+		{
+			deleteBuffer(bufId, size);
+		}
+		bufId = 0;
+	}
+
+	static void deleteBuffer(int bufId, int size)
+	{
+		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
 		{
 			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_DELETE, bufId, size);
 			boolean returned = false;
@@ -107,7 +160,6 @@ class VBO
 			}
 		}
 		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
-		bufId = 0;
 	}
 
 	void map()
