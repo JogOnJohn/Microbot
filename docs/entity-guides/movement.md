@@ -643,3 +643,18 @@ three-switch cap, cancellation, scene readiness and landing checks.
 loading/movement and genuinely obstructed loaded facilities. World330HostedHouse-
 AccessTest covers exact normalized session exclusions that do not expire with
 the ten-minute transient cooldown. Permanent trap exclusions remain separate.
+
+## 35. Batch bounded read-only continuation probes before the lead window closes
+
+JFR showed repeated roughly 20 ms client-dispatch parks for door definition,
+impostor and route-candidate checks inside each continuation attempt. A six-to-eight
+tile lead can expire while those reads are queued separately. Dispatch bounded
+door inspection, raw candidate selection and pre-click door clamping as coherent
+read-only operations. Keep mouse dispatch, handler execution and all waits outside
+the client callback. Do not remove collision checks or retain snapshots across
+clicks/game ticks to make movement appear faster. An unavailable read must refuse
+the click. Keep stopped-player door recovery separate from moving continuation.
+
+Measure route_continuation elapsedMs, leadBefore and movingAfter along with
+the normal waypoint heartbeat. movingAfter is a post-dispatch pose sample, not
+proof of uninterrupted movement or a substitute for matched route measurements.

@@ -17,6 +17,47 @@ import static org.mockito.ArgumentMatchers.*;
 public class Rs2WalkerSceneThreadTest
 {
     @Test
+    public void unresolvedDoorProbeFailsClosedWhenClientReadIsUnavailable() throws Exception
+    {
+        Field threadField = Microbot.class.getDeclaredField("clientThread");
+        threadField.setAccessible(true);
+        Object oldThread = threadField.get(null);
+        try
+        {
+            ClientThread dispatcher = mock(ClientThread.class);
+            when(dispatcher.runOnClientThreadOptional(any())).thenReturn(Optional.empty());
+            threadField.set(null, dispatcher);
+            Method method = Rs2Walker.class.getDeclaredMethod("hasUnresolvedDoorLikeObjectNearRawPath",
+                    java.util.List.class, int.class, WorldPoint.class, int.class, int.class, int.class);
+            method.setAccessible(true);
+            assertEquals(true, method.invoke(null, null, 0, new WorldPoint(3200, 3200, 0), 2, 14, 10));
+            verify(dispatcher).runOnClientThreadOptional(any());
+        }
+        finally { threadField.set(null, oldThread); }
+    }
+
+    @Test
+    public void batchedCandidateSelectionFailsClosedWhenClientReadIsUnavailable() throws Exception
+    {
+        Field threadField = Microbot.class.getDeclaredField("clientThread");
+        threadField.setAccessible(true);
+        Object oldThread = threadField.get(null);
+        try
+        {
+            ClientThread dispatcher = mock(ClientThread.class);
+            when(dispatcher.runOnClientThreadOptional(any())).thenReturn(Optional.empty());
+            threadField.set(null, dispatcher);
+            Method method = Rs2Walker.class.getDeclaredMethod("findFurthestRawPathPointMatchingGated",
+                    java.util.List.class, WorldPoint.class, int.class, int.class, java.util.function.Predicate.class);
+            method.setAccessible(true);
+            assertNull(method.invoke(null, null, new WorldPoint(3200, 3200, 0), 24, 0,
+                    (java.util.function.Predicate<WorldPoint>) point -> true));
+            verify(dispatcher).runOnClientThreadOptional(any());
+        }
+        finally { threadField.set(null, oldThread); }
+    }
+
+    @Test
     public void sceneWorldViewReadRunsInsideClientThreadDispatch() throws Exception
     {
         Field clientField = Microbot.class.getDeclaredField("client");

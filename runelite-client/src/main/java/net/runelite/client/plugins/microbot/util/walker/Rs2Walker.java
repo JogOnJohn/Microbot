@@ -3958,6 +3958,8 @@ public class Rs2Walker {
             final WorldPoint[] guarded = {target};
             java.util.concurrent.atomic.AtomicReference<Map<WorldPoint, Integer>> reachable =
                     new java.util.concurrent.atomic.AtomicReference<>();
+            boolean probed = Microbot.getClientThread().runOnClientThreadOptional(new java.util.concurrent.Callable<Boolean>() {
+                public Boolean call() {
             withScopedDoorProbeSnapshot(playerLoc, maxEuclidean + 2, new BooleanSupplier() {
                 public boolean getAsBoolean() {
                     guarded[0] = WalkerPathGeometry.clampBeforeClosedDoor(rawPath, playerLoc, requested,
@@ -3981,6 +3983,10 @@ public class Rs2Walker {
                     return false;
                 }
             });
+                return true;
+                }
+            }).orElse(false);
+            if (!probed) return null;
             if (!requested.equals(guarded[0])) {
                 WebWalkLog.spInfo("closed_door_approach | requested={} approach={} player={}",
                         compactWorldPoint(requested), compactWorldPoint(guarded[0]), compactWorldPoint(playerLoc));
@@ -4128,6 +4134,17 @@ public class Rs2Walker {
                                                                     int maxEuclidean,
                                                                     int rawAnchorIndex,
                                                                     Predicate<WorldPoint> isCandidate) {
+        // Bounded read-only selection: avoid one dispatcher round trip per candidate tile.
+        return Microbot.getClientThread().runOnClientThreadOptional(new java.util.concurrent.Callable<WorldPoint>() {
+            public WorldPoint call() {
+                return findFurthestRawPathPointMatchingGatedSnapshot(rawPath, playerLoc, maxEuclidean,
+                        rawAnchorIndex, isCandidate);
+            }
+        }).orElse(null);
+    }
+
+    private static WorldPoint findFurthestRawPathPointMatchingGatedSnapshot(List<WorldPoint> rawPath,
+            WorldPoint playerLoc, int maxEuclidean, int rawAnchorIndex, Predicate<WorldPoint> isCandidate) {
         Map<WorldPoint, Integer> reachable = getClosestIndexReachableTiles(playerLoc);
         WorldPoint selected = WalkerPathGeometry.findFurthestRawPathPointMatching(rawPath, playerLoc, maxEuclidean,
                 rawAnchorIndex, isCandidate, ROUTE_PROGRESS_FORWARD_SEARCH_TILES,
@@ -4370,6 +4387,12 @@ public class Rs2Walker {
                                                           List<WorldPoint> path,
                                                           WorldPoint target,
                                                           int configuredDistance) {
+        long started = System.nanoTime();
+        WorldPoint previous = routeState.interimTargetWp;
+        WorldPoint before = Rs2Player.getWorldLocation();
+        boolean issued = false;
+        String reason = "no-target";
+        try {
         WorldPoint playerLoc = Rs2Player.getWorldLocation();
         if (playerLoc == null || path == null || path.isEmpty()) {
             return false;
@@ -4382,6 +4405,7 @@ public class Rs2Walker {
                     UNREACHABLE_DOOR_RECOVERY_BACKTRACK_EDGES,
                     UNREACHABLE_DOOR_RECOVERY_LOOKAHEAD_EDGES,
                     HANDLER_RANGE)) {
+                reason = "door";
                 return false;
             }
         }
@@ -4389,10 +4413,20 @@ public class Rs2Walker {
         if (hasUpcomingNearbyTransportStep(path, pathIdx, playerLoc,
                 POST_TRANSPORT_RAW_SCAN_TRANSPORT_LOOKAHEAD_EDGES,
                 POST_TRANSPORT_RAW_SCAN_TRANSPORT_MAX_DIST)) {
+            reason = "transport";
             return false;
         }
-        return tryIssueRouteMovementClick(rawPath, path, target, configuredDistance, "interim close route click",
+        issued = tryIssueRouteMovementClick(rawPath, path, target, configuredDistance, "interim close route click",
                 NORMAL_MINIMAP_REACH_EUCLIDEAN, false);
+        reason = issued ? "dispatched" : "selection-or-dispatch";
+        return issued;
+        } finally {
+            long elapsed = (System.nanoTime() - started) / 1_000_000;
+            if (issued || elapsed >= 250) WebWalkLog.spInfo(
+                    "route_continuation | result={} elapsedMs={} leadBefore={} movingAfter={} previous={} next={}",
+                    reason, elapsed, distanceToInterimOrMax(previous, before), Rs2Player.isMoving(),
+                    compactWorldPoint(previous), compactWorldPoint(routeState.interimTargetWp));
+        }
     }
 
     private static boolean tryIssueRouteMovementClick(List<WorldPoint> rawPath,
@@ -7992,6 +8026,17 @@ public class Rs2Walker {
                                                                   int backtrackEdges,
                                                                   int lookaheadEdges,
                                                                   int radiusTiles) {
+        // No interactions or waits: read all candidate definitions in one bounded scene read.
+        return Microbot.getClientThread().runOnClientThreadOptional(new java.util.concurrent.Callable<Boolean>() {
+            public Boolean call() {
+                return hasUnresolvedDoorLikeObjectNearRawPathSnapshot(rawPath, rawEdgeStart, playerLoc,
+                        backtrackEdges, lookaheadEdges, radiusTiles);
+            }
+        }).orElse(true);
+    }
+
+    private static boolean hasUnresolvedDoorLikeObjectNearRawPathSnapshot(List<WorldPoint> rawPath,
+            int rawEdgeStart, WorldPoint playerLoc, int backtrackEdges, int lookaheadEdges, int radiusTiles) {
         if (rawPath == null || rawPath.size() < 2 || playerLoc == null || rawEdgeStart < 0) {
             return false;
         }
@@ -7999,7 +8044,7 @@ public class Rs2Walker {
         if (rawScanWallSnapshot == null && rawScanGameObjectSnapshot == null) {
             return withScopedDoorProbeSnapshot(playerLoc, radiusTiles + 2, new BooleanSupplier() {
                 public boolean getAsBoolean() {
-                    return hasUnresolvedDoorLikeObjectNearRawPath(rawPath, rawEdgeStart, playerLoc,
+                    return hasUnresolvedDoorLikeObjectNearRawPathSnapshot(rawPath, rawEdgeStart, playerLoc,
                             backtrackEdges, lookaheadEdges, radiusTiles);
                 }
             });
