@@ -52,6 +52,7 @@ public enum World330HostedHouse implements PohTeleport {
     private static final int MAX_ADVERTISED_HOST_ATTEMPTS = 8;
     private static final Set<String> EXCLUDED_ADVERTISED_HOSTS = Set.of("v 3", "jaecob");
     private static final Map<String, Long> unsuitableHosts = new ConcurrentHashMap<>();
+    private static final Set<String> sessionUnsuitableHosts = ConcurrentHashMap.newKeySet();
     private static volatile String currentAdvertisedHost;
     private static final HostedHouseContext houseContext = new HostedHouseContext();
     public static final WorldPoint POH_INSTANCE_ANCHOR = new WorldPoint(1877, 7052, 1);
@@ -198,6 +199,21 @@ public enum World330HostedHouse implements PohTeleport {
         if (currentAdvertisedHost != null)
             excludeUnsuitableHost(currentAdvertisedHost, System.currentTimeMillis());
         invalidateHousePreparation();
+    }
+
+    public void excludeCurrentHouseForSession(String facility) {
+        if (!sceneReady() || !isInHostedHouse()) return;
+        houseContext.reject();
+        String host = currentAdvertisedHost;
+        excludeHostForSession(host);
+        log.warn("[W330POH] house_session_exclusion host={} recorded={} facility={} generation={}",
+                host, host != null && !Text.standardize(host).isEmpty(), facility, houseContext.generation());
+        invalidateHousePreparation();
+    }
+
+    static void excludeHostForSession(String host) {
+        if (host != null && !Text.standardize(host).isEmpty())
+            sessionUnsuitableHosts.add(Text.standardize(host));
     }
 
     public void blacklistUnreachableHouse(String facility) {
@@ -473,6 +489,7 @@ public enum World330HostedHouse implements PohTeleport {
         String blocked = Microbot.getConfigManager() == null ? null
                 : Microbot.getConfigManager().getConfiguration(ShortestPathPlugin.CONFIG_GROUP, "blockedWorld330Hosts");
         return EXCLUDED_ADVERTISED_HOSTS.contains(name) || blockedHosts(blocked).contains(name)
+                || sessionUnsuitableHosts.contains(name)
                 || (until != null && now < until);
     }
 

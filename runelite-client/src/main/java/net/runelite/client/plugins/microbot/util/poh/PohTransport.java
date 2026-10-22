@@ -45,6 +45,7 @@ public class PohTransport extends Transport {
         if (cancelled.getAsBoolean() || Thread.currentThread().isInterrupted()) return PohExecutionResult.CANCELLED;
         if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
         long recoveryDeadline = System.currentTimeMillis() + 60_000L;
+        boolean recovering = false;
         log.info("[W330POH] PohTransport execute teleport={} origin={} dest={}",
                 teleport.displayInfo(), getOrigin(), getDestination());
         for (int switches = 0; switches <= 3; switches++) {
@@ -71,8 +72,15 @@ public class PohTransport extends Transport {
             log.warn("[W330POH] facility_access teleport={} access={} generation={} at={}",
                     teleport.displayInfo(), access, World330HostedHouse.ADVERTISED_HOUSE.houseGeneration(),
                     Rs2Player.getWorldLocation());
+            World330HostedHouse.ADVERTISED_HOUSE.excludeCurrentHouseForSession(teleport.displayInfo());
             if (access == PohFacilityAccess.Access.UNREACHABLE)
                 World330HostedHouse.ADVERTISED_HOUSE.blacklistUnreachableHouse(teleport.displayInfo());
+            // Slow inspection/execution must not consume the separate exit/re-entry budget.
+            // Initialize once: successive unsuitable houses cannot keep renewing it.
+            if (!recovering) {
+                recoveryDeadline = System.currentTimeMillis() + 60_000L;
+                recovering = true;
+            }
             if (switches == 3 || System.currentTimeMillis() >= recoveryDeadline
                     || !World330HostedHouse.ADVERTISED_HOUSE.switchUnsuitableHouse(cancelled, recoveryDeadline)) {
                 if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
@@ -85,15 +93,17 @@ public class PohTransport extends Transport {
     }
 
     private PohFacilityAccess.Access confirmedFacilityAccess(BooleanSupplier cancelled, long deadline) {
+        long generation = World330HostedHouse.ADVERTISED_HOUSE.houseGeneration();
+        WorldPoint at = Rs2Player.getWorldLocation();
         PohFacilityAccess.Access access = PohFacilityAccess.inspect(teleport);
         if (access == PohFacilityAccess.Access.MISSING) {
             sleepUntil(() -> stopped(cancelled) || PohFacilityAccess.inspect(teleport) != PohFacilityAccess.Access.MISSING,
                     remaining(deadline, 3000));
             access = PohFacilityAccess.inspect(teleport);
+            if (generation != World330HostedHouse.ADVERTISED_HOUSE.houseGeneration()
+                    || !Objects.equals(at, Rs2Player.getWorldLocation())) return PohFacilityAccess.Access.PENDING;
         }
         if (access != PohFacilityAccess.Access.UNREACHABLE) return access;
-        long generation = World330HostedHouse.ADVERTISED_HOUSE.houseGeneration();
-        WorldPoint at = Rs2Player.getWorldLocation();
         sleepUntil(() -> stopped(cancelled) || PohFacilityAccess.inspect(teleport) != PohFacilityAccess.Access.UNREACHABLE,
                 remaining(deadline, 1200));
         if (generation != World330HostedHouse.ADVERTISED_HOUSE.houseGeneration()

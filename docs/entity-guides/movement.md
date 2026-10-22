@@ -622,3 +622,24 @@ collision means a closed door. Retain long clicks on unobstructed routes.
 **Defensive check:** `WalkerPathGeometryTest` covers distant entrances, wrong-side
 endpoint anchors, already-crossed doors, long open approaches, standing at the
 entrance and transport jumps.
+
+## 34. Recover from an absent house facility without scanning unrelated doors
+
+Once a logged-in, collision-ready, stationary house scene has no candidate for
+the selected facility, classify it as missing before inspecting door definitions.
+An unrelated closed door is not evidence that an absent mounted talisman exists.
+Confirm absence briefly and abandon that evidence if house generation or player
+position changes. Exclude the recorded host for this client session (not permanent
+configuration), then use bounded exit/re-entry recovery. Preserve the Leave House
+settings-widget and Outside teleport fallbacks for inaccessible exit portals.
+
+**Why this matters:** ifluffy's house had a nexus and jewellery box but no loaded
+Xeric's talisman. Unrelated door checks produced OBSTRUCTED after a 98-second
+inspection; the original 60-second budget was exhausted before any exit attempt.
+Start a separate recovery budget once, not once per replacement house. Keep the
+three-switch cap, cancellation, scene readiness and landing checks.
+
+**Defensive checks:** PohFacilityAccessTest covers absent facilities with doors,
+loading/movement and genuinely obstructed loaded facilities. World330HostedHouse-
+AccessTest covers exact normalized session exclusions that do not expire with
+the ten-minute transient cooldown. Permanent trap exclusions remain separate.

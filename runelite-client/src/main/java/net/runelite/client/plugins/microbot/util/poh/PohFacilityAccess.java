@@ -28,6 +28,10 @@ final class PohFacilityAccess {
         }).orElse(false);
         if (!collisionReady) return Access.PENDING;
         List<Rs2TileObjectModel> objects = Microbot.getRs2TileObjectCache().query().fromWorldView().withIds(ids).toList();
+        boolean moving = Rs2Player.isMoving() || Rs2Player.isAnimating();
+        // An unrelated door cannot obstruct a facility that is not in this scene.
+        // Avoid querying every door composition in a large house for an absent object.
+        if (objects.isEmpty()) return classify(true, 0, false, moving, false);
         boolean reachable = objects.stream().anyMatch(Rs2TileObjectModel::isReachable);
         // A normal closed door may explain disconnection. Never permanently label that a trap.
         boolean closedDoor = !reachable && Microbot.getRs2TileObjectCache().query()
@@ -37,7 +41,7 @@ final class PohFacilityAccess {
                             && Arrays.stream(composition.getActions()).anyMatch("Open"::equalsIgnoreCase);
                 });
         return classify(collisionReady, objects.size(), reachable,
-                Rs2Player.isMoving() || Rs2Player.isAnimating(), closedDoor);
+                moving, closedDoor);
     }
 
     static Access classify(boolean collisionReady, int candidates, boolean reachable,
@@ -45,8 +49,9 @@ final class PohFacilityAccess {
         if (!collisionReady) return Access.PENDING;
         if (reachable) return Access.AVAILABLE;
         if (moving) return Access.PENDING;
+        if (candidates == 0) return Access.MISSING;
         if (closedDoor) return Access.OBSTRUCTED;
-        return candidates == 0 ? Access.MISSING : Access.UNREACHABLE;
+        return Access.UNREACHABLE;
     }
 
     static int[] facilityIds(PohTeleport teleport) {

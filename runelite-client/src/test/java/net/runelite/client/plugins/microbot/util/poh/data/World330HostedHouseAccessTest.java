@@ -58,6 +58,16 @@ public class World330HostedHouseAccessTest {
     }
 
     @Test
+    public void sessionExclusionDoesNotExpireOrMatchOtherHosts() {
+        World330HostedHouse.excludeHostForSession(" <col=ffffff>Missing facility test host</col> ");
+        assertTrue(World330HostedHouse.isExcludedAdvertisedHost("missing facility test host", Long.MAX_VALUE));
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("missing facility test host 2", Long.MAX_VALUE));
+        World330HostedHouse.excludeHostForSession(null);
+        World330HostedHouse.excludeHostForSession(" ");
+        assertFalse(World330HostedHouse.isExcludedAdvertisedHost("", Long.MAX_VALUE));
+    }
+
+    @Test
     public void permanentlyExcludesTrollHostRegardlessOfWidgetFormatting() {
         assertTrue(World330HostedHouse.isExcludedAdvertisedHost("V 3"));
         assertTrue(World330HostedHouse.isExcludedAdvertisedHost("v 3"));

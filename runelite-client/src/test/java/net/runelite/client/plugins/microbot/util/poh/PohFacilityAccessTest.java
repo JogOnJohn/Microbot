@@ -7,6 +7,13 @@ import static org.junit.Assert.*;
 import static net.runelite.client.plugins.microbot.util.poh.PohFacilityAccess.Access.*;
 
 public class PohFacilityAccessTest {
+    @Test public void unrelatedClosedDoorCannotTurnAnAbsentFacilityIntoObstruction() {
+        assertEquals(MISSING, PohFacilityAccess.classify(true, 0, false, false, true));
+        assertEquals(PENDING, PohFacilityAccess.classify(false, 0, false, false, true));
+        assertEquals(PENDING, PohFacilityAccess.classify(true, 0, false, true, true));
+        assertEquals(OBSTRUCTED, PohFacilityAccess.classify(true, 1, false, false, true));
+    }
+
     @Test public void loadedButDisconnectedIsNotAMissingFacility() {
         assertEquals(UNREACHABLE, PohFacilityAccess.classify(true, 2, false, false, false));
         assertEquals(MISSING, PohFacilityAccess.classify(true, 0, false, false, false));
