@@ -218,8 +218,22 @@ public final class Rs2PlayerStateCache {
 		return value;
 	}
 
+	public boolean isValidVarpId(int varpId) {
+		if (varpId < 0) {
+			return false;
+		}
+		return clientThread.runOnClientThreadOptional(() -> isVarpIdInRange(client.getVarps(), varpId)).orElse(false);
+	}
+
+	static boolean isVarpIdInRange(int[] varpValues, int varpId) {
+		return varpValues != null && varpId >= 0 && varpId < varpValues.length;
+	}
+
 	private @Varp int updateVarpValue(@Varp int varpId) {
 		return clientThread.runOnClientThreadOptional(() -> {
+			if (!isVarpIdInRange(client.getVarps(), varpId)) {
+				return 0;
+			}
 			int value = client.getVarpValue(varpId);
 			// Zero is a legitimate value and must be cached too — see updateVarbitValue.
 			if (client.getGameState() == GameState.LOGGED_IN) {

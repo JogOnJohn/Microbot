@@ -43,6 +43,11 @@ public class VarpHandler extends AgentHandler {
 			return;
 		}
 
+		if (varpId < 0 || !Microbot.getRs2PlayerStateCache().isValidVarpId(varpId)) {
+			sendJson(exchange, 400, errorResponse("Invalid varp id: " + idStr));
+			return;
+		}
+
 		int value = Microbot.getVarbitPlayerValue(varpId);
 
 		Map<String, Object> response = new LinkedHashMap<>();
