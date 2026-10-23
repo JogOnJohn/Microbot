@@ -908,16 +908,12 @@ net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findContainsMa
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findExactMatch$28(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$32(Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$33(String, Widget): AbstractMap$SimpleEntry  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$17(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$15(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$19(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidgetsWithAction$21(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesSpriteId(Widget, int): boolean  ->  net.runelite.api.widgets.Widget#getSpriteId(): int
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesText(Widget, String, boolean): boolean  ->  net.runelite.api.widgets.Widget#getActions(): String[]
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesText(Widget, String, boolean): boolean  ->  net.runelite.api.widgets.Widget#getName(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesText(Widget, String, boolean): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesWildCardText(Widget, String, boolean, boolean): boolean  ->  net.runelite.api.widgets.Widget#getActions(): String[]
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesWildCardText(Widget, String, boolean, boolean): boolean  ->  net.runelite.api.widgets.Widget#getName(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesWildCardText(Widget, String, boolean, boolean): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#searchChildren(String, Widget, boolean): Widget  ->  net.runelite.api.widgets.Widget#getChildren(): Widget[]
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#searchChildren(String, Widget, boolean): Widget  ->  net.runelite.api.widgets.Widget#getDynamicChildren(): Widget[]
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#searchChildren(String, Widget, boolean): Widget  ->  net.runelite.api.widgets.Widget#getStaticChildren(): Widget[]
