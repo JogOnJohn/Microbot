@@ -117,8 +117,9 @@ public class BankJagexPopupEventTest
 	}
 
 	@Test
-	public void findNotNowButtonReturnsButton()
+	public void findNotNowButtonReturnsButton() throws Exception
 	{
+		runClientThreadInline();
 		Widget button = textWidget("<col=ffffff>Not now</col>");
 		Widget popup = popupWithChild(button);
 		when(client.getWidget(InterfaceID.Popupoverlay.CONTAINER)).thenReturn(popup);
