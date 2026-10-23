@@ -3,10 +3,28 @@ package net.runelite.client.plugins.microbot.util.poh;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.util.poh.data.*;
 import org.junit.Test;
+import net.runelite.api.ObjectComposition;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import java.util.Collections;
+import static org.mockito.Mockito.*;
 import static org.junit.Assert.*;
 import static net.runelite.client.plugins.microbot.util.poh.PohFacilityAccess.Access.*;
 
 public class PohFacilityAccessTest {
+    @Test public void incompleteDoorEvidenceNeverBecomesPermanentTrapEvidence() {
+        Rs2TileObjectModel object = mock(Rs2TileObjectModel.class);
+        assertEquals(UNKNOWN, PohFacilityAccess.inspectDoors(Collections.singletonList(object), () -> true));
+        verifyNoInteractions(object);
+        assertEquals(UNKNOWN, PohFacilityAccess.inspectDoors(Collections.singletonList(object), () -> false));
+        ObjectComposition composition = mock(ObjectComposition.class);
+        when(object.getObjectComposition()).thenReturn(composition);
+        when(composition.getName()).thenReturn("Wall");
+        assertEquals(UNREACHABLE, PohFacilityAccess.inspectDoors(Collections.singletonList(object), () -> false));
+        assertEquals(UNKNOWN, PohFacilityAccess.inspectDoors(Collections.nCopies(1025, object), () -> false));
+        when(composition.getName()).thenReturn("Door");
+        when(composition.getActions()).thenReturn(new String[]{"Open"});
+        assertEquals(OBSTRUCTED, PohFacilityAccess.inspectDoors(Collections.singletonList(object), () -> false));
+    }
     @Test public void unrelatedClosedDoorCannotTurnAnAbsentFacilityIntoObstruction() {
         assertEquals(MISSING, PohFacilityAccess.classify(true, 0, false, false, true));
         assertEquals(PENDING, PohFacilityAccess.classify(false, 0, false, false, true));

@@ -658,3 +658,22 @@ the click. Keep stopped-player door recovery separate from moving continuation.
 Measure route_continuation elapsedMs, leadBefore and movingAfter along with
 the normal waypoint heartbeat. movingAfter is a post-dispatch pose sample, not
 proof of uninterrupted movement or a substitute for matched route measurements.
+
+## 36. Let observed POH landing supersede stale facility evidence
+
+A mounted-facility click can spend its initial timeout approaching the object.
+Recheck arrival before inspecting or excluding a house, and again after any
+inspection or recovery attempt. If execution is still moving/animating after its
+first landing budget, permit only a bounded additional wait. Cancellation wins.
+House generation and presence must still match before trusting inspection.
+
+Inspect facility/door definitions in one read-only client-thread callback rather
+than queuing one callback per scene object. Bound the door scan by time and count;
+incomplete evidence is UNKNOWN, never proof of an unreachable trap house. Do not
+limit inspection to nearby doors and then infer that a distant closed door does
+not exist.
+
+**Evidence:** the 2026-10-23 Glade route landed at 13:30:43, but a stale house
+inspection finished at 13:33:33 and reported HOUSE_RECOVERY_FAILED outside the POH.
+PohTransportArrivalTest covers arrival during obstruction inspection and already-
+arrived dispatch suppression. PohFacilityAccessTest covers incomplete evidence.

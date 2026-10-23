@@ -65,6 +65,7 @@ public class PohPoolContextTest {
         when(teleport.displayInfo()).thenReturn("Glade regression");
         PohTransport transport = new PohTransport(new WorldPoint(2053, 7052, 0), teleport);
         try (MockedStatic<PohTeleports> pools = mockStatic(PohTeleports.class);
+             MockedStatic<Rs2Player> players = mockStatic(Rs2Player.class);
              MockedStatic<Microbot> microbot = mockStatic(Microbot.class)) {
             microbot.when(Microbot::getClient).thenReturn(client);
             microbot.when(Microbot::getClientThread).thenReturn(thread);
