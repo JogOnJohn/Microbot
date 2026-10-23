@@ -51,6 +51,7 @@ public abstract class Script extends Global implements IScript {
             {
                 setKeepAliveTime(EXECUTOR_KEEP_ALIVE_SECONDS, TimeUnit.SECONDS);
                 allowCoreThreadTimeOut(true);
+                setRemoveOnCancelPolicy(true);
             }
 
             @Override

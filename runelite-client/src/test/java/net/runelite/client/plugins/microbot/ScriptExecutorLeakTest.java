@@ -44,6 +44,27 @@ public class ScriptExecutorLeakTest {
         }
     }
 
+    @Test public void cancelledLongDelayLoopReleasesLastThread() throws Exception {
+        Fixture script = new Fixture();
+        ScheduledThreadPoolExecutor executor = (ScheduledThreadPoolExecutor) script.scheduledExecutorService;
+        executor.setKeepAliveTime(100, TimeUnit.MILLISECONDS);
+        try {
+            CountDownLatch ran = new CountDownLatch(1);
+            ScheduledFuture<?> loop = executor.scheduleWithFixedDelay(ran::countDown, 0, 1, TimeUnit.DAYS);
+            assertTrue(ran.await(5, TimeUnit.SECONDS));
+            loop.cancel(true);
+            assertTrue(executor.getQueue().isEmpty());
+
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (executor.getPoolSize() > 0 && System.nanoTime() < deadline) {
+                Thread.sleep(20);
+            }
+            assertEquals(0, executor.getPoolSize());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     @Test public void loopDelayLongerThanKeepAliveKeepsRunning() throws Exception {
         Fixture script = new Fixture();
         ScheduledThreadPoolExecutor executor = (ScheduledThreadPoolExecutor) script.scheduledExecutorService;
