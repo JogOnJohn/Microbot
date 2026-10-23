@@ -677,3 +677,19 @@ not exist.
 inspection finished at 13:33:33 and reported HOUSE_RECOVERY_FAILED outside the POH.
 PohTransportArrivalTest covers arrival during obstruction inspection and already-
 arrived dispatch suppression. PohFacilityAccessTest covers incomplete evidence.
+
+## 37. Coordinate arrival cannot spin an unready interaction indefinitely
+
+An opt-in interaction can arrive at its approach tile while target readiness is
+still false. Repeated ARRIVED replies are not progress. After a fresh post-walk
+probe, bound a stationary arrived/not-ready state by five seconds since actual
+position progress; release only the operation's owned route and report BLOCKED
+with the rejected readiness predicate. Do not dispatch through failed collision,
+visibility, action, UI or ownership checks. Do not expire a dispatched action's
+effect wait using this arrival guard, and let fresh readiness/cancellation win.
+
+Homes may recreate one undispatched furniture request for this specific reason.
+It must preserve authoritative work effects and never reset retries indefinitely.
+Barbara's clock at (1749,3536,0) reached access (1749,3537,0) but issued no click
+for two minutes on 23 October. A fresh operation then passed all readiness checks;
+the original rejected predicate was not recorded, so its cause remains unproven.

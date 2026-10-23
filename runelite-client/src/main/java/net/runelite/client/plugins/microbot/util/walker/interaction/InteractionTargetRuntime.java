@@ -30,14 +30,20 @@ public final class InteractionTargetRuntime {
         public final WorldPoint position;
         public final boolean sceneReady, moving, ready, confirmed, inputBlocked;
         public final long identity;
+        public final String readiness;
         Snapshot(WorldPoint p, boolean scene, boolean moving, boolean ready, boolean confirmed, long identity) {
             this(p, scene, moving, ready, confirmed, identity, false);
         }
         Snapshot(WorldPoint p, boolean scene, boolean moving, boolean ready, boolean confirmed, long identity,
                 boolean inputBlocked) {
+            this(p, scene, moving, ready, confirmed, identity, inputBlocked, "unknown");
+        }
+        Snapshot(WorldPoint p, boolean scene, boolean moving, boolean ready, boolean confirmed, long identity,
+                boolean inputBlocked, String readiness) {
             this.position = p; this.sceneReady = scene; this.moving = moving;
             this.ready = ready; this.confirmed = confirmed; this.identity = identity;
             this.inputBlocked = inputBlocked;
+            this.readiness = readiness;
         }
     }
     private final InteractionRequest request;
@@ -129,6 +135,7 @@ public final class InteractionTargetRuntime {
         Shape shape = null;
         boolean action = false;
         WorldArea footprint = null;
+        String readiness = "target-missing";
         if (request.kind == InteractionRequest.Kind.NPC) {
             Rs2NpcModel model = npc();
             NPC npc = model == null ? null : model.getNpc();
@@ -152,6 +159,10 @@ public final class InteractionTargetRuntime {
                 action = composition != null && hasAction(composition.getActions(), request.action);
             }
         }
+        if (target != null) readiness = player == null ? "player-missing"
+                : player.getPlane() != target.getPlane() ? "wrong-plane"
+                : player.distanceTo(target) > 8 ? "outside-probe-radius"
+                : !action ? "action-unavailable" : inputBlocked ? "input-blocked" : "off-canvas";
         if (player != null && target != null && player.getPlane() == target.getPlane()
                 && player.distanceTo(target) <= 8 && action && !inputBlocked
                 && !InputArbiter.isHuman() && !Microbot.pauseAllScripts.get()) {
@@ -164,6 +175,8 @@ public final class InteractionTargetRuntime {
                         : request.access != null && request.access.getPlane() == player.getPlane()
                         && reachable.contains(request.access)
                         && objectEdgeReachable(footprint, reachable, c.getTopLevelWorldView());
+                readiness = ready ? "ready" : request.kind == InteractionRequest.Kind.NPC ? "npc-unreachable"
+                        : request.access == null || !reachable.contains(request.access) ? "access-unreachable" : "object-edge-blocked";
             }
         }
         lastTick = c.getTickCount(); lastScene = scene;
@@ -171,7 +184,7 @@ public final class InteractionTargetRuntime {
         // The independent eight-second effect deadline still bounds a stuck animation.
         boolean active = Rs2Player.isMoving()
                 || request.kind == InteractionRequest.Kind.OBJECT && Rs2Player.isAnimating();
-        return cached = new Snapshot(player, true, active, ready, confirmed, identity, inputBlocked);
+        return cached = new Snapshot(player, true, active, ready, confirmed, identity, inputBlocked, readiness);
     }
 
     private Rs2NpcModel npc() {

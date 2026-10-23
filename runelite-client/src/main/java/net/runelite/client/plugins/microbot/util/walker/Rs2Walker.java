@@ -13646,6 +13646,7 @@ public class Rs2Walker {
                 return InteractionResult.BLOCKED;
             activeInteraction.set(request);
             interactionOwner.set(request);
+            boolean approachArrived = false;
             for (int pass = 0; pass < 2; pass++) {
                 var snapshot = request.runtime.probe(pass > 0);
                 boolean cancelled = !request.active() || Thread.currentThread().isInterrupted()
@@ -13694,12 +13695,22 @@ public class Rs2Walker {
                                 (System.nanoTime() - readyAt) / 1_000_000, snapshot.position);
                         return InteractionResult.IN_PROGRESS;
                     case APPROACH:
-                        if (pass > 0) return InteractionResult.IN_PROGRESS;
+                        if (pass > 0) {
+                            if (approachArrived && !snapshot.moving && snapshot.sceneReady && !snapshot.inputBlocked
+                                    && request.lifecycle.stalledAtArrival(System.nanoTime() / 1_000_000)) {
+                                WebWalkLog.spInfo("interaction_blocked | op={} target={} reason=arrived-not-ready readiness={} at={} anchor={} access={}",
+                                        request.id, request.entityId, snapshot.readiness, snapshot.position, request.anchor, request.access);
+                                releaseInteraction(request);
+                                return InteractionResult.BLOCKED;
+                            }
+                            return InteractionResult.IN_PROGRESS;
+                        }
                         WalkerState state = bankAware
                                 ? walkWithBankedTransportsUntil(target, distance, request.ownedTarget,
                                         () -> !request.active() || request.runtime.probe(false).ready)
                                 : walkWithStateUntil(target, distance, () -> !request.active() || request.runtime.probe(false).ready);
                         if (!bankAware) request.ownedTarget.set(currentTarget);
+                        approachArrived = state == WalkerState.ARRIVED;
                         if (state == WalkerState.UNREACHABLE || state == WalkerState.EXIT && request.active()) {
                             request.cancel(); releaseInteraction(request);
                             return InteractionResult.BLOCKED;

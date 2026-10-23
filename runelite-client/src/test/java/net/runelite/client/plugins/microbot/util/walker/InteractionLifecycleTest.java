@@ -8,6 +8,19 @@ import static org.junit.Assert.*;
 import static net.runelite.client.plugins.microbot.util.walker.interaction.InteractionLifecycle.Decision.*;
 
 public class InteractionLifecycleTest {
+    @Test public void arrivedWithoutReadinessHasBoundedFailureButProgressAndDispatchRemainProtected() {
+        InteractionLifecycle s = new InteractionLifecycle();
+        s.update(0, p, true, false, false, false, false);
+        assertFalse(s.stalledAtArrival(4999));
+        s.update(4000, p.dx(1), true, true, false, false, false);
+        assertFalse(s.stalledAtArrival(5000));
+        assertTrue(s.stalledAtArrival(9000));
+        assertEquals("arrived-not-ready", s.reason());
+        InteractionLifecycle sent = new InteractionLifecycle();
+        sent.update(0, p, true, false, true, false, false);
+        sent.dispatched(0);
+        assertFalse(sent.stalledAtArrival(6000));
+    }
     @Test public void inFlightGuardExpiresWithoutAnotherControllerPoll() {
         InteractionLifecycle s = new InteractionLifecycle();
         s.update(100, p, true, false, false, false, false);

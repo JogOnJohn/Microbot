@@ -49,6 +49,12 @@ public final class InteractionLifecycle {
     }
 
     public synchronized void rejected(long now) { retryAfter = now + RETRY_MS; }
+    public synchronized boolean stalledAtArrival(long now) {
+        if (terminal != null || !initialized || awaiting || now - lastProgress < 5_000) return false;
+        reason = "arrived-not-ready";
+        terminal = Decision.FAILED;
+        return true;
+    }
     public synchronized void cancel() {
         if (terminal == null) { terminal = Decision.CANCELLED; reason = "cancelled"; }
     }
