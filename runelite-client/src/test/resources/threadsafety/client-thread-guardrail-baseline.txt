@@ -92,13 +92,13 @@ net.runelite.client.plugins.microbot.util.bank.Rs2Bank#isLockedSlot(int): boolea
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#isLockedSlot(int): boolean  ->  net.runelite.api.widgets.Widget#getChildren(): Widget[]
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#isWidgetLocked(Widget): boolean  ->  net.runelite.api.widgets.Widget#getActions(): String[]
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#itemBounds(Rs2ItemModel): Rectangle  ->  net.runelite.api.widgets.Widget#getBounds(): Rectangle
-net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$getPathAndBankToNearestBank$44(TileObject, BankLocation): int  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
-net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$getPathAndBankToNearestBank$45(Set, TileObject): AbstractMap$SimpleEntry  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$getPathAndBankToNearestBank$45(TileObject, BankLocation): int  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$getPathAndBankToNearestBank$46(Set, TileObject): AbstractMap$SimpleEntry  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$handleAmount$17(): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$32(TileObject): boolean  ->  net.runelite.api.TileObject#getId(): int
-net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$33(TileObject): boolean  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
-net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$34(WorldPoint, TileObject): int  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
-net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$35(WorldPoint, int, TileObject): boolean  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$33(TileObject): boolean  ->  net.runelite.api.TileObject#getId(): int
+net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$34(TileObject): boolean  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$35(WorldPoint, TileObject): int  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.bank.Rs2Bank#lambda$pickVisibleBankObject$36(WorldPoint, int, TileObject): boolean  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#openBank(): boolean  ->  net.runelite.api.Client#isWidgetSelected(): boolean
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#openCollectionBox(): boolean  ->  net.runelite.api.Client#isWidgetSelected(): boolean
 net.runelite.client.plugins.microbot.util.bank.Rs2Bank#pickVisibleBankObject(WorldPoint): Optional  ->  net.runelite.api.TileObject#getWorldLocation(): WorldPoint
@@ -936,13 +936,13 @@ net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInter
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInterface(String): boolean  ->  net.runelite.api.widgets.Widget#getName(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInterface(String): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#hasVisibleWidgetText(String): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findContainsMatch$27(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findExactMatch$26(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$30(Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$31(String, Widget): AbstractMap$SimpleEntry  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$15(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findContainsMatch$29(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findExactMatch$28(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$32(Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$33(String, Widget): AbstractMap$SimpleEntry  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$17(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidgetsWithAction$19(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$19(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidgetsWithAction$21(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesSpriteId(Widget, int): boolean  ->  net.runelite.api.widgets.Widget#getSpriteId(): int
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesText(Widget, String, boolean): boolean  ->  net.runelite.api.widgets.Widget#getActions(): String[]
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesText(Widget, String, boolean): boolean  ->  net.runelite.api.widgets.Widget#getName(): String
