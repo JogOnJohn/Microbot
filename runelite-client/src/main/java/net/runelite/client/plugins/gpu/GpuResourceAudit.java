@@ -225,7 +225,24 @@ final class GpuResourceAudit
     {
         if (!enabled()) return;
         Resource r = LEDGER.get(kind, id);
-        if (r != null) r.bytes = bytes;
+        if (r != null) { r.bytes = bytes; capture("store", r, null, -1, 0, "store"); }
+    }
+
+    static synchronized void mapping(int id, boolean mapped, int flags)
+    {
+        if (!GpuReplayCapture.ENABLED) return;
+        capture(mapped ? "map" : "unmap", LEDGER.get(Kind.BUFFER, id), null, -1, flags, "vbo-map");
+    }
+
+    static synchronized void draw(int vao)
+    {
+        if (!GpuReplayCapture.ENABLED) return;
+        capture("draw", LEDGER.get(Kind.VERTEX_ARRAY, vao), null, -1, 0, "synthetic-draw-boundary");
+    }
+
+    static synchronized void frame()
+    {
+        if (GpuReplayCapture.ENABLED) capture("frame", null, null, -1, 0, "frame");
     }
 
     static synchronized void attribute(int slot, int expectedBuffer, String site)
@@ -239,6 +256,7 @@ final class GpuResourceAudit
                 "slot=" + slot + " expected=" + expectedBuffer + " bound=" + bound + " actual=" + actual);
         LEDGER.reference(vao, slot, actual);
         Resource buffer = LEDGER.get(Kind.BUFFER, actual);
+        capture("attribute", LEDGER.get(Kind.VERTEX_ARRAY, vao), buffer, slot, 0, site);
         emit("attribute-capture", site, LEDGER.get(Kind.VERTEX_ARRAY, vao), "slot=" + slot
             + " buffer=" + actual + " bufferSerial=" + (buffer == null ? 0 : buffer.serial));
     }
@@ -380,6 +398,10 @@ final class GpuResourceAudit
 
     private static void emit(String operation, String site, Resource resource, String detail)
     {
+        if (operation.equals("create") || operation.equals("delete-returned")
+            || operation.equals("context-created") || operation.equals("context-destroyed")
+            || operation.equals("checkpoint"))
+            capture(operation, resource, null, -1, 0, site);
         Lifecycle e = new Lifecycle();
         if (!e.isEnabled()) return;
         e.operation = operation; e.site = site; e.detail = detail;
@@ -392,6 +414,14 @@ final class GpuResourceAudit
             e.bytes = resource.bytes; e.context = resource.context;
         }
         e.monoNanos = System.nanoTime(); e.wallMillis = System.currentTimeMillis(); e.commit();
+    }
+
+    private static void capture(String operation, Resource resource, Resource peer, int slot, int flags, String site)
+    {
+        if (!GpuReplayCapture.ENABLED) return;
+        GpuReplayCapture.record(operation, resource == null ? "context" : resource.kind.name(), site,
+            resource == null ? 0 : resource.serial, peer == null ? 0 : peer.serial,
+            resource == null ? 0 : resource.bytes, currentContext(), slot, flags);
     }
 
     static synchronized void scene() { if (enabled()) LEDGER.scene++; }

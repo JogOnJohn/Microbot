@@ -288,6 +288,7 @@ class Zone
 			glBindVertexArray(glVao);
 			{
 				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.OPAQUE_DRAW, glVao, drawEnd.remaining());
+				if (GpuReplayCapture.ENABLED) GpuResourceAudit.draw(glVao);
 				boolean returned = false;
 				try
 				{
@@ -741,6 +742,7 @@ class Zone
 			glDepthMask(false);
 			{
 				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.ALPHA_DRAW, elementBufferId, alphaElements.limit());
+				if (GpuReplayCapture.ENABLED) GpuResourceAudit.draw(lastVao);
 				boolean returned = false;
 				try
 				{
@@ -766,6 +768,7 @@ class Zone
 			glDepthMask(false);
 			{
 				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.STATIC_ALPHA_DRAW, lastVao, drawEnd.remaining());
+				if (GpuReplayCapture.ENABLED) GpuResourceAudit.draw(lastVao);
 				boolean returned = false;
 				try
 				{

@@ -196,6 +196,7 @@ final class GpuMemoryDiagnostics
     static void frame()
     {
         if (!ENABLED) return;
+        if (GpuReplayCapture.ENABLED) GpuResourceAudit.frame();
         synchronized (LEDGER) { LEDGER.frames++; }
         long now = System.nanoTime();
         if (now >= nextReport) { nextReport = now + 5_000_000_000L; checkpoint("periodic"); }

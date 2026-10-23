@@ -124,6 +124,7 @@ class VBO
 				}
 			}
 			GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-destroy-unmap", 0);
+			if (GpuReplayCapture.ENABLED) GpuResourceAudit.mapping(bufId, false, 0);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			mapped = false;
 		}
@@ -189,6 +190,7 @@ class VBO
 		GpuMemoryDiagnostics.mapping(bufId, true, usage != GL_STATIC_DRAW, "vbo-map", diagnosticStart);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = true;
+		if (GpuReplayCapture.ENABLED) GpuResourceAudit.mapping(bufId, true, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)));
 	}
 
 	void unmap()
@@ -230,5 +232,6 @@ class VBO
 		GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-unmap", 0);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = false;
+		if (GpuReplayCapture.ENABLED) GpuResourceAudit.mapping(bufId, false, 0);
 	}
 }
