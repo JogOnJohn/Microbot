@@ -125,8 +125,9 @@ public class BankTutorialEventTest
 	}
 
 	@Test
-	public void findCloseButtonReturnsButton()
+	public void findCloseButtonReturnsButton() throws Exception
 	{
+		runClientThreadInline();
 		Widget button = textWidget("<col=ffffff>Close</col>");
 		Widget box = boxWithChild(button);
 		when(client.getWidget(InterfaceID.Screenhighlight.INFORMATION_BOX)).thenReturn(box);
