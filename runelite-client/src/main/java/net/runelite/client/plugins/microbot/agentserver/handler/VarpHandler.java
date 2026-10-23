@@ -7,6 +7,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class VarpHandler extends AgentHandler {
 
@@ -43,7 +44,12 @@ public class VarpHandler extends AgentHandler {
 			return;
 		}
 
-		if (varpId < 0 || !Microbot.getRs2PlayerStateCache().isValidVarpId(varpId)) {
+		Optional<Boolean> validId = Microbot.getRs2PlayerStateCache().isValidVarpId(varpId);
+		if (!validId.isPresent()) {
+			sendJson(exchange, 503, errorResponse("Client thread unavailable"));
+			return;
+		}
+		if (!validId.get()) {
 			sendJson(exchange, 400, errorResponse("Invalid varp id: " + idStr));
 			return;
 		}

@@ -65,12 +65,23 @@ public class Rs2PlayerStateCacheTest
 	@Test
 	public void isValidVarpIdChecksVarpArrayBounds()
 	{
-		assertTrue(cache.isValidVarpId(0));
-		assertTrue(cache.isValidVarpId(VARP_COUNT - 1));
-		assertFalse(cache.isValidVarpId(VARP_COUNT));
-		assertFalse(cache.isValidVarpId(8063));
-		assertFalse(cache.isValidVarpId(-1));
-		assertFalse(cache.isValidVarpId(Integer.MIN_VALUE));
+		assertEquals(Optional.of(true), cache.isValidVarpId(0));
+		assertEquals(Optional.of(true), cache.isValidVarpId(VARP_COUNT - 1));
+		assertEquals(Optional.of(false), cache.isValidVarpId(VARP_COUNT));
+		assertEquals(Optional.of(false), cache.isValidVarpId(8063));
+		assertEquals(Optional.of(false), cache.isValidVarpId(-1));
+		assertEquals(Optional.of(false), cache.isValidVarpId(Integer.MIN_VALUE));
+	}
+
+	@Test
+	public void isValidVarpIdIsEmptyWhenClientThreadUnavailable()
+	{
+		ClientThread unavailable = mock(ClientThread.class);
+		when(unavailable.runOnClientThreadOptional(any())).thenReturn(Optional.empty());
+		Rs2PlayerStateCache stalled = new Rs2PlayerStateCache(eventBus, client, unavailable);
+
+		assertEquals(Optional.empty(), stalled.isValidVarpId(281));
+		assertEquals(Optional.of(false), stalled.isValidVarpId(-1));
 	}
 
 	@Test

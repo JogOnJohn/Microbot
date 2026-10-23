@@ -22,6 +22,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -218,11 +219,11 @@ public final class Rs2PlayerStateCache {
 		return value;
 	}
 
-	public boolean isValidVarpId(int varpId) {
+	public Optional<Boolean> isValidVarpId(int varpId) {
 		if (varpId < 0) {
-			return false;
+			return Optional.of(false);
 		}
-		return clientThread.runOnClientThreadOptional(() -> isVarpIdInRange(client.getVarps(), varpId)).orElse(false);
+		return clientThread.runOnClientThreadOptional(() -> isVarpIdInRange(client.getVarps(), varpId));
 	}
 
 	static boolean isVarpIdInRange(int[] varpValues, int varpId) {
