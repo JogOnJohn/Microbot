@@ -23,6 +23,8 @@ Closed-door approaches must also constrain fallback clicks: [movement gotcha 33]
 
 Arriving beside stairs does not request another climb: [movement gotcha 18](movement.md#18-do-not-infer-a-floor-transition-from-proximity-to-stairs).
 
+A missing scene tile means no path: [movement gotcha 29](movement.md#29-null-check-a-scene-tile-before-pathing-from-or-to-it).
+
 ## Format
 
 Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use

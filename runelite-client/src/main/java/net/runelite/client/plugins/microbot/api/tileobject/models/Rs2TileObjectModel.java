@@ -266,6 +266,8 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
      */
     public boolean click(String action) {
         try {
+            WorldView worldView = getWorldView();
+            if (worldView == null) return false;
             var objComp = getVisibleObjectComposition();
             if (objComp == null) {
                 return false;
@@ -361,7 +363,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                             .itemId(-1)
                             .option(action)
                             .target(objName)
-                            .setWorldViewId(getWorldView().getId())
+                            .setWorldViewId(worldView.getId())
                             .gameObject(tileObject).validWhen(clickDispatchGuard.get())
                     ,
                     Rs2UiHelper.getObjectClickbox(tileObject));
