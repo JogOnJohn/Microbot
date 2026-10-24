@@ -3,6 +3,8 @@ package net.runelite.client.plugins.microbot.breakhandler.breakhandlerv2;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerTickGuard;
 import net.runelite.client.plugins.microbot.breakhandler.BreakPreparation;
+import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.Script;
 import org.junit.After;
 import org.junit.Test;
 
@@ -15,20 +17,24 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.mock;
 
 public class BreakHandlerV2DeferralTest {
+    private BreakHandlerV2Script script;
+
     @After
-    public void clearPluginLock() {
+    public void clearPluginLock() throws Exception {
         BreakHandlerScript.setLockState(false);
         BreakPreparation.finishBreak();
-    }
-
-    @Test
-    public void clearingBreakClearsCooperativeRequest() {
-        try (BreakPreparation.Handle handle = BreakPreparation.register("test")) {
-            assertTrue(BreakHandlerV2Script.shouldDeferRequestedBreak(null));
-            BreakHandlerV2Script.resetActiveBreakState();
-            assertFalse(handle.isRequested());
+        Microbot.pauseAllScripts.set(false);
+        BreakHandlerV2State.setState(BreakHandlerV2State.WAITING_FOR_BREAK);
+        if (script != null) {
+            Field executor = Script.class.getDeclaredField("scheduledExecutorService");
+            executor.setAccessible(true);
+            ((ScheduledExecutorService) executor.get(script)).shutdownNow();
         }
     }
 
