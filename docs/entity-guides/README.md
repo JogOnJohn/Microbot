@@ -19,6 +19,8 @@ Ground-item pickup: [propagate dispatch failures](items.md#11-propagate-ground-i
 
 Run-orb energy, geometry, and pending-click semantics: [movement gotcha 21](movement.md#21-apply-the-shared-energy-policy-before-clicking-the-run-orb).
 
+A missing scene tile means no path: [movement gotcha 29](movement.md#29-null-check-a-scene-tile-before-pathing-from-or-to-it).
+
 ## Format
 
 Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use
