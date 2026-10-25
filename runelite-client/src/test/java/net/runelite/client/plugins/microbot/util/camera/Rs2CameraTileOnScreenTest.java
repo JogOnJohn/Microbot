@@ -117,7 +117,7 @@ public class Rs2CameraTileOnScreenTest {
     }
 
     @Test
-    public void viewportAndProjectionReadsStayOnClientThread() {
+    public void viewportReadsStayOnClientThread() {
         org.mockito.Mockito.doAnswer(inv -> { org.junit.Assert.assertTrue(onClientThread.get()); return 765; }).when(client).getViewportWidth();
         org.mockito.Mockito.doAnswer(inv -> { org.junit.Assert.assertTrue(onClientThread.get()); return 503; }).when(client).getViewportHeight();
         LocalPoint tile = sceneTile(50, 50);

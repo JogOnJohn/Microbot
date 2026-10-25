@@ -263,41 +263,34 @@ public class Rs2Camera {
 
     public static boolean isTileOnScreen(TileObject tileObject) {
         if (tileObject == null) return false;
-        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            Client client = Microbot.getClient();
-            LocalPoint localPoint = tileObject.getLocalLocation();
-            if (!isInWorldViewScene(client, localPoint)) return false;
-
-            int viewportHeight = client.getViewportHeight();
-            int viewportWidth = client.getViewportWidth();
-
-            Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
-
-            if (poly == null) return false;
-
-            return poly.getBounds2D().getX() <= viewportWidth && poly.getBounds2D().getY() <= viewportHeight;
-        }).orElse(false);
+        Client client = Microbot.getClient();
+        LocalPoint localPoint = tileObject.getLocalLocation();
+        if (!isInWorldViewScene(client, localPoint)) return false;
+        int[] viewport = viewportSize();
+        if (viewport == null) return false;
+        Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
+        if (poly == null) return false;
+        return poly.getBounds2D().getX() <= viewport[0] && poly.getBounds2D().getY() <= viewport[1];
     }
 
     public static boolean isTileOnScreen(LocalPoint localPoint) {
+        Client client = Microbot.getClient();
+        if (!isInWorldViewScene(client, localPoint)) return false;
+        int[] viewport = viewportSize();
+        if (viewport == null) return false;
+        Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
+        if (poly == null) return false;
+        Rectangle viewportBounds = new Rectangle(0, 0, viewport[0], viewport[1]);
+        if (!poly.intersects(viewportBounds)) return false;
+        Point canvasPoint = Perspective.localToCanvas(client, localPoint, client.getPlane());
+        return canvasPoint != null;
+    }
+
+    private static int[] viewportSize() {
         return Microbot.getClientThread().runOnClientThreadOptional(() -> {
             Client client = Microbot.getClient();
-            if (!isInWorldViewScene(client, localPoint)) return false;
-
-            int viewportHeight = client.getViewportHeight();
-            int viewportWidth = client.getViewportWidth();
-
-            Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
-            if (poly == null) return false;
-
-            // Check if any part of the polygon intersects with the screen bounds
-            Rectangle viewportBounds = new Rectangle(0, 0, viewportWidth, viewportHeight);
-            if (!poly.intersects(viewportBounds)) return false;
-
-            // Optionally, check if the tile is in front of the camera
-            Point canvasPoint = Perspective.localToCanvas(client, localPoint, client.getPlane());
-            return canvasPoint != null;
-        }).orElse(false);
+            return new int[]{client.getViewportWidth(), client.getViewportHeight()};
+        }).orElse(null);
     }
 
     private static boolean isInWorldViewScene(Client client, LocalPoint localPoint) {
@@ -444,28 +437,19 @@ public class Rs2Camera {
      */
     public static boolean isTileCenteredOnScreen(LocalPoint tile, double marginPercentage) {
         if (tile == null) return false;
-        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            Polygon poly = Perspective.getCanvasTilePoly(Microbot.getClient(), tile);
-            if (poly == null) return false;
-
-            Rectangle tileBounds = poly.getBounds();
-            int viewportWidth = Microbot.getClient().getViewportWidth();
-            int viewportHeight = Microbot.getClient().getViewportHeight();
-            int centerX = viewportWidth / 2;
-            int centerY = viewportHeight / 2;
-
-            int marginX = (int) (viewportWidth * (marginPercentage / 100.0));
-            int marginY = (int) (viewportHeight * (marginPercentage / 100.0));
-
-            Rectangle centerBox = new Rectangle(
-                    centerX - marginX / 2,
-                    centerY - marginY / 2,
-                    marginX,
-                    marginY
-            );
-
-            return centerBox.contains(tileBounds);
-        }).orElse(false);
+        int[] viewport = viewportSize();
+        if (viewport == null) return false;
+        Polygon poly = Perspective.getCanvasTilePoly(Microbot.getClient(), tile);
+        if (poly == null) return false;
+        Rectangle tileBounds = poly.getBounds();
+        int viewportWidth = viewport[0];
+        int viewportHeight = viewport[1];
+        int centerX = viewportWidth / 2;
+        int centerY = viewportHeight / 2;
+        int marginX = (int) (viewportWidth * (marginPercentage / 100.0));
+        int marginY = (int) (viewportHeight * (marginPercentage / 100.0));
+        Rectangle centerBox = new Rectangle(centerX - marginX / 2, centerY - marginY / 2, marginX, marginY);
+        return centerBox.contains(tileBounds);
     }
 
     /**

@@ -35,8 +35,8 @@ bounds; an unavailable snapshot must use the existing minimap fallback.
 
 An open deposit box can close before its widget is fetched. Capture and null-check
 the widget before creating a singleton child list; never pass null into `List.of`.
-Camera visibility and viewport checks must read projection/viewport state on the
-client thread and fail closed when the snapshot cannot be obtained.
+Camera visibility and viewport checks must snapshot viewport dimensions on the
+client thread and fail closed when those dimensions cannot be obtained.
 
 ## Format
 
