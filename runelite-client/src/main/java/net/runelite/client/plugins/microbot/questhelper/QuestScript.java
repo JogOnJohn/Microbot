@@ -486,7 +486,7 @@ public class QuestScript extends Script {
 			int primaryId = tradablePrimaryId(ir);
 			if (primaryId == -1) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason("Quest item is not tradable on the Grand Exchange: " + ir.getName(), Level.WARN);
+				stopQuesterWithReason("Quest item is not tradable on the Grand Exchange: " + ir.getName());
 				return true;
 			}
 
@@ -501,7 +501,8 @@ public class QuestScript extends Script {
 			if (basePrice <= 0) {
 				Rs2Bank.closeBank();
 				stopQuesterWithReason("No Grand Exchange price for " + ir.getName()
-						+ ": it is probably not sold on the Grand Exchange. Get it in-game and restart.", Level.WARN);
+						+ ": it isn't sold on the Grand Exchange, or the price service is unreachable. Get it in-game and restart.",
+						Level.WARN);
 				return true;
 			}
 
@@ -565,6 +566,32 @@ public class QuestScript extends Script {
 			return true;
 		}
 
+		boolean bankWithdrawalMissed = false;
+		for (ItemRequirement ir : fromBank) {
+			Integer idToWithdraw = bankWithdrawId.get(ir);
+			if (idToWithdraw == null || idToWithdraw <= 0) {
+				continue;
+			}
+			int qty = remainingQuantityNeeded(ir);
+			if (qty <= 0) {
+				continue;
+			}
+			Microbot.status = "Withdrawing " + ir.getName() + " x" + qty;
+			Rs2Bank.withdrawX(idToWithdraw, qty);
+			if (!sleepUntil(() -> hasItemRequirementOnPlayer(ir), 2_000)) {
+				Microbot.log("Quest helper: bank withdrawal for " + ir.getName() + " did not land in time",
+						Level.WARN);
+				bankWithdrawalMissed = true;
+			}
+		}
+
+		if (bankWithdrawalMissed && Rs2Inventory.isFull()) {
+			Rs2Bank.closeBank();
+			stopQuesterWithReason("Inventory is full, so missing quest items can't be withdrawn. Free some slots and restart.",
+					Level.WARN);
+			return true;
+		}
+
 		if (!toBuy.isEmpty()) {
 			final long requiredCoins = totalBuyCost;
 			long currentInvCoins = Rs2Inventory.itemQuantity(ItemID.COINS_995);
@@ -588,23 +615,6 @@ public class QuestScript extends Script {
 							requiredCoins, invCoinsAfter));
 				}
 				return true;
-			}
-		}
-
-		for (ItemRequirement ir : fromBank) {
-			Integer idToWithdraw = bankWithdrawId.get(ir);
-			if (idToWithdraw == null || idToWithdraw <= 0) {
-				continue;
-			}
-			int qty = remainingQuantityNeeded(ir);
-			if (qty <= 0) {
-				continue;
-			}
-			Microbot.status = "Withdrawing " + ir.getName() + " x" + qty;
-			Rs2Bank.withdrawX(idToWithdraw, qty);
-			if (!sleepUntil(() -> hasItemRequirementOnPlayer(ir), 2_000)) {
-				Microbot.log("Quest helper: bank withdrawal for " + ir.getName() + " did not land in time",
-						Level.WARN);
 			}
 		}
 
