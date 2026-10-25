@@ -12509,7 +12509,7 @@ public class Rs2Walker {
             return found;
         }
 
-        return findCharterDestinationTextWidget(widget.getNestedChildren(), destinationText);
+        return findCharterDestinationTextWidget(Rs2Widget.getNestedChildrenSnapshot(widget), destinationText);
     }
 
     private static Widget findCharterDestinationTextWidget(Widget[] widgets, String destinationText) {

@@ -24,6 +24,14 @@ import static net.runelite.client.plugins.microbot.util.Global.*;
 @Slf4j
 public class Rs2Widget {
 
+    public static Widget[] getNestedChildrenSnapshot(Widget widget) {
+        if (widget == null) return new Widget[0];
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Widget[] children = widget.getNestedChildren();
+            return children == null ? new Widget[0] : children.clone();
+        }).orElseGet(() -> new Widget[0]);
+    }
+
     public static boolean sleepUntilHasWidgetText(String text, int widgetId, int childId, boolean exact, int sleep) {
         return sleepUntilTrue(() -> hasWidgetText(text, widgetId, childId, exact), 300, sleep);
     }
@@ -238,7 +246,7 @@ public class Rs2Widget {
         if (child == null) return null;
         if (matchesText(child, text, exact)) return child;
 
-        Widget[][] childGroups = {child.getChildren(), child.getNestedChildren(), child.getDynamicChildren(), child.getStaticChildren()};
+        Widget[][] childGroups = {child.getChildren(), Rs2Widget.getNestedChildrenSnapshot(child), child.getDynamicChildren(), child.getStaticChildren()};
         for (Widget[] childGroup : childGroups) {
             if (childGroup != null) {
                 for (Widget nestedChild : childGroup) {
@@ -350,7 +358,7 @@ public class Rs2Widget {
         if (child == null) return null;
         if (matchesSpriteId(child, spriteId)) return child;
 
-        Widget[][] childGroups = {child.getChildren(), child.getNestedChildren(), child.getDynamicChildren(), child.getStaticChildren()};
+        Widget[][] childGroups = {child.getChildren(), Rs2Widget.getNestedChildrenSnapshot(child), child.getDynamicChildren(), child.getStaticChildren()};
         for (Widget[] childGroup : childGroups) {
             if (childGroup != null) {
                 for (Widget nestedChild : childGroup) {
@@ -555,7 +563,7 @@ public class Rs2Widget {
             Widget child = Microbot.getClient().getWidget(widgetGroupId, widgetSubGroupId);
             if (child == null) return found;
 
-            List<Widget[]> childGroups = Stream.of(child.getChildren(), child.getNestedChildren(),
+            List<Widget[]> childGroups = Stream.of(child.getChildren(), Rs2Widget.getNestedChildrenSnapshot(child),
                                                  child.getDynamicChildren(), child.getStaticChildren())
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
@@ -900,7 +908,7 @@ public class Rs2Widget {
 	    }       	   
 	    List<Widget[]> nestedAndDynamicWidgets = new java.util.ArrayList<>();
 	    if (widget.getDynamicChildren() != null) nestedAndDynamicWidgets.add(widget.getDynamicChildren());
-		if (widget.getNestedChildren() != null) nestedAndDynamicWidgets.add(widget.getNestedChildren());
+        nestedAndDynamicWidgets.add(getNestedChildrenSnapshot(widget));
 	    for (Widget[] widgetArray : nestedAndDynamicWidgets) {
 		   for (Widget nestedOrDynamic : widgetArray) {
 			   if (nestedOrDynamic == null || nestedOrDynamic.isHidden()) {
