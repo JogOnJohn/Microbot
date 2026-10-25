@@ -4395,7 +4395,7 @@ public class Rs2Walker {
                 Microbot.getClient().getTopLevelWorldView().getPlane());
         int canvasX = canvasPoint != null ? canvasPoint.getX() : -1;
         int canvasY = canvasPoint != null ? canvasPoint.getY() : -1;
-        if (canvasX < 0 || canvasY < 0) {
+        if (canvasX < 0 || canvasY < 0 || !WalkerSceneClickSafety.isSafe(canvasPoint)) {
             return false;
         }
 
@@ -4409,7 +4409,7 @@ public class Rs2Walker {
                 .option("Walk here");
 
         Microbot.doInvoke(entry,
-                new Rectangle(canvasX, canvasY, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
+                WalkerSceneClickSafety.clickArea(canvasPoint));
         return true;
     }
 
@@ -4454,7 +4454,8 @@ public class Rs2Walker {
         int canvasY = canv != null ? canv.getY() : -1;
 
         //if the tile is not on screen, use minimap
-        if (!Rs2Camera.isTileOnScreen(localPoint) || canvasX < 0 || canvasY < 0) {
+        if (!Rs2Camera.isTileOnScreen(localPoint) || canvasX < 0 || canvasY < 0
+                || !WalkerSceneClickSafety.isSafe(canv)) {
             WorldPoint playerLoc = Rs2Player.getWorldLocation();
             if (playerLoc != null
                     && playerLoc.getPlane() == worldPoint.getPlane()
@@ -4473,7 +4474,7 @@ public class Rs2Walker {
                 .option("Walk here");
 
         Microbot.doInvoke(entry,
-                new Rectangle(canvasX, canvasY, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
+                WalkerSceneClickSafety.clickArea(canv));
         return true;
     }
 
@@ -11739,16 +11740,16 @@ public class Rs2Walker {
         }
 
         if (Rs2Tab.getCurrentTab() != InterfaceTab.CHAT) {
-            Rs2Tab.switchTo(InterfaceTab.CHAT);
-            sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.CHAT);
+            if (!Rs2Tab.switchTo(InterfaceTab.CHAT)
+                    || !sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.CHAT)) return false;
         }
 
         Widget groupingBtn = Rs2Widget.getWidget(GROUPING_BUTTON_COMPONENT_ID);
         if (groupingBtn == null) return false;
 
-        if (!Arrays.equals(groupingBtn.getOnOpListener(), selectedOpListener)) {
+        if (!minigameGroupingSelected(GROUPING_BUTTON_COMPONENT_ID, selectedOpListener)) {
             Rs2Widget.clickWidget(groupingBtn);
-            sleepUntil(() -> Arrays.equals(groupingBtn.getOnOpListener(), selectedOpListener));
+            if (!sleepUntil(() -> minigameGroupingSelected(GROUPING_BUTTON_COMPONENT_ID, selectedOpListener))) return false;
         }
 
         boolean hasMultipleDestination = transport.getDisplayInfo().contains(":");
@@ -11758,35 +11759,20 @@ public class Rs2Walker {
 
         Widget selectedWidget = Rs2Widget.getWidget(SELECTED_MINIGAME);
         if (selectedWidget == null) return false;
-        if (!selectedWidget.getText().equalsIgnoreCase(destination)) {
+        if (!minigameWidgetTextMatches(SELECTED_MINIGAME, destination)) {
             Widget dropdownBtn = Rs2Widget.getWidget(DROPDOWN_BUTTON_COMPONENT_ID);
             if (dropdownBtn == null) return false;
 
-            if (dropdownBtn.getSpriteId() != DROPDOWN_SELECTED_SPRITE_ID) {
+            if (!minigameDropdownSelected(DROPDOWN_BUTTON_COMPONENT_ID, DROPDOWN_SELECTED_SPRITE_ID)) {
                 Rs2Widget.clickWidget(dropdownBtn);
-                sleepUntil(() -> Rs2Widget.findWidget(DROPDOWN_SELECTED_SPRITE_ID, List.of(Rs2Widget.getWidget(DROPDOWN_BUTTON_COMPONENT_ID))) != null);
+                if (!sleepUntil(() -> minigameDropdownSelected(DROPDOWN_BUTTON_COMPONENT_ID, DROPDOWN_SELECTED_SPRITE_ID))) return false;
             }
 
-            Widget minigameWidgetParent = Rs2Widget.getWidget(MINIGAME_LIST);
-            if (minigameWidgetParent == null) return false;
-            List<Widget> minigameWidgetList = Arrays.stream(minigameWidgetParent.getDynamicChildren())
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-            Widget destinationWidget = Rs2Widget.findWidget(destination, minigameWidgetList);
-            if (destinationWidget == null) return false;
-
-            NewMenuEntry destinationMenuEntry = new NewMenuEntry()
-                    .option("Select")
-                    .target("")
-                    .identifier(1)
-                    .type(MenuAction.CC_OP)
-                    .param0(destinationWidget.getIndex())
-                    .param1(minigameWidgetParent.getId())
-                    .forceLeftClick(false);
+            NewMenuEntry destinationMenuEntry = minigameDestinationEntry(MINIGAME_LIST, destination);
+            if (destinationMenuEntry == null) return false;
 
             Microbot.doInvoke(destinationMenuEntry, new Rectangle(1, 1));
-            sleepUntil(() -> Rs2Widget.getWidget(SELECTED_MINIGAME).getText().equalsIgnoreCase(destination));
+            if (!sleepUntil(() -> minigameWidgetTextMatches(SELECTED_MINIGAME, destination))) return false;
         }
 
         Widget teleportBtn = Rs2Widget.getWidget(TELEPORT_BUTTON);
@@ -11798,8 +11784,42 @@ public class Rs2Walker {
             Rs2Dialogue.clickOption(transport.getDisplayInfo().split(":")[1].trim().toLowerCase());
         }
 
-        sleepUntil(Rs2Player::isAnimating);
+        if (!sleepUntil(Rs2Player::isAnimating)) return false;
         return sleepUntilTrue(() -> !Rs2Player.isAnimating() && teleportGraphics.stream().noneMatch(Rs2Player::hasSpotAnimation), 100, 20000);
+    }
+
+    static boolean minigameWidgetTextMatches(int componentId, String expected) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Widget widget = Microbot.getClient().getWidget(componentId);
+            return widget != null && expected != null && expected.equalsIgnoreCase(widget.getText());
+        }).orElse(false);
+    }
+
+    static boolean minigameGroupingSelected(int componentId, Object[] expected) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Widget widget = Microbot.getClient().getWidget(componentId);
+            return widget != null && Arrays.equals(widget.getOnOpListener(), expected);
+        }).orElse(false);
+    }
+
+    static boolean minigameDropdownSelected(int componentId, int spriteId) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Widget widget = Microbot.getClient().getWidget(componentId);
+            return widget != null && Rs2Widget.findWidget(spriteId, List.of(widget)) != null;
+        }).orElse(false);
+    }
+
+    static NewMenuEntry minigameDestinationEntry(int componentId, String destination) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Widget parent = Microbot.getClient().getWidget(componentId);
+            if (parent == null || parent.getDynamicChildren() == null) return null;
+            List<Widget> children = Arrays.stream(parent.getDynamicChildren())
+                    .filter(Objects::nonNull).collect(Collectors.toList());
+            Widget target = Rs2Widget.findWidget(destination, children);
+            if (target == null) return null;
+            return new NewMenuEntry().option("Select").target("").identifier(1)
+                    .type(MenuAction.CC_OP).param0(target.getIndex()).param1(parent.getId()).forceLeftClick(false);
+        }).orElse(null);
     }
 
     private static boolean handleCanoe(Transport transport) {
