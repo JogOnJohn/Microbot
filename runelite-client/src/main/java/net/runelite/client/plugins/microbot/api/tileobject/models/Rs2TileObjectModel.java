@@ -171,7 +171,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
 
     @Override
     public @Nullable Shape getClickbox() {
-        return tileObject.getClickbox();
+        return Microbot.getClientThread().runOnClientThreadOptional(tileObject::getClickbox).orElse(null);
     }
 
     @Override
