@@ -47,6 +47,7 @@ import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -475,17 +476,32 @@ public class QuestScript extends Script {
 		Map<ItemRequirement, Integer> buyPrimaryIds = new HashMap<>();
 
 		for (ItemRequirement ir : toBuy) {
+			if (isCoinsRequirement(ir.getAllIds())) {
+				Rs2Bank.closeBank();
+				stopQuesterWithReason(String.format(
+						"Not enough coins for this quest step (need %,d gp in total)", ir.getQuantity()), Level.WARN);
+				return true;
+			}
+
 			int primaryId = tradablePrimaryId(ir);
 			if (primaryId == -1) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason("Quest item is not tradable on the Grand Exchange: " + ir.getName());
+				stopQuesterWithReason("Quest item is not tradable on the Grand Exchange: " + ir.getName(), Level.WARN);
+				return true;
+			}
+
+			if (isMembersItem(primaryId) && !isOnMembersWorld()) {
+				Rs2Bank.closeBank();
+				stopQuesterWithReason(ir.getName()
+						+ " is members-only and can't be bought on the Grand Exchange from a free-to-play world.", Level.WARN);
 				return true;
 			}
 
 			int basePrice = fetchInstabuyReferencePrice(primaryId);
 			if (basePrice <= 0) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason("Failed to fetch Grand Exchange price for: " + ir.getName());
+				stopQuesterWithReason("No Grand Exchange price for " + ir.getName()
+						+ ": it is probably not sold on the Grand Exchange. Get it in-game and restart.", Level.WARN);
 				return true;
 			}
 
@@ -505,7 +521,7 @@ public class QuestScript extends Script {
 			Rs2Bank.closeBank();
 			stopQuesterWithReason(String.format(
 					"Not enough gp to buy missing quest items (need %,d gp, have %,d gp)",
-					totalBuyCost, availableGp));
+					totalBuyCost, availableGp), Level.WARN);
 			return true;
 		}
 
@@ -528,7 +544,7 @@ public class QuestScript extends Script {
 					return true;
 				}
 				stopQuesterWithReason(
-						"No free Grand Exchange slots for missing quest items. Free a slot and restart.");
+						"No free Grand Exchange slots for missing quest items. Free a slot and restart.", Level.WARN);
 				return true;
 			}
 			int missingCount = toBuy.size();
@@ -549,23 +565,6 @@ public class QuestScript extends Script {
 			return true;
 		}
 
-		for (ItemRequirement ir : fromBank) {
-			Integer idToWithdraw = bankWithdrawId.get(ir);
-			if (idToWithdraw == null || idToWithdraw <= 0) {
-				continue;
-			}
-			int qty = remainingQuantityNeeded(ir);
-			if (qty <= 0) {
-				continue;
-			}
-			Microbot.status = "Withdrawing " + ir.getName() + " x" + qty;
-			Rs2Bank.withdrawX(idToWithdraw, qty);
-			if (!sleepUntil(() -> hasItemRequirementOnPlayer(ir), 2_000)) {
-				Microbot.log("Quest helper: bank withdrawal for " + ir.getName() + " did not land in time",
-						Level.WARN);
-			}
-		}
-
 		if (!toBuy.isEmpty()) {
 			final long requiredCoins = totalBuyCost;
 			long currentInvCoins = Rs2Inventory.itemQuantity(ItemID.COINS_995);
@@ -580,10 +579,32 @@ public class QuestScript extends Script {
 			long invCoinsAfter = Rs2Inventory.itemQuantity(ItemID.COINS_995);
 			if (invCoinsAfter < requiredCoins) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason(String.format(
-						"Bank withdrawal failed to supply enough coins (need %,d gp, have %,d gp in inventory)",
-						requiredCoins, invCoinsAfter));
+				if (invCoinsAfter == 0 && Rs2Inventory.isFull()) {
+					stopQuesterWithReason("Inventory is full, so coins for the Grand Exchange can't be withdrawn. Free a slot and restart.",
+							Level.WARN);
+				} else {
+					stopQuesterWithReason(String.format(
+							"Bank withdrawal failed to supply enough coins (need %,d gp, have %,d gp in inventory)",
+							requiredCoins, invCoinsAfter));
+				}
 				return true;
+			}
+		}
+
+		for (ItemRequirement ir : fromBank) {
+			Integer idToWithdraw = bankWithdrawId.get(ir);
+			if (idToWithdraw == null || idToWithdraw <= 0) {
+				continue;
+			}
+			int qty = remainingQuantityNeeded(ir);
+			if (qty <= 0) {
+				continue;
+			}
+			Microbot.status = "Withdrawing " + ir.getName() + " x" + qty;
+			Rs2Bank.withdrawX(idToWithdraw, qty);
+			if (!sleepUntil(() -> hasItemRequirementOnPlayer(ir), 2_000)) {
+				Microbot.log("Quest helper: bank withdrawal for " + ir.getName() + " did not land in time",
+						Level.WARN);
 			}
 		}
 
@@ -703,7 +724,7 @@ public class QuestScript extends Script {
 					Rs2GrandExchange.abortAllOffers(false);
 					stopQuesterWithReason(String.format(
 							"Not enough gp to retry %s at %,d gp each (need %,d, have %,d)",
-							canonicalName, newPrice, costNeeded, retryInvCoins));
+							canonicalName, newPrice, costNeeded, retryInvCoins), Level.WARN);
 					return true;
 				}
 
@@ -854,6 +875,22 @@ public class QuestScript extends Script {
 			}
 		}
 		return bestId;
+	}
+
+	static boolean isCoinsRequirement(Collection<Integer> itemIds) {
+		return itemIds != null && itemIds.contains(ItemID.COINS_995);
+	}
+
+	private boolean isMembersItem(int itemId) {
+		return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+			ItemComposition def = Microbot.getClient().getItemDefinition(itemId);
+			return def != null && def.isMembers();
+		}).orElse(false);
+	}
+
+	private boolean isOnMembersWorld() {
+		return Microbot.getClientThread().runOnClientThreadOptional(
+				() -> Microbot.getClient().getWorldType().contains(WorldType.MEMBERS)).orElse(true);
 	}
 
 	private int remainingQuantityNeeded(ItemRequirement itemRequirement) {
@@ -1228,8 +1265,12 @@ public class QuestScript extends Script {
 	}
 
 	private void stopQuesterWithReason(String reason) {
+		stopQuesterWithReason(reason, Level.ERROR);
+	}
+
+	private void stopQuesterWithReason(String reason, Level level) {
 		Microbot.status = reason;
-		Microbot.log("Quest helper stopped: " + reason, Level.ERROR);
+		Microbot.log("Quest helper stopped: " + reason, level);
 		if (Microbot.getConfigManager() != null) {
 			Microbot.getConfigManager().setConfiguration(
 					QuestHelperConfig.QUEST_HELPER_GROUP, "TurnOn", false);
