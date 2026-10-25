@@ -45,17 +45,26 @@ public class Cheerer
 
 	public static void createCheerers(RuneliteObjectManager runeliteObjectManager, Client client, ConfigManager configManager)
 	{
-		cheerers.clear();
-		createWOM(runeliteObjectManager, client);
-		createZoinkwiz(runeliteObjectManager, client);
+		tryCreateCheerers(runeliteObjectManager, client, configManager);
 	}
 
-	private static void createWOM(RuneliteObjectManager runeliteObjectManager, Client client)
+	static boolean tryCreateCheerers(RuneliteObjectManager runeliteObjectManager, Client client, ConfigManager configManager)
+	{
+		cheerers.clear();
+		Model wiseOldManModel = wiseOldManOutfit(client);
+		Model zoinkwizModel = zoinkwizOutfit(client);
+		if (wiseOldManModel == null || zoinkwizModel == null) return false;
+		createWOM(runeliteObjectManager, client, wiseOldManModel);
+		createZoinkwiz(runeliteObjectManager, client, zoinkwizModel);
+		return true;
+	}
+
+	private static void createWOM(RuneliteObjectManager runeliteObjectManager, Client client, Model model)
 	{
 		// Spawn the initial NPC in lumbridge.
 		// When the NPC is activated from the player completing a quest, we will always update the position anyway.
 		var spawnPos = new WorldPoint(3223, 3218, 0);
-		FakeNpc wiseOldMan = runeliteObjectManager.createFakeNpc("global", wiseOldManOutfit(client), spawnPos, AnimationID.EMOTE_CHEER);
+		FakeNpc wiseOldMan = runeliteObjectManager.createFakeNpc("global", model, spawnPos, AnimationID.EMOTE_CHEER);
 		wiseOldMan.setName("Wise Old Man");
 		wiseOldMan.setExamine("Loves questing.");
 		wiseOldMan.addExamineAction(runeliteObjectManager);
@@ -67,10 +76,12 @@ public class Cheerer
 	private static Model wiseOldManOutfit(Client client)
 	{
 		NPCComposition wom = client.getNpcDefinition(NpcID.WISE_OLD_MAN);
+		if (wom == null || wom.getModels() == null) return null;
 		int[] models = wom.getModels();
 		short[] coloursToReplace = wom.getColorToReplace();
 		short[] coloursToReplaceWith = wom.getColorToReplaceWith();
 		ModelData mdf = createModel(client, models); // feet?
+		if (mdf == null) return null;
 
 		if (coloursToReplace != null && coloursToReplaceWith != null && coloursToReplace.length == coloursToReplaceWith.length) {
 			for (int i=0; i < coloursToReplace.length; i++)
@@ -82,12 +93,12 @@ public class Cheerer
 			.light();
 	}
 
-	private static void createZoinkwiz(RuneliteObjectManager runeliteObjectManager, Client client)
+	private static void createZoinkwiz(RuneliteObjectManager runeliteObjectManager, Client client, Model model)
 	{
 		// Spawn the initial NPC in lumbridge.
 		// When the NPC is activated from the player completing a quest, we will always update the position anyway.
 		var spawnPos = new WorldPoint(3223, 3218, 0);
-		FakeNpc zoinkwiz = runeliteObjectManager.createFakeNpc("global", zoinkwizOutfit(client), spawnPos, AnimationID.EMOTE_CHEER);
+		FakeNpc zoinkwiz = runeliteObjectManager.createFakeNpc("global", model, spawnPos, AnimationID.EMOTE_CHEER);
 		zoinkwiz.setName("Zoinkwiz");
 		zoinkwiz.setExamine("Loves questing.");
 		zoinkwiz.addExamineAction(runeliteObjectManager);
@@ -101,13 +112,17 @@ public class Cheerer
 		short qpcDark = (short) -22440;
 		final int QUEST_CAPE_MALE = 18946;
 
-		ModelData cape = client.loadModelData(QUEST_CAPE_MALE).cloneColors()
+		ModelData capeData = client.loadModelData(QUEST_CAPE_MALE);
+		if (capeData == null) return null;
+		ModelData cape = capeData.cloneColors()
 			.recolor((short) -8256, qpcDark) // Outside trim
 			.recolor((short) -11353, JagexColor.rgbToHSL(Color.WHITE.getRGB(), 1.0d)); // Inside trim
 
 		ModelData mdf = createModel(client,
 				46603, 46606, 46607, 46608, 7207);
+		if (mdf == null) return null;
 		mdf = createModel(client, mdf, cape);
+		if (mdf == null) return null;
 
 		return mdf.cloneColors()
 			.light(64, 768, -50, -50, 10);
@@ -124,12 +139,14 @@ public class Cheerer
 		for (int i = 0; i < data.length; i++)
 		{
 			modelData[i] = client.loadModelData(data[i]);
+			if (modelData[i] == null) return null;
 		}
 		return client.mergeModels(modelData);
 	}
 
 	public static void activateCheerer(Client client, ChatMessageManager chatMessageManager)
 	{
+		if (cheerers.isEmpty() || client.getLocalPlayer() == null) return;
 		Random generator = new Random();
 		FakeNpc cheerer = cheerers.get(generator.nextInt(cheerers.size()));
 		WorldPoint playerPos = client.getLocalPlayer().getWorldLocation();

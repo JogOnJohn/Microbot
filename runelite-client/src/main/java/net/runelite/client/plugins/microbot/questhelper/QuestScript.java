@@ -899,8 +899,10 @@ public class QuestScript extends Script {
 	}
 
 	private boolean isOnMembersWorld() {
-		return Microbot.getClientThread().runOnClientThreadOptional(
-				() -> Microbot.getClient().getWorldType().contains(WorldType.MEMBERS)).orElse(true);
+		return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+			Set<WorldType> types = Microbot.getClient().getWorldType();
+			return types != null && types.contains(WorldType.MEMBERS);
+		}).orElse(false);
 	}
 
 	private int remainingQuantityNeeded(ItemRequirement itemRequirement) {
