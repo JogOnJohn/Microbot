@@ -922,6 +922,7 @@ public class Rs2GrandExchange {
     }
 
     static Pair<Widget, Integer> findSearchResult(Widget[] children, String search, boolean exact) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
         if (children == null || children.length == 0 || search == null) {
             return null;
         }
@@ -944,6 +945,7 @@ public class Rs2GrandExchange {
             return Pair.of(children[originalWidgetIndex], originalWidgetIndex);
         }
         return null;
+        }).orElse(null);
     }
 
     /**
