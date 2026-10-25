@@ -18,6 +18,19 @@ import java.util.regex.Pattern;
 
 @Slf4j
 public class Rs2UiHelper {
+    private static final ThreadLocal<Boolean> preparedPointer = new ThreadLocal<>();
+
+    /** Opt-in for a caller that has revalidated its pre-hover target. Other callers are unchanged. */
+    public static <T> T withPreparedPointer(java.util.function.Supplier<T> action) {
+        Boolean previous = preparedPointer.get();
+        preparedPointer.set(true);
+        try {
+            return action.get();
+        } finally {
+            if (previous == null) preparedPointer.remove();
+            else preparedPointer.set(previous);
+        }
+    }
 
     public static boolean isRectangleWithinViewport(Rectangle rectangle) {
         int viewportHeight = Microbot.getClient().getViewportHeight();
@@ -80,6 +93,12 @@ public class Rs2UiHelper {
 
     public static Point getClickingPoint(Rectangle rectangle, boolean randomize, boolean resolveFallback) {
         if (rectangle == null || (resolveFallback && isFallbackRectangle(rectangle))) return getRestingPoint();
+
+        if (Boolean.TRUE.equals(preparedPointer.get()) && !isFallbackRectangle(rectangle)) {
+            Point current = PointerState.get();
+            Rectangle visible = clipToCanvas(rectangle);
+            if (visible != null && visible.contains(current.getX(), current.getY())) return current;
+        }
 
         if (!randomize) return new Point((int) rectangle.getCenterX(), (int) rectangle.getCenterY());
 

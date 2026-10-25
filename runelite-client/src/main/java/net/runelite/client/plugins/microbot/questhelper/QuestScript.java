@@ -34,6 +34,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.shop.Rs2Shop;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+import net.runelite.client.plugins.microbot.util.walker.WalkerState;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
@@ -1516,13 +1517,13 @@ public class QuestScript extends Script {
                     targetTile = stepLocation;
             }
 
-            Rs2Walker.walkTo(targetTile, 3);
+            WalkerState walkState = Rs2Walker.walkWithState(targetTile, 3);
 
             if (ShortestPathPlugin.getPathfinder() != null) {
                 var path = ShortestPathPlugin.getPathfinder().getPath();
                 if (path.get(path.size() - 1).distanceTo(step.getDefinedPoint().getWorldPoint()) <= 1)
                     return false;
-            } else
+            } else if (walkState == WalkerState.ARRIVED || mainScheduledFuture.isCancelled() || !hasLineOfSightToObject(object))
                 return false;
         }
 
