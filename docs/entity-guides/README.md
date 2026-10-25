@@ -33,6 +33,11 @@ Resizable viewports include interface overlays. Scene-walk clicks must validate
 and dispatch the same small click area outside visible sidebar/chat/minimap
 bounds; an unavailable snapshot must use the existing minimap fallback.
 
+An open deposit box can close before its widget is fetched. Capture and null-check
+the widget before creating a singleton child list; never pass null into `List.of`.
+Camera visibility and viewport checks must read projection/viewport state on the
+client thread and fail closed when the snapshot cannot be obtained.
+
 ## Format
 
 Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use

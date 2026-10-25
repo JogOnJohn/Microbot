@@ -34,6 +34,8 @@ public class Rs2CameraTileOnScreenTest {
     private MockedStatic<Microbot> microbot;
     private Client client;
     private WorldView worldView;
+    private ClientThread clientThread;
+    private final java.util.concurrent.atomic.AtomicBoolean onClientThread = new java.util.concurrent.atomic.AtomicBoolean();
 
     @Before
     public void setUp() {
@@ -48,10 +50,12 @@ public class Rs2CameraTileOnScreenTest {
         when(client.getViewportWidth()).thenReturn(765);
         when(client.getViewportHeight()).thenReturn(503);
 
-        ClientThread clientThread = mock(ClientThread.class);
+        clientThread = mock(ClientThread.class);
         when(clientThread.runOnClientThreadOptional(any())).thenAnswer(inv -> {
             Callable<?> callable = inv.getArgument(0);
-            return Optional.ofNullable(callable.call());
+            boolean previous = onClientThread.getAndSet(true);
+            try { return Optional.ofNullable(callable.call()); }
+            finally { onClientThread.set(previous); }
         });
 
         microbot = Mockito.mockStatic(Microbot.class);
@@ -110,5 +114,28 @@ public class Rs2CameraTileOnScreenTest {
 
     private static LocalPoint sceneTile(int sceneX, int sceneY) {
         return new LocalPoint(sceneX * 128 + 64, sceneY * 128 + 64, WORLD_VIEW_ID);
+    }
+
+    @Test
+    public void viewportAndProjectionReadsStayOnClientThread() {
+        org.mockito.Mockito.doAnswer(inv -> { org.junit.Assert.assertTrue(onClientThread.get()); return 765; }).when(client).getViewportWidth();
+        org.mockito.Mockito.doAnswer(inv -> { org.junit.Assert.assertTrue(onClientThread.get()); return 503; }).when(client).getViewportHeight();
+        LocalPoint tile = sceneTile(50, 50);
+        try (MockedStatic<net.runelite.api.Perspective> perspective = Mockito.mockStatic(net.runelite.api.Perspective.class)) {
+            perspective.when(() -> net.runelite.api.Perspective.getCanvasTilePoly(client, tile))
+                    .thenReturn(new java.awt.Polygon(new int[]{100, 110, 110, 100}, new int[]{100, 100, 110, 110}, 4));
+            perspective.when(() -> net.runelite.api.Perspective.localToCanvas(client, tile, 0))
+                    .thenReturn(new net.runelite.api.Point(100, 100));
+            org.junit.Assert.assertTrue(Rs2Camera.isTileOnScreen(tile));
+            org.junit.Assert.assertTrue(Rs2Camera.isTileCenteredOnScreen(tile, 100));
+        }
+    }
+
+    @Test
+    public void unavailableClientThreadFailsVisibilityClosed() {
+        doReturn(Optional.empty()).when(clientThread).runOnClientThreadOptional(any());
+        assertFalse(Rs2Camera.isTileOnScreen(sceneTile(50, 50)));
+        assertFalse(Rs2Camera.isTileCenteredOnScreen(sceneTile(50, 50), 100));
+        verify(client, never()).getViewportWidth();
     }
 }

@@ -33,13 +33,16 @@ public class Rs2UiHelper {
     }
 
     public static boolean isRectangleWithinViewport(Rectangle rectangle) {
-        int viewportHeight = Microbot.getClient().getViewportHeight();
-        int viewportWidth = Microbot.getClient().getViewportWidth();
+        if (rectangle == null) return false;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            int viewportHeight = Microbot.getClient().getViewportHeight();
+            int viewportWidth = Microbot.getClient().getViewportWidth();
 
-        return !(rectangle.getX() > (double) viewportWidth) &&
-                !(rectangle.getY() > (double) viewportHeight) &&
-                !(rectangle.getX() < 0.0) &&
-                !(rectangle.getY() < 0.0);
+            return !(rectangle.getX() > (double) viewportWidth) &&
+                    !(rectangle.getY() > (double) viewportHeight) &&
+                    !(rectangle.getX() < 0.0) &&
+                    !(rectangle.getY() < 0.0);
+        }).orElse(false);
     }
 
     public static boolean isRectangleWithinCanvas(Rectangle rectangle) {
