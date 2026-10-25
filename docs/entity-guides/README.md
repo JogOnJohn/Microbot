@@ -27,6 +27,19 @@ Widget child arrays are live scene data. Read nested children through
 `Rs2Widget.getNestedChildrenSnapshot` before traversing them off the client
 thread; a timed-out read returns an empty array, not stale children.
 
+Minigame grouping/dropdown widgets can disappear between polls. Re-query and read
+their text/listeners on the client thread; an unobserved selection or animation
+must fail the transport rather than clicking a teleport for the previous choice.
+
+Resizable viewports include interface overlays. Scene-walk clicks must validate
+and dispatch the same small click area outside visible sidebar/chat/minimap
+bounds; an unavailable snapshot must use the existing minimap fallback.
+
+An open deposit box can close before its widget is fetched. Capture and null-check
+the widget before creating a singleton child list; never pass null into `List.of`.
+Camera visibility and viewport checks must snapshot viewport dimensions on the
+client thread and fail closed when those dimensions cannot be obtained.
+
 ## Format
 
 Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use
