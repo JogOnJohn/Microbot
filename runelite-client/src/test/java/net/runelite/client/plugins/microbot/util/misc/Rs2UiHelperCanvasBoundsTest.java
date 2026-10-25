@@ -23,6 +23,29 @@ import static org.mockito.ArgumentMatchers.any;
 
 public class Rs2UiHelperCanvasBoundsTest {
 
+    @Test
+    public void preparedPointerIsReusedOnlyInsideLiveVisibleTarget() {
+        PointerState.setFromBot(24, 26);
+        Rectangle target = new Rectangle(10, 10, 40, 40);
+        assertEquals(new Point(24, 26), Rs2UiHelper.withPreparedPointer(
+                () -> Rs2UiHelper.getClickingPoint(target, true)));
+        PointerState.setFromBot(500, 500);
+        assertEquals(new Point(30, 30), Rs2UiHelper.withPreparedPointer(
+                () -> Rs2UiHelper.getClickingPoint(target, false)));
+    }
+
+    @Test
+    public void preparedPointerScopeIsClearedEvenWhenActionThrows() {
+        PointerState.setFromBot(24, 26);
+        try {
+            Rs2UiHelper.withPreparedPointer(() -> { throw new IllegalStateException("cancelled"); });
+            throw new AssertionError("expected cancellation");
+        } catch (IllegalStateException expected) {
+            assertEquals("cancelled", expected.getMessage());
+        }
+        assertEquals(new Point(30, 30), Rs2UiHelper.getClickingPoint(new Rectangle(10, 10, 40, 40), false));
+    }
+
 	private Object previousClient;
 	private Object previousClientThread;
 

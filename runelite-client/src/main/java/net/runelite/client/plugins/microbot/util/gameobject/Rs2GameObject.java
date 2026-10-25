@@ -1783,6 +1783,8 @@ public class Rs2GameObject {
 
     public static boolean clickObject(TileObject object, String action) {
         if (object == null) return false;
+        WorldView objectWorldView = object.getWorldView();
+        if (objectWorldView == null) return false;
         // Use LocalPoint-based distance when the object is in the current scene (e.g. inside a
         // POH instance, where Rs2Player.getWorldLocation() returns the overworld-template tile
         // and distanceTo() against an instance world point yields Integer.MAX_VALUE, falsely
@@ -1895,7 +1897,7 @@ public class Rs2GameObject {
 
             int worldViewId = WorldView.TOPLEVEL;
 
-            if (!object.getWorldView().isTopLevel()) {
+            if (!objectWorldView.isTopLevel()) {
                 var worldView =Microbot.getClientThread().invoke(() ->  Microbot.getClient().getLocalPlayer().getWorldView());
                 if (worldView == null) {
                     worldViewId = Microbot.getClient().getTopLevelWorldView().getId();
@@ -1924,6 +1926,7 @@ public class Rs2GameObject {
 
         } catch (Exception ex) {
             Microbot.log("Failed to interact with object " + ex.getMessage());
+            return false;
         }
 
         return true;

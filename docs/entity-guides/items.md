@@ -1,5 +1,10 @@
 # Items — Entity Guide
 
+Prepared-pointer interactions may opt into `Rs2UiHelper.withPreparedPointer` only
+after checking the current target shape/item slot. The scope reuses a pointer only
+inside the freshly supplied visible bounds, restores its prior value in `finally`,
+and never changes the default movement policy for other callers.
+
 Gotchas when interacting with items in inventory, bank, ground, equipment, shops, or deposit box.
 
 Covers utilities under:
