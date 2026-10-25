@@ -41,11 +41,11 @@ public class Rs2WidgetFindWidgetsWithActionThreadTest {
         clientThread = mock(ClientThread.class);
         when(clientThread.runOnClientThreadOptional(any())).thenAnswer(inv -> {
             Callable<?> callable = inv.getArgument(0);
-            onClientThread.set(true);
+            boolean previous = onClientThread.getAndSet(true);
             try {
                 return Optional.ofNullable(callable.call());
             } finally {
-                onClientThread.set(false);
+                onClientThread.set(previous);
             }
         });
         microbot = Mockito.mockStatic(Microbot.class);
@@ -57,6 +57,27 @@ public class Rs2WidgetFindWidgetsWithActionThreadTest {
     @After
     public void tearDown() {
         microbot.close();
+    }
+
+    @Test
+    public void nestedChildrenAreReadOnClientThreadAndCopied() {
+        Widget parent = mock(Widget.class);
+        Widget[] original = {mock(Widget.class)};
+        when(parent.getNestedChildren()).thenAnswer(inv -> {
+            assertTrue(onClientThread.get());
+            return original;
+        });
+        Widget[] snapshot = Rs2Widget.getNestedChildrenSnapshot(parent);
+        assertEquals(original[0], snapshot[0]);
+        assertFalse(original == snapshot);
+    }
+
+    @Test
+    public void nestedChildrenTimeoutFailsClosed() {
+        Widget parent = mock(Widget.class);
+        doReturn(Optional.empty()).when(clientThread).runOnClientThreadOptional(any());
+        assertEquals(0, Rs2Widget.getNestedChildrenSnapshot(parent).length);
+        verify(parent, org.mockito.Mockito.never()).getNestedChildren();
     }
 
     private Widget[] requireClientThread(Widget[] value) {

@@ -21,6 +21,10 @@ Run-orb energy, geometry, and pending-click semantics: [movement gotcha 21](move
 
 A missing scene tile means no path: [movement gotcha 29](movement.md#29-null-check-a-scene-tile-before-pathing-from-or-to-it).
 
+Widget child arrays are live scene data. Read nested children through
+`Rs2Widget.getNestedChildrenSnapshot` before traversing them off the client
+thread; a timed-out read returns an empty array, not stale children.
+
 ## Format
 
 Shortest-path spell labels may include house `(Inside)` / `(Outside)` suffixes. Use

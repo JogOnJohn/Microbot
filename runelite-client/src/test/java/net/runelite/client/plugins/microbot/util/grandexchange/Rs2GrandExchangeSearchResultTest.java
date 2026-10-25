@@ -1,6 +1,14 @@
 package net.runelite.client.plugins.microbot.util.grandexchange;
 
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.callback.ClientThread;
+import net.runelite.client.plugins.microbot.Microbot;
+import org.junit.Before;
+import org.junit.After;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import java.util.Optional;
+import java.util.concurrent.Callable;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Test;
 
@@ -11,6 +19,21 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class Rs2GrandExchangeSearchResultTest {
+	private MockedStatic<Microbot> microbot;
+
+	@Before
+	public void setUp() {
+		ClientThread thread = mock(ClientThread.class);
+		when(thread.runOnClientThreadOptional(org.mockito.ArgumentMatchers.any())).thenAnswer(inv ->
+			Optional.ofNullable(((Callable<?>) inv.getArgument(0)).call()));
+		microbot = Mockito.mockStatic(Microbot.class);
+		microbot.when(Microbot::getClientThread).thenReturn(thread);
+	}
+
+	@After
+	public void tearDown() {
+		microbot.close();
+	}
 	private static Widget widget(String text) {
 		Widget widget = mock(Widget.class);
 		when(widget.getText()).thenReturn(text);

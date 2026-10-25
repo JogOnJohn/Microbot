@@ -87,6 +87,9 @@ public class Rs2EquipmentInvokeMenuTest {
         Client client = mock(Client.class);
         when(client.getCanvasWidth()).thenReturn(765);
         when(client.getCanvasHeight()).thenReturn(503);
+        net.runelite.client.callback.ClientThread thread = mock(net.runelite.client.callback.ClientThread.class);
+        when(thread.runOnClientThreadOptional(any())).thenAnswer(inv ->
+                java.util.Optional.ofNullable(((java.util.concurrent.Callable<?>) inv.getArgument(0)).call()));
 
         try (MockedStatic<Rs2Equipment> equipment = Mockito.mockStatic(Rs2Equipment.class, Answers.CALLS_REAL_METHODS);
              MockedStatic<Microbot> microbot = Mockito.mockStatic(Microbot.class);
@@ -95,6 +98,7 @@ public class Rs2EquipmentInvokeMenuTest {
         {
             equipment.when(() -> Rs2Equipment.get(EquipmentInventorySlot.HEAD)).thenReturn(item);
             microbot.when(Microbot::getClient).thenReturn(client);
+            microbot.when(Microbot::getClientThread).thenReturn(thread);
             tabs.when(() -> Rs2Tab.switchTo(InterfaceTab.EQUIPMENT)).thenReturn(true);
             widgets.when(() -> Rs2Widget.getWidget(anyInt(), anyInt())).thenReturn(null);
 

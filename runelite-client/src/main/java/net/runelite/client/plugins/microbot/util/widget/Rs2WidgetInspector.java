@@ -195,7 +195,7 @@ public class Rs2WidgetInspector {
 		List<Widget> all = new ArrayList<>();
 		addNonNull(all, widget.getStaticChildren());
 		addNonNull(all, widget.getDynamicChildren());
-		addNonNull(all, widget.getNestedChildren());
+		addNonNull(all, Rs2Widget.getNestedChildrenSnapshot(widget));
 		return all;
 	}
 
@@ -217,7 +217,7 @@ public class Rs2WidgetInspector {
 		if (children != null) count += countVisible(children);
 		children = widget.getDynamicChildren();
 		if (children != null) count += countVisible(children);
-		children = widget.getNestedChildren();
+		children = Rs2Widget.getNestedChildrenSnapshot(widget);
 		if (children != null) count += countVisible(children);
 		return count;
 	}

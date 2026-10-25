@@ -365,12 +365,16 @@ public class Rs2Equipment {
                 identifier = NewMenuEntry.findIdentifier(subMenuEntry.getValue() + 1, mainMenuIndex + 2);
             }
         }
-        Rectangle rectangle = new Rectangle(1, 1, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight());
+        Rectangle rectangle = Microbot.getClientThread().runOnClientThreadOptional(() ->
+                new Rectangle(1, 1, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()))
+                .orElse(null);
+        if (rectangle == null) return false;
         int[] slotParams = SLOT_PARAMS.get(rs2Item.getSlot());
         if (slotParams != null) {
             param1 = slotParams[0];
             rectangle = getSafeBounds(InterfaceID.WORNITEMS, slotParams[1]);
         }
+        if (rectangle == null) return false;
 
         Microbot.doInvoke(new NewMenuEntry()
                 .param0(param0)
@@ -386,6 +390,7 @@ public class Rs2Equipment {
     }
 
     private static Rectangle getSafeBounds(int interfaceId, int childId) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
         Widget widget = Rs2Widget.getWidget(interfaceId, childId);
         if (widget != null && widget.getBounds() != null) {
             return widget.getBounds();
@@ -393,5 +398,6 @@ public class Rs2Equipment {
         return new Rectangle(1, 1,
                 Microbot.getClient().getCanvasWidth(),
                 Microbot.getClient().getCanvasHeight());
+        }).orElse(null);
     }
 }
