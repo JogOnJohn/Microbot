@@ -79,7 +79,10 @@ public class Rs2ActorModel implements Actor
         }
         return Microbot.getClientThread().invoke(() -> {
             WorldView worldView = actor.getWorldView();
-            if (worldView != null && !worldView.isTopLevel()) {
+            if (worldView == null) {
+                return null;
+            }
+            if (!worldView.isTopLevel()) {
                 return projectActorLocationToMainWorld();
             }
             return actor.getWorldLocation();
