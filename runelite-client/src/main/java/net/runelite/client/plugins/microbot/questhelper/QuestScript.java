@@ -47,6 +47,7 @@ import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel
 import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,6 +57,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
@@ -63,7 +65,7 @@ import org.slf4j.event.Level;
 import net.runelite.api.coords.WorldArea;
 
 public class QuestScript extends Script {
-    public static double version = 0.5;
+    public static double version = 0.6;
 
     private static final long MISSING_REQUIREMENT_NOTIFY_INTERVAL_MS = 10_000L;
     private static final Map<Integer, Long> lastMissingRequirementNotice = new HashMap<>();
@@ -474,6 +476,13 @@ public class QuestScript extends Script {
 		Map<ItemRequirement, Integer> buyPrimaryIds = new HashMap<>();
 
 		for (ItemRequirement ir : toBuy) {
+			if (isCoinsRequirement(ir.getAllIds())) {
+				Rs2Bank.closeBank();
+				stopQuesterWithReason(String.format(
+						"Not enough coins for this quest step (need %,d gp in total)", ir.getQuantity()), Level.WARN);
+				return true;
+			}
+
 			int primaryId = tradablePrimaryId(ir);
 			if (primaryId == -1) {
 				Rs2Bank.closeBank();
@@ -481,10 +490,19 @@ public class QuestScript extends Script {
 				return true;
 			}
 
+			if (isMembersItem(primaryId) && !isOnMembersWorld()) {
+				Rs2Bank.closeBank();
+				stopQuesterWithReason(ir.getName()
+						+ " is members-only and can't be bought on the Grand Exchange from a free-to-play world.", Level.WARN);
+				return true;
+			}
+
 			int basePrice = fetchInstabuyReferencePrice(primaryId);
 			if (basePrice <= 0) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason("Failed to fetch Grand Exchange price for: " + ir.getName());
+				stopQuesterWithReason("No Grand Exchange price for " + ir.getName()
+						+ ": it isn't sold on the Grand Exchange, or the price service is unreachable. Get it in-game and restart.",
+						Level.WARN);
 				return true;
 			}
 
@@ -504,18 +522,41 @@ public class QuestScript extends Script {
 			Rs2Bank.closeBank();
 			stopQuesterWithReason(String.format(
 					"Not enough gp to buy missing quest items (need %,d gp, have %,d gp)",
-					totalBuyCost, availableGp));
+					totalBuyCost, availableGp), Level.WARN);
 			return true;
 		}
 
 		if (!toBuy.isEmpty()) {
 			int freeSlots = Rs2GrandExchange.getAvailableSlotsCount();
-			if (freeSlots < toBuy.size()) {
+			if (freeSlots <= 0) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason(String.format(
-						"Not enough free Grand Exchange slots for missing quest items (need %d, have %d)",
-						toBuy.size(), freeSlots));
+				if (Rs2GrandExchange.hasBoughtOffer()) {
+					Microbot.status = "Quest helper: collecting finished Grand Exchange offers";
+					Rs2GrandExchange.walkToGrandExchange();
+					Rs2GrandExchange.openExchange();
+					sleepUntil(Rs2GrandExchange::isOpen, 15_000);
+					if (Rs2GrandExchange.isOpen()) {
+						collectPurchasedItemsViaBank(missing);
+						if (Rs2GrandExchange.getAvailableSlotsCount() <= 0) {
+							stopQuesterWithReason(
+									"Could not collect finished Grand Exchange offers (bank full?). Collect them manually and restart.");
+						}
+					}
+					return true;
+				}
+				stopQuesterWithReason(
+						"No free Grand Exchange slots for missing quest items. Free a slot and restart.", Level.WARN);
 				return true;
+			}
+			int missingCount = toBuy.size();
+			if (trimToGrandExchangeSlots(toBuy, freeSlots)) {
+				Microbot.log(String.format(
+						"Quest helper: %d missing quest items but only %d free Grand Exchange slots; buying %d now and the rest afterwards",
+						missingCount, freeSlots, toBuy.size()), Level.INFO);
+				totalBuyCost = 0L;
+				for (ItemRequirement ir : toBuy) {
+					totalBuyCost += (long) offerPrices.get(ir) * buyQuantities.get(ir);
+				}
 			}
 		}
 
@@ -525,6 +566,7 @@ public class QuestScript extends Script {
 			return true;
 		}
 
+		boolean bankWithdrawalMissed = false;
 		for (ItemRequirement ir : fromBank) {
 			Integer idToWithdraw = bankWithdrawId.get(ir);
 			if (idToWithdraw == null || idToWithdraw <= 0) {
@@ -539,7 +581,15 @@ public class QuestScript extends Script {
 			if (!sleepUntil(() -> hasItemRequirementOnPlayer(ir), 2_000)) {
 				Microbot.log("Quest helper: bank withdrawal for " + ir.getName() + " did not land in time",
 						Level.WARN);
+				bankWithdrawalMissed = true;
 			}
+		}
+
+		if (bankWithdrawalMissed && Rs2Inventory.isFull()) {
+			Rs2Bank.closeBank();
+			stopQuesterWithReason("Inventory is full, so missing quest items can't be withdrawn. Free some slots and restart.",
+					Level.WARN);
+			return true;
 		}
 
 		if (!toBuy.isEmpty()) {
@@ -556,9 +606,14 @@ public class QuestScript extends Script {
 			long invCoinsAfter = Rs2Inventory.itemQuantity(ItemID.COINS_995);
 			if (invCoinsAfter < requiredCoins) {
 				Rs2Bank.closeBank();
-				stopQuesterWithReason(String.format(
-						"Bank withdrawal failed to supply enough coins (need %,d gp, have %,d gp in inventory)",
-						requiredCoins, invCoinsAfter));
+				if (invCoinsAfter == 0 && Rs2Inventory.isFull()) {
+					stopQuesterWithReason("Inventory is full, so coins for the Grand Exchange can't be withdrawn. Free a slot and restart.",
+							Level.WARN);
+				} else {
+					stopQuesterWithReason(String.format(
+							"Bank withdrawal failed to supply enough coins (need %,d gp, have %,d gp in inventory)",
+							requiredCoins, invCoinsAfter));
+				}
 				return true;
 			}
 		}
@@ -679,7 +734,7 @@ public class QuestScript extends Script {
 					Rs2GrandExchange.abortAllOffers(false);
 					stopQuesterWithReason(String.format(
 							"Not enough gp to retry %s at %,d gp each (need %,d, have %,d)",
-							canonicalName, newPrice, costNeeded, retryInvCoins));
+							canonicalName, newPrice, costNeeded, retryInvCoins), Level.WARN);
 					return true;
 				}
 
@@ -830,6 +885,24 @@ public class QuestScript extends Script {
 			}
 		}
 		return bestId;
+	}
+
+	static boolean isCoinsRequirement(Collection<Integer> itemIds) {
+		return itemIds != null && itemIds.contains(ItemID.COINS_995);
+	}
+
+	private boolean isMembersItem(int itemId) {
+		return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+			ItemComposition def = Microbot.getClient().getItemDefinition(itemId);
+			return def != null && def.isMembers();
+		}).orElse(false);
+	}
+
+	private boolean isOnMembersWorld() {
+		return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+			Set<WorldType> types = Microbot.getClient().getWorldType();
+			return types != null && types.contains(WorldType.MEMBERS);
+		}).orElse(false);
 	}
 
 	private int remainingQuantityNeeded(ItemRequirement itemRequirement) {
@@ -1204,8 +1277,12 @@ public class QuestScript extends Script {
 	}
 
 	private void stopQuesterWithReason(String reason) {
+		stopQuesterWithReason(reason, Level.ERROR);
+	}
+
+	private void stopQuesterWithReason(String reason, Level level) {
 		Microbot.status = reason;
-		Microbot.log("Quest helper stopped: " + reason, Level.ERROR);
+		Microbot.log("Quest helper stopped: " + reason, level);
 		if (Microbot.getConfigManager() != null) {
 			Microbot.getConfigManager().setConfiguration(
 					QuestHelperConfig.QUEST_HELPER_GROUP, "TurnOn", false);
@@ -1715,17 +1792,25 @@ public class QuestScript extends Script {
     }
 
 	private String chooseCorrectItemOption(QuestStep step, int itemId) {
-		var actions = Rs2Inventory.get(itemId).getInventoryActions();
+		return chooseItemAction(step.getText(), Rs2Inventory.get(itemId).getInventoryActions());
+	}
 
-		for (var action : actions) {
-			if (action != null && step.getText().stream().anyMatch(x -> x.toLowerCase().contains(action.toLowerCase())))
-				return action;
+	static boolean trimToGrandExchangeSlots(List<?> toBuy, int freeSlots) {
+		if (toBuy.size() <= freeSlots) {
+			return false;
 		}
+		toBuy.subList(Math.max(0, freeSlots), toBuy.size()).clear();
+		return true;
+	}
 
-		// Fallback: first non-empty inventory action (the item's default left-click).
-		for (var action : actions) {
-			if (action != null && !action.isEmpty())
-				return action;
+	static String chooseItemAction(List<String> stepText, String[] actions) {
+		if (stepText != null && actions != null) {
+			for (var action : actions) {
+				if (action == null || action.isEmpty()) continue;
+				Pattern word = Pattern.compile("(?<![a-z])" + Pattern.quote(action.toLowerCase()) + "(?![a-z])");
+				if (stepText.stream().anyMatch(x -> x != null && word.matcher(x.toLowerCase()).find()))
+					return action;
+			}
 		}
 
 		return "use";

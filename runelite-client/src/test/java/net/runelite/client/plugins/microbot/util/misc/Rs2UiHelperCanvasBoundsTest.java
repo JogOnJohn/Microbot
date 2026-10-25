@@ -73,6 +73,21 @@ public class Rs2UiHelperCanvasBoundsTest {
 	public void unavailableClientThreadSnapshotRejectsClipping() {
 		doReturn(java.util.Optional.empty()).when(Microbot.getClientThread()).runOnClientThreadOptional(any());
 		assertNull(Rs2UiHelper.clipToCanvas(new Rectangle(10, 10, 20, 20)));
+		assertFalse(Rs2UiHelper.isRectangleWithinViewport(new Rectangle(10, 10, 20, 20)));
+	}
+
+	@Test
+	public void viewportCheckMarshalsBeforeReadingDimensions() {
+		java.util.concurrent.atomic.AtomicBoolean inside = new java.util.concurrent.atomic.AtomicBoolean();
+		org.mockito.Mockito.doAnswer(inv -> {
+			inside.set(true);
+			try { return java.util.Optional.ofNullable(((java.util.concurrent.Callable<?>) inv.getArgument(0)).call()); }
+			finally { inside.set(false); }
+		}).when(Microbot.getClientThread()).runOnClientThreadOptional(any());
+		org.mockito.Mockito.doAnswer(inv -> { assertTrue(inside.get()); return 800; }).when(Microbot.getClient()).getViewportWidth();
+		org.mockito.Mockito.doAnswer(inv -> { assertTrue(inside.get()); return 600; }).when(Microbot.getClient()).getViewportHeight();
+		assertTrue(Rs2UiHelper.isRectangleWithinViewport(new Rectangle(10, 10, 20, 20)));
+		assertFalse(Rs2UiHelper.isRectangleWithinViewport(null));
 	}
 
 	@Test
