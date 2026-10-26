@@ -589,3 +589,10 @@ live footprint. A mapped access tile can be reachable on the wrong side of an
 internal door; its presence alone cannot authorize the click. Keep animation
 waits bounded and release pending ownership before the plugin changes state on
 a completion chat message or final hotspot effect.
+
+## 17. Clear exhausted interaction state without changing recovery ownership
+
+When an NPC interaction exhausts its existing retry limit, capture the attempt
+count and clear the can't-reach latch before reporting the failure. Leave the
+scripts paused for operator review. Script shutdown clears the same stale state;
+neither operation changes route ownership, retry thresholds or movement dispatch.
