@@ -693,3 +693,10 @@ It must preserve authoritative work effects and never reset retries indefinitely
 Barbara's clock at (1749,3536,0) reached access (1749,3537,0) but issued no click
 for two minutes on 23 October. A fresh operation then passed all readiness checks;
 the original rejected predicate was not recorded, so its cause remains unproven.
+
+## 17. Clear exhausted interaction state without changing recovery ownership
+
+When an NPC interaction exhausts its existing retry limit, capture the attempt
+count and clear the can't-reach latch before reporting the failure. Leave the
+scripts paused for operator review. Script shutdown clears the same stale state;
+neither operation changes route ownership, retry thresholds or movement dispatch.
