@@ -199,6 +199,13 @@ public class Microbot {
 
     public static int cantReachTargetRetries = 0;
 
+    public static int resetCantReachTargetState() {
+        int retries = cantReachTargetRetries;
+        cantReachTarget = false;
+        cantReachTargetRetries = 0;
+        return retries;
+    }
+
     @Getter
     private static final BlockingEventManager blockingEventManager = new BlockingEventManager();
 

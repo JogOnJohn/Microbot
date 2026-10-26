@@ -99,6 +99,7 @@ public abstract class Script extends Global implements IScript {
             // most scripts catch-and-continue without reaching here.
             Rs2Keyboard.releaseHeldKeys();
             Microbot.pauseAllScripts.set(false);
+            Microbot.resetCantReachTargetState();
             Rs2Walker.disableTeleports = false;
             Microbot.getSpecialAttackConfigs().reset();
         }
