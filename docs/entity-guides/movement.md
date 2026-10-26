@@ -524,3 +524,10 @@ timeout; preserve the existing proximity and progress thresholds.
 
 **Defensive check:** `Rs2WalkerLifecycleRuntimeMarkerTest` simulates a cleared
 shared marker; `Rs2WalkerProximityWaitTest` covers absent and valid position samples.
+
+## 17. Clear exhausted interaction state without changing recovery ownership
+
+When an NPC interaction exhausts its existing retry limit, capture the attempt
+count and clear the can't-reach latch before reporting the failure. Leave the
+scripts paused for operator review. Script shutdown clears the same stale state;
+neither operation changes route ownership, retry thresholds or movement dispatch.
