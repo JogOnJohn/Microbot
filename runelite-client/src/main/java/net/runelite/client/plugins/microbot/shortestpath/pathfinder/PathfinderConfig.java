@@ -1219,7 +1219,10 @@ public class PathfinderConfig {
 
         // Start with putting all the TSV imported persistent transports
         for (var entry : allTransports.entrySet()) {
-            mergedTransports.put(entry.getKey(), new HashSet<>(entry.getValue()));
+            Set<Transport> persistent = entry.getValue().stream()
+                .filter(t -> !net.runelite.client.plugins.microbot.shortestpath.PohHouseConfiguration.isImportedFacility(t))
+                .collect(Collectors.toSet());
+            if (!persistent.isEmpty()) mergedTransports.put(entry.getKey(), persistent);
         }
         logTransportMergeStage("persistent_copy", stageStart);
 
@@ -2388,6 +2391,7 @@ public class PathfinderConfig {
                 leaguesCtx.getUnlockedRegions().hashCode(),
                 usePoh,
                 useWorld330MaxHouse,
+                net.runelite.client.plugins.microbot.shortestpath.PohHouseConfiguration.load().fingerprint(),
                 client != null ? client.getWorld() : 0,
                 effectiveTarget,
                 PohTeleports.isInHouse(),

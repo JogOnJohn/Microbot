@@ -23,13 +23,21 @@ public class PohTransport extends Transport {
     @Getter
     private final PohTeleport teleport;
 
+    @Getter
+    private final boolean hostedHouse;
+
     public PohTransport(WorldPoint exitPortalPoint, PohTeleport teleport) {
+        this(exitPortalPoint, teleport, false);
+    }
+
+    public PohTransport(WorldPoint exitPortalPoint, PohTeleport teleport, boolean hostedHouse) {
         super(
                 java.util.Objects.requireNonNull(exitPortalPoint, "exitPortalPoint is null"),
                 java.util.Objects.requireNonNull(teleport, "teleport is null").getDestination(),
                 teleport.displayInfo(), TransportType.POH, true, teleport.getDuration()
         );
         this.teleport = teleport;
+        this.hostedHouse = hostedHouse;
     }
 
     /**
