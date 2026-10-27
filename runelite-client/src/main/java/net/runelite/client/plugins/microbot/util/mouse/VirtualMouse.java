@@ -10,6 +10,7 @@ import net.runelite.client.plugins.microbot.util.input.PointerState;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.client.plugins.microbot.util.misc.SceneClickSafety;
 
 import javax.inject.Inject;
 import java.awt.*;
@@ -52,10 +53,10 @@ public class VirtualMouse extends Mouse {
     }
 
     private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick) {
-        handleClick(emit, point, rightClick, false, () -> { });
+        handleClick(emit, point, rightClick, false, () -> { }, () -> true);
     }
 
-    private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick, boolean quick, Runnable beforePress) {
+    private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick, boolean quick, Runnable beforePress, java.util.function.BooleanSupplier valid) {
         int button = rightClick ? MouseEvent.BUTTON3 : MouseEvent.BUTTON1;
         // A human clicking where the pointer already is sends no fresh MOVED, so emit one only
         // when it is not there, which happens when NaturalMouse was skipped. No ENTERED/EXITED:
@@ -66,6 +67,7 @@ public class VirtualMouse extends Mouse {
                 sleep(Rs2Random.logNormalBounded(QUICK_CLICK_SETTLE_MIN_MS, QUICK_CLICK_SETTLE_MAX_MS));
             }
         }
+        if (!valid.getAsBoolean()) return;
         beforePress.run();
         emit.press(point.getX(), point.getY(), button);
         sleep(quick
@@ -122,34 +124,39 @@ public class VirtualMouse extends Mouse {
 
         runGesture(() -> InputLoop.run(emit -> {
             Point newPoint = point;
-            if (!quick && shouldMoveNaturally(point)) {
-                Microbot.naturalMouse.moveTo(point.getX(), point.getY());
-
-                if (Rs2UiHelper.hasActor(entry)) {
-                    newPoint = retarget(Rs2UiHelper.getActorClickbox(entry.getActor()), newPoint);
+            boolean scene = SceneClickSafety.appliesTo(entry);
+            if (scene) {
+                Rectangle clear = SceneClickSafety.forEntry(entry, newPoint);
+                if (clear == null) return;
+                if (!SceneClickSafety.contains(clear, newPoint)) {
+                    newPoint = Rs2UiHelper.getClickingPoint(clear, true, false);
                 }
-
-                if (Rs2UiHelper.isGameObject(entry)) {
-                    newPoint = retarget(Rs2UiHelper.getObjectClickbox(entry.getGameObject()), newPoint);
+            }
+            if (!quick && shouldMoveNaturally(newPoint)) {
+                Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
+                if (scene) {
+                    java.awt.Point at = Microbot.getMouse().getMousePosition();
+                    Point preferred = at == null ? newPoint : new Point(at.x, at.y);
+                    newPoint = retarget(SceneClickSafety.forEntry(entry, preferred), newPoint);
+                    if (newPoint == null) return;
                 }
             }
 
-            handleClick(emit, newPoint, rightClick, quick, () -> Microbot.targetMenu = entry);
+            final Point clickPoint = newPoint;
+            java.util.function.BooleanSupplier valid = () -> !scene || SceneClickSafety.permits(entry, clickPoint);
+            if (!valid.getAsBoolean()) return;
+            handleClick(emit, clickPoint, rightClick, quick, () -> Microbot.targetMenu = entry, valid);
         }));
 
         return this;
     }
 
 
-    private static Point retarget(Rectangle clickbox, Point current) {
-        if (Rs2UiHelper.isFallbackRectangle(clickbox)) {
-            return current;
-        }
-        Rectangle visible = Rs2UiHelper.clipToCanvas(clickbox);
-        if (visible == null || visible.contains(Microbot.getMouse().getMousePosition())) {
-            return current;
-        }
-        Point target = Rs2UiHelper.getClickingPoint(visible, true, false);
+    static Point retarget(Rectangle clear, Point current) {
+        if (clear == null) return null;
+        java.awt.Point at = Microbot.getMouse().getMousePosition();
+        if (at != null && clear.contains(at)) return new Point(at.x, at.y);
+        Point target = Rs2UiHelper.getClickingPoint(clear, true, false);
         Microbot.naturalMouse.moveTo(target.getX(), target.getY());
         return target;
     }
