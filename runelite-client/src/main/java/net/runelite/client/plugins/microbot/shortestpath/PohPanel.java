@@ -188,15 +188,14 @@ public class PohPanel extends PluginPanel {
      * must remap their current location to this tile.
      */
     public static WorldPoint getExitPortalTile() {
-        if (instance == null || instance.tilePanel == null) return null;
-        return instance.tilePanel.getTile();
+        return PohHouseConfiguration.load().exitPortal();
     }
 
     public static Map<WorldPoint, Set<Transport>> getTransportsToPoh() {
         HouseLocation location = HouseLocation.getHouseLocation();
         Map<WorldPoint, Set<Transport>> transportMap = new HashMap<>();
-        if (location == null || instance == null) return transportMap;
-        WorldPoint exitPortal = instance.tilePanel.getTile();
+        if (location == null) return transportMap;
+        WorldPoint exitPortal = getExitPortalTile();
         if (exitPortal == null) {
             return transportMap;
         }
@@ -225,23 +224,16 @@ public class PohPanel extends PluginPanel {
 
     public static Map<WorldPoint, Set<Transport>> getAvailableTransports(
             Map<WorldPoint, Set<Transport>> allTransports, boolean usePortalNexus) {
-        if (instance == null) return allTransports;
-        Set<PohTeleport> pohTeleports = new HashSet<>();
+        PohHouseConfiguration house = PohHouseConfiguration.load();
+        Set<PohTeleport> pohTeleports = house.teleports(usePortalNexus);
         Map<WorldPoint, Set<Transport>> pohTransports = new HashMap<>();
-        WorldPoint exitPortal = instance.tilePanel.getTile();
+        WorldPoint exitPortal = house.exitPortal();
         if (exitPortal == null) {
             Microbot.log("Failed to load exit portal config");
-            return allTransports;
+            return pohTransports;
         }
 
-        pohTeleports.addAll(instance.checkboxPanel.getTeleports());
-        pohTeleports.addAll(instance.portalPanel.getTeleports());
-        if (usePortalNexus) {
-            pohTeleports.addAll(instance.nexusPanel.getTeleports());
-        }
-        pohTeleports.addAll(instance.jewelleryBoxPanel.getTeleports());
-
-        if (instance.checkboxPanel.fairyRingCb.isSelected()) {
+        if (house.enabled("fairyRing")) {
             Map<WorldPoint, Set<Transport>> fairyRings = createFairyRingMap(exitPortal, allTransports);
             for (var entry : fairyRings.entrySet()) {
                 pohTransports
@@ -249,7 +241,7 @@ public class PohPanel extends PluginPanel {
                         .addAll(entry.getValue());
             }
         }
-        if (instance.checkboxPanel.spiritTreeCb.isSelected()) {
+        if (house.enabled("spiritTree")) {
             Map<WorldPoint, Set<Transport>> spiritTrees = createSpiritTreeMap(exitPortal, allTransports);
             for (var entry : spiritTrees.entrySet()) {
                 pohTransports
@@ -288,7 +280,7 @@ public class PohPanel extends PluginPanel {
                 // option the player can't click and never falls back to the next best route.
                 .filter(PohTeleport::isUnlockedForPlayer)
                 .filter(t -> !PohTeleports.isTeleportBlocked(t))
-                .map(t -> new PohTransport(anchor, t))
+                .map(t -> new PohTransport(anchor, t, true))
                 .collect(Collectors.toList()));
 
         for (var entry : createFairyRingMap(anchor, allTransports).entrySet()) {
