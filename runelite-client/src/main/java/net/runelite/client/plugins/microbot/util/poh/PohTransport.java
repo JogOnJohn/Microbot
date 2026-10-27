@@ -23,13 +23,21 @@ public class PohTransport extends Transport {
     @Getter
     private final PohTeleport teleport;
 
+    @Getter
+    private final boolean hostedHouse;
+
     public PohTransport(WorldPoint exitPortalPoint, PohTeleport teleport) {
+        this(exitPortalPoint, teleport, false);
+    }
+
+    public PohTransport(WorldPoint exitPortalPoint, PohTeleport teleport, boolean hostedHouse) {
         super(
                 java.util.Objects.requireNonNull(exitPortalPoint, "exitPortalPoint is null"),
                 java.util.Objects.requireNonNull(teleport, "teleport is null").getDestination(),
                 teleport.displayInfo(), TransportType.POH, true, teleport.getDuration()
         );
         this.teleport = teleport;
+        this.hostedHouse = hostedHouse;
     }
 
     /**
@@ -53,7 +61,7 @@ public class PohTransport extends Transport {
             if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
             if (landed()) return PohExecutionResult.SUCCESS;
             if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
-            boolean hosted = World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
+            boolean hosted = hostedHouse && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
             PohFacilityAccess.Access access = hosted ? confirmedFacilityAccess(cancelled, recoveryDeadline)
                     : PohFacilityAccess.Access.UNKNOWN;
             if (stopped(cancelled)) return PohExecutionResult.CANCELLED;

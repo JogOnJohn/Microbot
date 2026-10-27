@@ -6,6 +6,9 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.mouse.BotEventGuard;
 import net.runelite.client.plugins.microbot.util.mouse.VirtualMouse;
+import net.runelite.client.plugins.microbot.util.misc.SceneClickSafety;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.NaturalMouse;
 import org.junit.After;
 import org.junit.Before;
@@ -389,6 +392,73 @@ public class InputEmissionTest
 
 		assertEquals(640, mouse.getMousePosition().x);
 		assertEquals(480, mouse.getMousePosition().y);
+	}
+
+	@Test
+	public void aFullyCoveredSceneTargetEmitsNothing()
+	{
+		NewMenuEntry entry = new NewMenuEntry();
+		try (MockedStatic<SceneClickSafety> scene = Mockito.mockStatic(SceneClickSafety.class)) {
+			scene.when(() -> SceneClickSafety.appliesTo(entry)).thenReturn(true);
+			new VirtualMouse().quickClick(new Point(100, 50), entry);
+			assertTrue(received.isEmpty());
+			assertNull(Microbot.targetMenu);
+		}
+	}
+
+	@Test
+	public void sceneCoverAppearingAfterTheQuickMoveCancelsBeforeArmingOrPressing()
+	{
+		NewMenuEntry entry = new NewMenuEntry();
+		Point target = new Point(100, 50);
+		PointerState.setFromBot(10, 10);
+		try (MockedStatic<SceneClickSafety> scene = Mockito.mockStatic(SceneClickSafety.class)) {
+			scene.when(() -> SceneClickSafety.appliesTo(entry)).thenReturn(true);
+			scene.when(() -> SceneClickSafety.forEntry(entry, target)).thenReturn(new java.awt.Rectangle(90, 40, 20, 20));
+			scene.when(() -> SceneClickSafety.contains(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+			scene.when(() -> SceneClickSafety.permits(entry, target)).thenReturn(true, false);
+			new VirtualMouse().quickClick(target, entry);
+			assertEquals(ids(MouseEvent.MOUSE_MOVED), receivedIds());
+			assertNull(Microbot.targetMenu);
+		}
+	}
+
+	@Test
+	public void safeSceneClickStillEmitsTheNormalTriad()
+	{
+		NewMenuEntry entry = new NewMenuEntry();
+		Point target = new Point(100, 50);
+		PointerState.setFromBot(100, 50);
+		try (MockedStatic<SceneClickSafety> scene = Mockito.mockStatic(SceneClickSafety.class)) {
+			scene.when(() -> SceneClickSafety.appliesTo(entry)).thenReturn(true);
+			scene.when(() -> SceneClickSafety.forEntry(entry, target)).thenReturn(new java.awt.Rectangle(90, 40, 20, 20));
+			scene.when(() -> SceneClickSafety.contains(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+			scene.when(() -> SceneClickSafety.permits(entry, target)).thenReturn(true);
+			new VirtualMouse().quickClick(target, entry);
+			assertEquals(ids(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED), receivedIds());
+			assertSame(entry, targetMenuAtDispatch.get(0));
+		}
+	}
+
+	@Test
+	public void sceneCoverAppearingDuringNaturalTravelCancelsTheEntireClick() throws Exception
+	{
+		NewMenuEntry entry = new NewMenuEntry();
+		Point target = new Point(100, 50);
+		NaturalMouse motion = mock(NaturalMouse.class);
+		net.runelite.client.plugins.microbot.util.mouse.Mouse tracked = mock(net.runelite.client.plugins.microbot.util.mouse.Mouse.class);
+		when(tracked.getMousePosition()).thenReturn(new java.awt.Point(100, 50));
+		Object oldMouse = swapStatic("mouse", tracked);
+		swapStatic("naturalMouse", motion);
+		try (MockedStatic<SceneClickSafety> scene = Mockito.mockStatic(SceneClickSafety.class)) {
+			scene.when(() -> SceneClickSafety.appliesTo(entry)).thenReturn(true);
+			scene.when(() -> SceneClickSafety.forEntry(entry, target)).thenReturn(new java.awt.Rectangle(90, 40, 20, 20), null);
+			scene.when(() -> SceneClickSafety.contains(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+			new VirtualMouse().click(target, entry);
+			verify(motion).moveTo(100, 50);
+			assertTrue(received.isEmpty());
+			assertNull(Microbot.targetMenu);
+		} finally { swapStatic("mouse", oldMouse); }
 	}
 
 	private void record(MouseEvent event)
