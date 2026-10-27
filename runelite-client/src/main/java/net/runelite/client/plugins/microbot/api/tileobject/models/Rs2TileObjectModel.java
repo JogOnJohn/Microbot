@@ -15,6 +15,7 @@ import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.client.plugins.microbot.util.misc.SceneClickSafety;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -350,10 +351,23 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             log.info("[QuestObjectClick] object={} name='{}' action='{}' optionIndex={} menuAction={} location={}",
                     getId(), objName, action, index, menuAction, getWorldLocation());
 
+            boolean turned = false;
             if (!Rs2Camera.isTileOnScreen(getLocalLocation())) {
                 Rs2Camera.turnTo(tileObject);
+                turned = true;
             }
 
+            Rectangle clickArea = SceneClickSafety.forObject(tileObject, null);
+            if (clickArea == null && !turned) {
+                Rs2Camera.turnTo(tileObject);
+                clickArea = SceneClickSafety.forObject(tileObject, null);
+            }
+            if (clickArea == null) {
+                if (SceneClickSafety.shouldWarnCovered(getId(), System.currentTimeMillis())) {
+                    log.warn("Can't click object {}: clickbox unavailable or covered by the interface after a camera turn", getId());
+                }
+                return false;
+            }
 
             Microbot.doInvoke(new NewMenuEntry()
                             .param0(param0)
@@ -366,7 +380,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                             .setWorldViewId(worldView.getId())
                             .gameObject(tileObject).validWhen(clickDispatchGuard.get())
                     ,
-                    Rs2UiHelper.getObjectClickbox(tileObject));
+                    clickArea);
 // MenuEntryImpl(getOption=Use, getTarget=Barrier, getIdentifier=43700, getType=GAME_OBJECT_THIRD_OPTION, getParam0=53, getParam1=51, getItemId=-1, isForceLeftClick=true, getWorldViewId=-1, isDeprioritized=false)
             //Rs2Reflection.invokeMenu(param0, param1, menuAction.getId(), object.getId(),-1, "", "", -1, -1);
 

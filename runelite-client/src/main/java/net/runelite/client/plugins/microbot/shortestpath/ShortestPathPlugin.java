@@ -575,7 +575,8 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         // Transport/path option changed; rerun pathfinding so PathfinderConfig.refresh() rehydrates snapshots.
         if (reloadRequested
                 || TRANSPORT_OPTIONS_REGEX.matcher(event.getKey()).matches()
-                || PATH_REFRESH_CONFIG_KEYS.contains(event.getKey())) {
+                || PATH_REFRESH_CONFIG_KEYS.contains(event.getKey())
+                || PohHouseConfiguration.KEYS.contains(event.getKey())) {
             if (pathfinderConfig != null) {
                 pathfinderConfig.invalidateTransportRefreshCache();
             }
