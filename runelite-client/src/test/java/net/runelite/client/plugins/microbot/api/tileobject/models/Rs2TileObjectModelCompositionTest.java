@@ -1,6 +1,8 @@
 package net.runelite.client.plugins.microbot.api.tileobject.models;
 
 import java.awt.Rectangle;
+import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.function.Supplier;
 import net.runelite.api.Client;
 import net.runelite.api.ObjectComposition;
@@ -12,7 +14,6 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
-import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -42,6 +43,10 @@ public class Rs2TileObjectModelCompositionTest {
         client = mock(Client.class);
         ClientThread clientThread = mock(ClientThread.class);
         when(clientThread.invoke(any(Supplier.class))).thenAnswer(inv -> ((Supplier<?>) inv.getArgument(0)).get());
+        when(clientThread.runOnClientThreadOptional(any())).thenAnswer(inv ->
+                Optional.ofNullable(((Callable<?>) inv.getArgument(0)).call()));
+        when(client.getViewportWidth()).thenReturn(800);
+        when(client.getViewportHeight()).thenReturn(600);
         microbot = Mockito.mockStatic(Microbot.class);
         microbot.when(Microbot::getClientThread).thenReturn(clientThread);
         microbot.when(Microbot::getClient).thenReturn(client);
@@ -140,12 +145,23 @@ public class Rs2TileObjectModelCompositionTest {
         WorldView view = mock(WorldView.class);
         when(tileObject.getWorldView()).thenReturn(view);
         Rectangle bounds = new Rectangle(10, 10, 20, 20);
-        try (MockedStatic<Rs2Camera> camera = Mockito.mockStatic(Rs2Camera.class);
-             MockedStatic<Rs2UiHelper> ui = Mockito.mockStatic(Rs2UiHelper.class, Mockito.CALLS_REAL_METHODS)) {
+        when(tileObject.getClickbox()).thenReturn(bounds);
+        try (MockedStatic<Rs2Camera> camera = Mockito.mockStatic(Rs2Camera.class)) {
             camera.when(() -> Rs2Camera.isTileOnScreen(any(LocalPoint.class))).thenReturn(true);
-            ui.when(() -> Rs2UiHelper.getObjectClickbox(tileObject)).thenReturn(bounds);
             assertTrue(new Rs2TileObjectModel(tileObject).click());
             microbot.verify(() -> Microbot.doInvoke(argThat(entry -> entry.getType() == MenuAction.GAME_OBJECT_FIRST_OPTION), eq(bounds)));
+        }
+    }
+
+    @Test
+    public void unavailableClickboxTurnsOnceAndNeverInvokes() {
+        visibleObject();
+        when(tileObject.getWorldView()).thenReturn(mock(WorldView.class));
+        try (MockedStatic<Rs2Camera> camera = Mockito.mockStatic(Rs2Camera.class)) {
+            camera.when(() -> Rs2Camera.isTileOnScreen(any(LocalPoint.class))).thenReturn(true);
+            assertFalse(new Rs2TileObjectModel(tileObject).click());
+            camera.verify(() -> Rs2Camera.turnTo(tileObject));
+            microbot.verify(() -> Microbot.doInvoke(any(NewMenuEntry.class), any(Rectangle.class)), never());
         }
     }
 
