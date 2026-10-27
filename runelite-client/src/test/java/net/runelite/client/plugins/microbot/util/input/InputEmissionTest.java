@@ -461,6 +461,27 @@ public class InputEmissionTest
 		} finally { swapStatic("mouse", oldMouse); }
 	}
 
+	@Test
+	public void ownershipRevokedDuringFinalSceneSnapshotNeverArmsOrPresses()
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		NewMenuEntry entry = new NewMenuEntry().validWhen(valid::get);
+		Point target = new Point(100, 50);
+		PointerState.setFromBot(100, 50);
+		try (MockedStatic<SceneClickSafety> scene = Mockito.mockStatic(SceneClickSafety.class)) {
+			scene.when(() -> SceneClickSafety.appliesTo(entry)).thenReturn(true);
+			scene.when(() -> SceneClickSafety.forEntry(entry, target)).thenReturn(new java.awt.Rectangle(90, 40, 20, 20));
+			scene.when(() -> SceneClickSafety.contains(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+			scene.when(() -> SceneClickSafety.permits(entry, target)).thenReturn(true).thenAnswer(call -> {
+				valid.set(false);
+				return true;
+			});
+			new VirtualMouse().quickClick(target, entry);
+			assertTrue(received.isEmpty());
+			assertNull(Microbot.targetMenu);
+		}
+	}
+
 	private void record(MouseEvent event)
 	{
 		received.add(event);
