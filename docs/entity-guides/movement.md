@@ -700,3 +700,13 @@ When an NPC interaction exhausts its existing retry limit, capture the attempt
 count and clear the can't-reach latch before reporting the failure. Leave the
 scripts paused for operator review. Script shutdown clears the same stale state;
 neither operation changes route ownership, retry thresholds or movement dispatch.
+
+## 18. Treat a missing player location as an unavailable cave check
+
+After a transport or region load, the cached player location can be null.
+Read it once and return false from `Rs2Player.isInCave()` while it is absent,
+retaining the existing underground threshold and instance exclusion. Do not
+change movement, recovery ownership or route selection to handle this gap.
+
+**Defensive check:** `Rs2PlayerIsInCaveTest` covers missing positions, surface
+and underground positions, and the existing instance exclusion.
