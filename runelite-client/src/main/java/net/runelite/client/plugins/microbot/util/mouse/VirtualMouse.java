@@ -143,8 +143,8 @@ public class VirtualMouse extends Mouse {
             }
 
             final Point clickPoint = newPoint;
-            java.util.function.BooleanSupplier valid = () -> (entry == null || entry.isDispatchValid())
-                    && (!scene || SceneClickSafety.permits(entry, clickPoint));
+            java.util.function.BooleanSupplier valid = () -> (!scene || SceneClickSafety.permits(entry, clickPoint))
+                    && (entry == null || entry.isDispatchValid());
             if (!valid.getAsBoolean()) return;
             handleClick(emit, clickPoint, rightClick, quick, () -> Microbot.targetMenu = entry, valid);
         }));
