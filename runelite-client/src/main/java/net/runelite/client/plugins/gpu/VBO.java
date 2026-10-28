@@ -30,10 +30,7 @@ import static org.lwjgl.opengl.GL33C.*;
 
 class VBO
 {
-	final long diagnosticOwner = GpuMemoryDiagnostics.owner();
 	final int size;
-	private final StaticVboPool pool;
-	private StaticVboPool.Storage storage;
 	private int usage;
 	int bufId;
 	private ByteBuffer buffer;
@@ -43,154 +40,45 @@ class VBO
 
 	VBO(int size)
 	{
-		this(size, null);
-	}
-
-	VBO(int size, StaticVboPool pool)
-	{
 		this.size = size;
-		this.pool = pool;
 	}
 
 	void init(int usage)
 	{
 		this.usage = usage;
-		if (pool != null && usage == GL_STATIC_DRAW)
-		{
-			storage = pool.acquire(size);
-			bufId = storage.id;
-			GpuMemoryDiagnostics.adopt(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "scene-vbo", diagnosticOwner);
-		}
-		else
-		{
-			bufId = createBuffer(size, usage, diagnosticOwner);
-		}
-	}
+		bufId = glGenBuffers();
 
-	static int createBuffer(int size, int usage, long diagnosticOwner)
-	{
-		int bufId = glGenBuffers();
-		try
-		{
-			GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, bufId,
-				usage == GL_STATIC_DRAW ? "scene-vbo" : "dynamic-vbo", diagnosticOwner);
-			glBindBuffer(GL_ARRAY_BUFFER, bufId);
-			long diagnosticStart = GpuMemoryDiagnostics.startCall();
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_STORE, bufId, size);
-			boolean returned = false;
-			try
-			{
-				glBufferData(GL_ARRAY_BUFFER, size, usage);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, bufId, size, "vbo-init", diagnosticStart);
-			return bufId;
-		}
-		catch (RuntimeException | Error error)
-		{
-			deleteBuffer(bufId, size);
-			throw error;
-		}
-		finally
-		{
-			glBindBuffer(GL_ARRAY_BUFFER, 0);
-		}
+		glBindBuffer(GL_ARRAY_BUFFER, bufId);
+		glBufferData(GL_ARRAY_BUFFER, size, usage);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
 	void destroy()
 	{
-		if (bufId == 0)
-		{
-			return;
-		}
 		if (mapped)
 		{
 			glBindBuffer(GL_ARRAY_BUFFER, bufId);
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_UNMAP, bufId, size);
-				boolean returned = false;
-				try
-				{
-					glUnmapBuffer(GL_ARRAY_BUFFER);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
-			GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-destroy-unmap", 0);
-			if (GpuReplayCapture.ENABLED) GpuResourceAudit.mapping(bufId, false, 0);
+			glUnmapBuffer(GL_ARRAY_BUFFER);
 			glBindBuffer(GL_ARRAY_BUFFER, 0);
 			mapped = false;
 		}
-		// Mapped Java views must not survive a storage handoff to another zone.
-		vb = null;
-		buffer = null;
-		len = 0;
-		if (storage != null)
-		{
-			pool.release(storage);
-			storage = null;
-		}
-		else
-		{
-			deleteBuffer(bufId, size);
-		}
+		glDeleteBuffers(bufId);
 		bufId = 0;
-	}
-
-	static void deleteBuffer(int bufId, int size)
-	{
-		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_DELETE, bufId, size);
-			boolean returned = false;
-			try
-			{
-				glDeleteBuffers(bufId);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, bufId, "vbo-destroy");
 	}
 
 	void map()
 	{
 		assert !mapped;
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
-		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_MAP, bufId, size);
-			boolean returned = false;
-			try
-			{
-				buffer = glMapBufferRange(GL_ARRAY_BUFFER, 0, size, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)), buffer);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
+		buffer = glMapBufferRange(GL_ARRAY_BUFFER, 0, size, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)), buffer);
 		if (buffer == null)
 		{
 			int err = glGetError();
 			throw new RuntimeException("unable to map GL buffer (bufId: " + bufId + " size: " + size + " renderer: " + glGetString(GL_RENDERER) + " version: " + glGetString(GL_VERSION) + " err: " + err + ")");
 		}
 		this.vb = buffer.asIntBuffer();
-		GpuMemoryDiagnostics.mapping(bufId, true, usage != GL_STATIC_DRAW, "vbo-map", diagnosticStart);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = true;
-		if (GpuReplayCapture.ENABLED) GpuResourceAudit.mapping(bufId, true, GL_MAP_WRITE_BIT | (usage == GL_STATIC_DRAW ? 0 : (GL_MAP_INVALIDATE_BUFFER_BIT | GL_MAP_FLUSH_EXPLICIT_BIT)));
 	}
 
 	void unmap()
@@ -202,36 +90,10 @@ class VBO
 		glBindBuffer(GL_ARRAY_BUFFER, bufId);
 		if (usage != GL_STATIC_DRAW)
 		{
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_FLUSH, bufId, (long) len * Integer.BYTES);
-				boolean returned = false;
-				try
-				{
-					glFlushMappedBufferRange(GL_ARRAY_BUFFER, 0, (long) len * Integer.BYTES);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
+			glFlushMappedBufferRange(GL_ARRAY_BUFFER, 0, (long) len * Integer.BYTES);
 		}
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.VBO_UNMAP, bufId, size);
-			boolean returned = false;
-			try
-			{
-				glUnmapBuffer(GL_ARRAY_BUFFER);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
-		GpuMemoryDiagnostics.mapping(bufId, false, false, "vbo-unmap", 0);
+		glUnmapBuffer(GL_ARRAY_BUFFER);
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		mapped = false;
-		if (GpuReplayCapture.ENABLED) GpuResourceAudit.mapping(bufId, false, 0);
 	}
 }

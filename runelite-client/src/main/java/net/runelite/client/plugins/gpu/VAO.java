@@ -54,7 +54,6 @@ class VAO
 	void init()
 	{
 		vao = glGenVertexArrays();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao", vbo.diagnosticOwner);
 		glBindVertexArray(vao);
 
 		vbo.init(GL_DYNAMIC_DRAW);
@@ -62,15 +61,12 @@ class VAO
 
 		glEnableVertexAttribArray(0);
 		glVertexAttribPointer(0, 3, GL_FLOAT, false, VERT_SIZE, 0);
-		GpuResourceAudit.attribute(0, vbo.bufId, "dynamic-position");
 
 		glEnableVertexAttribArray(1);
 		glVertexAttribIPointer(1, 1, GL_INT, VERT_SIZE, 12);
-		GpuResourceAudit.attribute(1, vbo.bufId, "dynamic-color");
 
 		glEnableVertexAttribArray(2);
 		glVertexAttribIPointer(2, 4, GL_SHORT, VERT_SIZE, 16);
-		GpuResourceAudit.attribute(2, vbo.bufId, "dynamic-texture");
 
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glBindVertexArray(0);
@@ -78,12 +74,9 @@ class VAO
 
 	void destroy()
 	{
-		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao-free");
-		glDeleteVertexArrays(vao);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vao, "dynamic-vao-free");
-		vao = 0;
 		vbo.destroy();
-		GpuResourceAudit.ownerReleased(vbo.diagnosticOwner, "dynamic-vao-free");
+		glDeleteVertexArrays(vao);
+		vao = 0;
 	}
 
 	static class Range

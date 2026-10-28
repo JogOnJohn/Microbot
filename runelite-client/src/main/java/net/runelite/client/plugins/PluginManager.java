@@ -385,7 +385,6 @@ public class PluginManager {
             return false;
         }
 
-        awaitStopBarrier(plugin);
         List<Plugin> conflicts = conflictsForPlugin(plugin);
         for (Plugin conflict : conflicts) {
             if (isPluginEnabled(conflict)) {
@@ -394,8 +393,6 @@ public class PluginManager {
             if (activePlugins.contains(conflict)) {
                 stopPlugin(conflict);
             }
-            // A previous stop may have timed out after removal from activePlugins.
-            awaitStopBarrier(conflict);
         }
 
         activePlugins.add(plugin);
@@ -441,16 +438,6 @@ public class PluginManager {
         }
 
         return true;
-    }
-
-    private static void awaitStopBarrier(Plugin plugin) throws PluginInstantiationException {
-        if (plugin instanceof PluginStopBarrier) {
-            try {
-                ((PluginStopBarrier) plugin).awaitStopCompletion();
-            } catch (RuntimeException ex) {
-                throw new PluginInstantiationException(ex);
-            }
-        }
     }
 
     public boolean stopPlugin(Plugin plugin) throws PluginInstantiationException {

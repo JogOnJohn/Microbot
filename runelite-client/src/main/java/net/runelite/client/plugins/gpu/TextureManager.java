@@ -51,53 +51,21 @@ class TextureManager
 		Texture[] textures = textureProvider.getTextures();
 
 		int textureArrayId = glGenTextures();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.TEXTURE, textureArrayId, "texture-array", 0);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 		if (GL.getCapabilities().glTexStorage3D != 0)
 		{
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_ARRAY_STORE, textureArrayId, (long) TEXTURE_SIZE * TEXTURE_SIZE * textures.length * 4);
-				boolean returned = false;
-				try
-				{
-					glTexStorage3D(GL_TEXTURE_2D_ARRAY, 8, GL_RGBA8, TEXTURE_SIZE, TEXTURE_SIZE, textures.length);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
+			glTexStorage3D(GL_TEXTURE_2D_ARRAY, 8, GL_RGBA8, TEXTURE_SIZE, TEXTURE_SIZE, textures.length);
 		}
 		else
 		{
 			int size = TEXTURE_SIZE;
 			for (int i = 0; i < 8; i++)
 			{
-				{
-					long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_ARRAY_IMAGE, textureArrayId, (long) size * size * textures.length * 4);
-					boolean returned = false;
-					try
-					{
-						glTexImage3D(GL_TEXTURE_2D_ARRAY, i, GL_RGBA8, size, size, textures.length, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-						returned = true;
-					}
-					finally
-					{
-						GpuCallJournal.end(gpuCall, returned);
-					}
-				}
+				glTexImage3D(GL_TEXTURE_2D_ARRAY, i, GL_RGBA8, size, size, textures.length, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
 				size /= 2;
 			}
 		}
 
-		long diagnosticBytes = 0;
-		for (int size = TEXTURE_SIZE; size > 0; size /= 2)
-		{
-			diagnosticBytes += (long) size * size * textures.length * Integer.BYTES;
-		}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.TEXTURE, textureArrayId,
-			diagnosticBytes, "texture-array-storage", 0);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
@@ -113,19 +81,7 @@ class TextureManager
 
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_MIPMAP, textureArrayId, 0);
-			boolean returned = false;
-			try
-			{
-				glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
+		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 		glActiveTexture(GL_TEXTURE0);
 
 		return textureArrayId;
@@ -162,7 +118,6 @@ class TextureManager
 	void freeTextureArray(int textureArrayId)
 	{
 		glDeleteTextures(textureArrayId);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.TEXTURE, textureArrayId, "texture-array-free");
 	}
 
 	/**
@@ -228,19 +183,8 @@ class TextureManager
 				ByteBuffer pixelBuffer = ByteBuffer.allocateDirect(pixels.length);
 				pixelBuffer.put(pixels);
 				pixelBuffer.flip();
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.TEXTURE_UPLOAD,
-					textureArrayId, pixelBuffer.remaining());
-				boolean returned = false;
-				try
-				{
-					glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, textureId, TEXTURE_SIZE, TEXTURE_SIZE,
-						1, GL_RGBA, GL_UNSIGNED_BYTE, pixelBuffer);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
+				glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, textureId, TEXTURE_SIZE, TEXTURE_SIZE,
+					1, GL_RGBA, GL_UNSIGNED_BYTE, pixelBuffer);
 			}
 		}
 

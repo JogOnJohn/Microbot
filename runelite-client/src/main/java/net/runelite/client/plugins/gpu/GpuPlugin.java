@@ -39,8 +39,7 @@ import java.nio.FloatBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.IntFunction;
+import java.util.concurrent.CountDownLatch;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -99,7 +98,7 @@ import org.lwjgl.system.Configuration;
 	loadInSafeMode = false
 )
 @Slf4j
-public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.client.plugins.PluginStopBarrier
+public class GpuPlugin extends Plugin implements DrawCallbacks
 {
 	static final int MAX_DISTANCE = 184;
 	static final int MAX_FOG_DEPTH = 100;
@@ -249,10 +248,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 
 	private SceneContext root;
 	private SceneContext[] subs;
-	private StaticVboPool staticVboPool;
-	private final SceneUploadLifecycle sceneUploads = new SceneUploadLifecycle();
-	private volatile boolean shutdownPending;
-	private volatile CompletableFuture<Void> shutdownComplete = CompletableFuture.completedFuture(null);
 	private Zone[][] nextZones;
 	private Map<Integer, Integer> nextRoofChanges;
 
@@ -285,31 +280,21 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	@Override
 	protected void startUp()
 	{
-		long generation = sceneUploads.requestStart();
+		root = new SceneContext(NUM_ZONES, NUM_ZONES);
+		subs = new SceneContext[MAX_WORLDVIEWS];
+		int numThreads = config.numThreads();
+		rts = new RenderThread[numThreads + 1];
+		for (int i = 0; i < rts.length; ++i)
+		{
+			var rt = rts[i] = new RenderThread();
+			rt.modelUploader = new ModelUploader();
+		}
+		clientUploader = new SceneUploader(renderCallbackManager);
+		mapUploader = new SceneUploader(renderCallbackManager);
 		clientThread.invoke(() ->
 		{
-			if (!sceneUploads.currentStart(generation))
-			{
-				return true;
-			}
-			if (shutdownPending)
-			{
-				return false;
-			}
 			try
 			{
-				sceneUploads.reset();
-				root = new SceneContext(NUM_ZONES, NUM_ZONES);
-				subs = new SceneContext[MAX_WORLDVIEWS];
-				int numThreads = config.numThreads();
-				rts = new RenderThread[numThreads + 1];
-				for (int i = 0; i < rts.length; ++i)
-				{
-					var rt = rts[i] = new RenderThread();
-					rt.modelUploader = new ModelUploader();
-				}
-				clientUploader = new SceneUploader(renderCallbackManager);
-				mapUploader = new SceneUploader(renderCallbackManager);
 				fboScene = -1;
 				lastAnisotropicFilteringLevel = -1;
 
@@ -337,7 +322,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 				Configuration.SHARED_LIBRARY_EXTRACT_DIRECTORY.set("lwjgl-rl");
 
 				glCapabilities = GL.createCapabilities();
-				GpuMemoryDiagnostics.contextCreated();
 
 				log.info("Using device: {}", glGetString(GL_RENDERER));
 				log.info("Using driver: {}", glGetString(GL_VERSION));
@@ -348,10 +332,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 				}
 
 				lwjglInitted = true;
-				if (Boolean.getBoolean(StaticVboPool.PROPERTY))
-				{
-					staticVboPool = StaticVboPool.create(glCapabilities);
-				}
 
 				checkGLErrors();
 				if (log.isDebugEnabled() && glCapabilities.glDebugMessageControl != 0)
@@ -464,136 +444,47 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	@Override
 	protected void shutDown()
 	{
-		CompletableFuture<Void> completion;
-		synchronized (sceneUploads)
-		{
-			if (!shutdownPending)
-			{
-				shutdownPending = true;
-				shutdownComplete = new CompletableFuture<>();
-			}
-			sceneUploads.close();
-			completion = shutdownComplete;
-		}
-		GpuMemoryDiagnostics.checkpoint("shutdown-requested");
 		clientThread.invoke(() ->
 		{
-			try
+			client.setGpuFlags(0);
+			client.setDrawCallbacks(null);
+			client.setUnlockedFps(false);
+			client.setExpandedMapLoading(0);
+
+			if (lwjglInitted)
 			{
-				boolean done = finishShutdown();
-				if (done)
+				if (textureArrayId != -1)
 				{
-					completion.complete(null);
+					textureManager.freeTextureArray(textureArrayId);
+					textureArrayId = -1;
 				}
-				return done;
+
+				root.free();
+
+				shutdownInterfaceTexture();
+				shutdownProgram();
+				shutdownVao();
+				shutdownBuffers();
+				shutdownFbo();
 			}
-			catch (RuntimeException | Error error)
+
+			if (awtContext != null)
 			{
-				completion.completeExceptionally(error);
-				throw error;
+				awtContext.destroy();
+				awtContext = null;
 			}
+
+			if (debugCallback != null)
+			{
+				debugCallback.free();
+				debugCallback = null;
+			}
+
+			glCapabilities = null;
+
+			// force main buffer provider rebuild to turn off alpha channel
+			client.resizeCanvas();
 		});
-		// PluginManager runs on the EDT and may start a conflicting renderer next.
-		if (!clientThread.isClientThread())
-		{
-			SceneUploadLifecycle.awaitRendererStop(completion);
-		}
-	}
-
-	@Override
-	public void awaitStopCompletion()
-	{
-		CompletableFuture<Void> completion = shutdownComplete;
-		if (clientThread.isClientThread() && !completion.isDone())
-		{
-			throw new IllegalStateException("GPU teardown is still pending on the client thread");
-		}
-		SceneUploadLifecycle.awaitRendererStop(completion);
-	}
-
-	private boolean finishShutdown()
-	{
-		if (!shutdownPending)
-		{
-			return true;
-		}
-		if (glCapabilities != null && GL.getCapabilities() != glCapabilities)
-		{
-			throw new IllegalStateException("GPU teardown attempted in another GL context");
-		}
-		client.setGpuFlags(0);
-		client.setDrawCallbacks(null);
-		client.setUnlockedFps(false);
-		client.setExpandedMapLoading(0);
-		if (!sceneUploads.drained())
-		{
-			return false;
-		}
-		GpuMemoryDiagnostics.checkpoint("shutdown-client-thread-entered");
-
-		if (lwjglInitted)
-		{
-			if (textureArrayId != -1)
-			{
-				textureManager.freeTextureArray(textureArrayId);
-				textureArrayId = -1;
-			}
-
-			// Drain cached stores first; subsequent zone releases then delete directly.
-			if (staticVboPool != null)
-			{
-				staticVboPool.close();
-			}
-			root.free();
-			for (SceneContext sub : subs)
-			{
-				if (sub != null)
-				{
-					sub.free();
-				}
-			}
-			if (nextZones != null)
-			{
-				for (Zone[] row : nextZones)
-				{
-					for (Zone zone : row)
-					{
-						zone.free();
-					}
-				}
-				nextZones = null;
-			}
-			staticVboPool = null;
-
-			shutdownInterfaceTexture();
-			shutdownProgram();
-			shutdownVao();
-			shutdownBuffers();
-			shutdownFbo();
-		}
-
-		if (awtContext != null)
-		{
-			GpuMemoryDiagnostics.checkpoint("before-context-destroy");
-			GpuResourceAudit.checkpoint("before-context-destroy", true);
-			awtContext.destroy();
-			GpuMemoryDiagnostics.contextDestroyed();
-			awtContext = null;
-		}
-
-		if (debugCallback != null)
-		{
-			debugCallback.free();
-			debugCallback = null;
-		}
-
-		glCapabilities = null;
-		lwjglInitted = false;
-		shutdownPending = false;
-
-		// force main buffer provider rebuild to turn off alpha channel
-		client.resizeCanvas();
-		return true;
 	}
 
 	@Provides
@@ -774,10 +665,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	{
 		// Create UI VAO
 		vaoUiHandle = glGenVertexArrays();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao", 0);
 		// Create UI buffer
 		vboUiHandle = glGenBuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo", 0);
 		glBindVertexArray(vaoUiHandle);
 
 		FloatBuffer vboUiBuf = GpuFloatBuffer.allocateDirect(5 * 4);
@@ -790,30 +679,14 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		});
 		vboUiBuf.rewind();
 		glBindBuffer(GL_ARRAY_BUFFER, vboUiHandle);
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_VBO_STORE, vboUiHandle, (long) vboUiBuf.remaining() * Float.BYTES);
-			boolean returned = false;
-			try
-			{
-				glBufferData(GL_ARRAY_BUFFER, vboUiBuf, GL_STATIC_DRAW);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle,
-			(long) vboUiBuf.remaining() * Float.BYTES, "interface-vbo-init", 0);
+		glBufferData(GL_ARRAY_BUFFER, vboUiBuf, GL_STATIC_DRAW);
 
 		// position attribute
 		glVertexAttribPointer(0, 3, GL_FLOAT, false, 5 * Float.BYTES, 0);
-		GpuResourceAudit.attribute(0, vboUiHandle, "interface-position");
 		glEnableVertexAttribArray(0);
 
 		// texture coord attribute
 		glVertexAttribPointer(1, 2, GL_FLOAT, false, 5 * Float.BYTES, 3 * Float.BYTES);
-		GpuResourceAudit.attribute(1, vboUiHandle, "interface-texture");
 		glEnableVertexAttribArray(1);
 
 		// unbind VAO/VBO
@@ -823,15 +696,11 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 
 	private void shutdownVao()
 	{
-		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao-free");
-		glDeleteVertexArrays(vaoUiHandle);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.VERTEX_ARRAY, vaoUiHandle, "interface-vao-free");
-		vaoUiHandle = 0;
-
-		GpuResourceAudit.beforeDelete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
 		glDeleteBuffers(vboUiHandle);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, vboUiHandle, "interface-vbo-free");
 		vboUiHandle = 0;
+
+		glDeleteVertexArrays(vaoUiHandle);
+		vaoUiHandle = 0;
 	}
 
 	private void initBuffers()
@@ -850,7 +719,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	private void initGlBuffer(GLBuffer glBuffer)
 	{
 		glBuffer.glBufferId = glGenBuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, glBuffer.glBufferId, glBuffer.name, 0);
 	}
 
 	private void shutdownBuffers()
@@ -879,7 +747,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		if (glBuffer.glBufferId != -1)
 		{
 			glDeleteBuffers(glBuffer.glBufferId);
-			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, glBuffer.glBufferId, "uniform-free");
 			glBuffer.glBufferId = -1;
 		}
 		glBuffer.size = -1;
@@ -888,10 +755,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	private void initInterfaceTexture()
 	{
 		interfacePbo = glGenBuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.BUFFER, interfacePbo, "interface-pbo", 0);
 
 		interfaceTexture = glGenTextures();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.TEXTURE, interfaceTexture, "interface-texture", 0);
 		glBindTexture(GL_TEXTURE_2D, interfaceTexture);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -903,9 +768,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	private void shutdownInterfaceTexture()
 	{
 		glDeleteBuffers(interfacePbo);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.BUFFER, interfacePbo, "interface-pbo-free");
 		glDeleteTextures(interfaceTexture);
-		GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.TEXTURE, interfaceTexture, "interface-texture-free");
 		interfaceTexture = -1;
 	}
 
@@ -928,49 +791,18 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 
 		// Create and bind the FBO
 		fboScene = glGenFramebuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.FRAMEBUFFER, fboScene, "scene-fbo", 0);
 		glBindFramebuffer(GL_FRAMEBUFFER, fboScene);
 
 		// Color render buffer
 		rboColorBuffer = glGenRenderbuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboColorBuffer, "aa-color", 0);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboColorBuffer);
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.AA_COLOR_STORE, 0, (long) width * height * 4 * aaSamples);
-				boolean returned = false;
-				try
-				{
-					glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_RGBA, width, height);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboColorBuffer,
-			(long) width * height * Integer.BYTES * Math.max(aaSamples, 1), "aa-color-storage", 0);
+		glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_RGBA, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rboColorBuffer);
 
 		// Depth render buffer
 		rboDepthBuffer = glGenRenderbuffers();
-		GpuMemoryDiagnostics.create(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboDepthBuffer, "aa-depth", 0);
 		glBindRenderbuffer(GL_RENDERBUFFER, rboDepthBuffer);
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.AA_DEPTH_STORE, 0, (long) width * height * 4 * aaSamples);
-				boolean returned = false;
-				try
-				{
-					glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_DEPTH_COMPONENT32F, width, height);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboDepthBuffer,
-			(long) width * height * Integer.BYTES * Math.max(aaSamples, 1), "aa-depth-storage", 0);
+		glRenderbufferStorageMultisample(GL_RENDERBUFFER, aaSamples, GL_DEPTH_COMPONENT32F, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepthBuffer);
 
 		int status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
@@ -989,21 +821,18 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		if (fboScene != -1)
 		{
 			glDeleteFramebuffers(fboScene);
-			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.FRAMEBUFFER, fboScene, "scene-fbo-free");
 			fboScene = -1;
 		}
 
 		if (rboColorBuffer != 0)
 		{
 			glDeleteRenderbuffers(rboColorBuffer);
-			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboColorBuffer, "aa-color-free");
 			rboColorBuffer = 0;
 		}
 
 		if (rboDepthBuffer != 0)
 		{
 			glDeleteRenderbuffers(rboDepthBuffer);
-			GpuMemoryDiagnostics.delete(GpuMemoryDiagnostics.Kind.RENDERBUFFER, rboDepthBuffer, "aa-depth-free");
 			rboDepthBuffer = 0;
 		}
 	}
@@ -1063,22 +892,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		uniformBuffer.flip();
 
 		glBindBuffer(GL_UNIFORM_BUFFER, glUniformBuffer.glBufferId);
-		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UNIFORM_STORE, glUniformBuffer.glBufferId, uniformBuffer.getBuffer().remaining() * 4L);
-			boolean returned = false;
-			try
-			{
-				glBufferData(GL_UNIFORM_BUFFER, uniformBuffer.getBuffer(), GL_DYNAMIC_DRAW);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, glUniformBuffer.glBufferId,
-			(long) uniformBuffer.getBuffer().remaining() * Float.BYTES, "uniform-stream", diagnosticStart);
+		glBufferData(GL_UNIFORM_BUFFER, uniformBuffer.getBuffer(), GL_DYNAMIC_DRAW);
 		glBindBuffer(GL_UNIFORM_BUFFER, 0);
 		uniformBuffer.clear();
 
@@ -1286,18 +1100,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		int defaultFbo = awtContext.getFramebuffer(false);
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, fboScene);
 		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, defaultFbo);
-		long gpuBlit = GpuCallJournal.begin(GpuCallJournal.Site.BLIT, fboScene, (long) width * height * 4);
-		boolean blitReturned = false;
-		try
-		{
-			glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
-				GL_COLOR_BUFFER_BIT, GL_NEAREST);
-			blitReturned = true;
-		}
-		finally
-		{
-			GpuCallJournal.end(gpuBlit, blitReturned);
-		}
+		glBlitFramebuffer(0, 0, width, height, 0, 0, width, height,
+			GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
 		// Reset
 		glBindFramebuffer(GL_READ_FRAMEBUFFER, defaultFbo);
@@ -1600,7 +1404,24 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 				Scene scene = wv.getScene();
 				clientUploader.zoneSize(scene, zone, x, z);
 
-				allocateZone(zone);
+				VBO o = null, a = null;
+				int sz = zone.sizeO * Zone.VERT_SIZE * 3;
+				if (sz > 0)
+				{
+					o = new VBO(sz);
+					o.init(GL_STATIC_DRAW);
+					o.map();
+				}
+
+				sz = zone.sizeA * Zone.VERT_SIZE * 3;
+				if (sz > 0)
+				{
+					a = new VBO(sz);
+					a.init(GL_STATIC_DRAW);
+					a.map();
+				}
+
+				zone.init(o, a);
 
 				clientUploader.uploadZone(scene, zone, x, z);
 
@@ -1621,21 +1442,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 			lastCanvasHeight = canvasHeight;
 
 			glBindTexture(GL_TEXTURE_2D, interfaceTexture);
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_TEXTURE_STORE, interfaceTexture, (long) canvasWidth * canvasHeight * 4);
-				boolean returned = false;
-				try
-				{
-					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
-			GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.TEXTURE, interfaceTexture,
-				(long) canvasWidth * canvasHeight * Integer.BYTES, "interface-resize", 0);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasWidth, canvasHeight, 0, GL_BGRA, GL_UNSIGNED_BYTE, 0);
 			glBindTexture(GL_TEXTURE_2D, 0);
 		}
 
@@ -1645,54 +1452,14 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		final int height = bufferProvider.getHeight();
 
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, interfacePbo);
-		long diagnosticStart = GpuMemoryDiagnostics.startCall();
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.PBO_STORE, interfacePbo, (long) width * height * 4);
-			boolean returned = false;
-			try
-			{
-				glBufferData(GL_PIXEL_UNPACK_BUFFER, (long) width * height * Integer.BYTES, GL_STREAM_DRAW);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
-		GpuMemoryDiagnostics.store(GpuMemoryDiagnostics.Kind.BUFFER, interfacePbo,
-			(long) width * height * Integer.BYTES, "interface-pbo-stream", diagnosticStart);
-		ByteBuffer interfaceBuf;
-		long gpuMap = GpuCallJournal.begin(GpuCallJournal.Site.PBO_MAP, interfacePbo, (long) width * height * 4);
-		boolean mapReturned = false;
-		try
-		{
-			interfaceBuf = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
-			mapReturned = true;
-		}
-		finally
-		{
-			GpuCallJournal.end(gpuMap, mapReturned);
-		}
+		glBufferData(GL_PIXEL_UNPACK_BUFFER, (long) width * height * Integer.BYTES, GL_STREAM_DRAW);
+		ByteBuffer interfaceBuf = glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
 		if (interfaceBuf != null)
 		{
-			GpuMemoryDiagnostics.mapping(interfacePbo, true, false, "interface-pbo-map", 0);
 			interfaceBuf
 				.asIntBuffer()
 				.put(pixels, 0, width * height);
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.PBO_UNMAP, interfacePbo, (long) width * height * 4);
-				boolean returned = false;
-				try
-				{
-					glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
-			GpuMemoryDiagnostics.mapping(interfacePbo, false, false, "interface-pbo-unmap", 0);
+			glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 		}
 		else
 		{
@@ -1700,19 +1467,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 			return;
 		}
 		glBindTexture(GL_TEXTURE_2D, interfaceTexture);
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_TEXTURE_UPLOAD, interfaceTexture, (long) width * height * 4);
-			boolean returned = false;
-			try
-			{
-				glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, 0);
 		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		glBindTexture(GL_TEXTURE_2D, 0);
 	}
@@ -1720,11 +1475,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	@Override
 	public void draw(int overlayColor)
 	{
-		GpuMemoryDiagnostics.frame();
-		if (staticVboPool != null)
-		{
-			staticVboPool.reportIfDue();
-		}
 		final GameState gameState = client.getGameState();
 		if (gameState == GameState.STARTING)
 		{
@@ -1765,19 +1515,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 
 		try
 		{
-			{
-				long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.SWAP, 0, 0);
-				boolean returned = false;
-				try
-				{
-					awtContext.swapBuffers();
-					returned = true;
-				}
-				finally
-				{
-					GpuCallJournal.end(gpuCall, returned);
-				}
-			}
+			awtContext.swapBuffers();
 		}
 		catch (RuntimeException ex)
 		{
@@ -1858,19 +1596,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 
 		// Texture on UI
 		glBindVertexArray(vaoUiHandle);
-		{
-			long gpuCall = GpuCallJournal.begin(GpuCallJournal.Site.UI_DRAW, vaoUiHandle, 4);
-			boolean returned = false;
-			try
-			{
-				glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-				returned = true;
-			}
-			finally
-			{
-				GpuCallJournal.end(gpuCall, returned);
-			}
-		}
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
 		// Reset
 		glBindTexture(GL_TEXTURE_2D, 0);
@@ -1944,23 +1670,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	@Override
 	public void loadScene(WorldView worldView, Scene scene)
 	{
-		if (!sceneUploads.begin())
-		{
-			return;
-		}
-		try
-		{
-			loadSceneStorage(worldView, scene);
-		}
-		finally
-		{
-			sceneUploads.end();
-		}
-	}
-
-	private void loadSceneStorage(WorldView worldView, Scene scene)
-	{
-		GpuMemoryDiagnostics.scene("scene-load", worldView.getId());
 		if (scene.getWorldViewId() != WorldView.TOPLEVEL)
 		{
 			loadSubScene(worldView, scene);
@@ -1972,7 +1681,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 			log.debug("Double zone load!");
 			// The previous scene load just gets dropped, this is uncommon and requires a back to back map build packet
 			// while having the first load take more than a full server cycle to complete
-			runSceneGl(() ->
+			CountDownLatch latch = new CountDownLatch(1);
+			clientThread.invoke(() ->
 			{
 				for (int x = 0; x < NUM_ZONES; ++x)
 				{
@@ -1989,7 +1699,16 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 						}
 					}
 				}
+				latch.countDown();
 			});
+			try
+			{
+				latch.await();
+			}
+			catch (InterruptedException e)
+			{
+				throw new RuntimeException(e);
+			}
 			nextZones = null;
 			nextRoofChanges = null;
 		}
@@ -2157,108 +1876,70 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 			lena, (lena * Zone.VERT_SIZE * 3) / 1024);
 
 		// allocate buffers for zones which require upload
-		try
+		CountDownLatch latch = new CountDownLatch(1);
+		clientThread.invoke(() ->
 		{
-			runSceneGl(() ->
-			{
-				for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE >> 3; ++x)
-				{
-					for (int z = 0; z < Constants.EXTENDED_SCENE_SIZE >> 3; ++z)
-					{
-						Zone zone = newZones[x][z];
-
-						if (zone.initialized)
-						{
-							continue;
-						}
-
-						allocateZone(zone);
-					}
-				}
-
-			});
-
-			// upload zones
-			sw = Stopwatch.createStarted();
 			for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE >> 3; ++x)
 			{
 				for (int z = 0; z < Constants.EXTENDED_SCENE_SIZE >> 3; ++z)
 				{
 					Zone zone = newZones[x][z];
 
-					if (!zone.initialized)
+					if (zone.initialized)
 					{
-						mapUploader.uploadZone(scene, zone, x, z);
+						continue;
 					}
+
+					VBO o = null, a = null;
+					int sz = zone.sizeO * Zone.VERT_SIZE * 3;
+					if (sz > 0)
+					{
+						o = new VBO(sz);
+						o.init(GL_STATIC_DRAW);
+						o.map();
+					}
+
+					sz = zone.sizeA * Zone.VERT_SIZE * 3;
+					if (sz > 0)
+					{
+						a = new VBO(sz);
+						a.init(GL_STATIC_DRAW);
+						a.map();
+					}
+
+					zone.init(o, a);
 				}
 			}
-			log.debug("Scene upload time {}", sw);
 
-			nextZones = newZones;
-			nextRoofChanges = roofChanges;
-		}
-		catch (RuntimeException | Error error)
-		{
-			runSceneGl(() -> freeUnpublishedZones(newZones));
-			throw error;
-		}
-	}
-
-	static void freeUnpublishedZones(Zone[][] zones)
-	{
-		for (Zone[] row : zones)
-		{
-			for (Zone zone : row)
-			{
-				if (!zone.initialized)
-				{
-					zone.free();
-				}
-			}
-		}
-	}
-
-	private void allocateZone(Zone zone)
-	{
-		allocateZone(zone, size ->
-		{
-			VBO vbo = new VBO(size, staticVboPool);
-			try
-			{
-				vbo.init(GL_STATIC_DRAW);
-				vbo.map();
-				return vbo;
-			}
-			catch (RuntimeException | Error error)
-			{
-				vbo.destroy();
-				throw error;
-			}
+			latch.countDown();
 		});
-	}
-
-	static void allocateZone(Zone zone, IntFunction<VBO> factory)
-	{
-		VBO opaque = null, alpha = null;
 		try
 		{
-			if (zone.sizeO > 0)
-			{
-				opaque = factory.apply(zone.sizeO * Zone.VERT_SIZE * 3);
-			}
-			if (zone.sizeA > 0)
-			{
-				alpha = factory.apply(zone.sizeA * Zone.VERT_SIZE * 3);
-			}
-			zone.init(opaque, alpha);
+			latch.await();
 		}
-		catch (RuntimeException | Error error)
+		catch (InterruptedException e)
 		{
-			zone.free();
-			if (opaque != null) opaque.destroy();
-			if (alpha != null) alpha.destroy();
-			throw error;
+			throw new RuntimeException(e);
 		}
+
+		// upload zones
+		sw = Stopwatch.createStarted();
+		for (int x = 0; x < Constants.EXTENDED_SCENE_SIZE >> 3; ++x)
+		{
+			for (int z = 0; z < Constants.EXTENDED_SCENE_SIZE >> 3; ++z)
+			{
+				Zone zone = newZones[x][z];
+
+				if (!zone.initialized)
+				{
+					mapUploader.uploadZone(scene, zone, x, z);
+				}
+			}
+		}
+		log.debug("Scene upload time {}", sw);
+
+		nextZones = newZones;
+		nextRoofChanges = roofChanges;
 	}
 
 	private static boolean canReuse(Zone[][] zones, int zx, int zz)
@@ -2291,48 +1972,7 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		return true;
 	}
 
-	private void runSceneGl(Runnable action)
-	{
-		if (clientThread.isClientThread())
-		{
-			action.run();
-		}
-		else
-		{
-			SceneUploadLifecycle.dispatchAndWait(clientThread::invoke, action);
-		}
-	}
-
 	private void loadSubScene(WorldView worldView, Scene scene)
-	{
-		if (!sceneUploads.begin())
-		{
-			return;
-		}
-		try
-		{
-			loadSubSceneStorage(worldView, scene);
-		}
-		catch (RuntimeException | Error error)
-		{
-			runSceneGl(() ->
-			{
-				SceneContext failed = subs[scene.getWorldViewId()];
-				if (failed != null)
-				{
-					failed.free();
-					subs[scene.getWorldViewId()] = null;
-				}
-			});
-			throw error;
-		}
-		finally
-		{
-			sceneUploads.end();
-		}
-	}
-
-	private void loadSubSceneStorage(WorldView worldView, Scene scene)
 	{
 		int worldViewId = scene.getWorldViewId();
 		assert worldViewId != -1;
@@ -2359,7 +1999,8 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		}
 
 		// allocate buffers for zones which require upload
-		runSceneGl(() ->
+		CountDownLatch latch = new CountDownLatch(1);
+		clientThread.invoke(() ->
 		{
 			for (int x = 0; x < ctx.sizeX; ++x)
 			{
@@ -2367,11 +2008,37 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 				{
 					Zone zone = ctx.zones[x][z];
 
-					allocateZone(zone);
+					VBO o = null, a = null;
+					int sz = zone.sizeO * Zone.VERT_SIZE * 3;
+					if (sz > 0)
+					{
+						o = new VBO(sz);
+						o.init(GL_STATIC_DRAW);
+						o.map();
+					}
+
+					sz = zone.sizeA * Zone.VERT_SIZE * 3;
+					if (sz > 0)
+					{
+						a = new VBO(sz);
+						a.init(GL_STATIC_DRAW);
+						a.map();
+					}
+
+					zone.init(o, a);
 				}
 			}
 
+			latch.countDown();
 		});
+		try
+		{
+			latch.await();
+		}
+		catch (InterruptedException e)
+		{
+			throw new RuntimeException(e);
+		}
 
 		for (int x = 0; x < ctx.sizeX; ++x)
 		{
@@ -2405,7 +2072,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 	@Override
 	public void swapScene(Scene scene)
 	{
-		GpuMemoryDiagnostics.scene("scene-swap-enter", scene.getWorldViewId());
 		if (scene.getWorldViewId() != WorldView.TOPLEVEL)
 		{
 			swapSub(scene);
@@ -2451,7 +2117,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 		}
 
 		checkGLErrors();
-		GpuResourceAudit.checkpoint("scene-swap-complete", false);
 	}
 
 	private void swapSub(Scene scene)
@@ -2477,7 +2142,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 			}
 		}
 		log.debug("WorldView ready: {}", scene.getWorldViewId());
-		GpuResourceAudit.checkpoint("sub-scene-swap-complete", false);
 	}
 
 	private int getScaledValue(final double scale, final int value)
@@ -2515,7 +2179,6 @@ public class GpuPlugin extends Plugin implements DrawCallbacks, net.runelite.cli
 			{
 				return;
 			}
-			GpuResourceAudit.glError(err);
 
 			String errStr;
 			switch (err)
