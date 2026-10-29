@@ -919,11 +919,10 @@ net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInter
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInterface(String): boolean  ->  net.runelite.api.widgets.Widget#getId(): int
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInterface(String): boolean  ->  net.runelite.api.widgets.Widget#getName(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#handleProcessingInterface(String): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#hasVisibleWidgetText(String): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findContainsMatch$31(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findExactMatch$30(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$34(Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
-net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$35(String, Widget): AbstractMap$SimpleEntry  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findContainsMatch$32(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findExactMatch$31(String, Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$35(Widget): boolean  ->  net.runelite.api.widgets.Widget#getText(): String
+net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findSimilarWidgets$36(String, Widget): AbstractMap$SimpleEntry  ->  net.runelite.api.widgets.Widget#getText(): String
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$17(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#lambda$findWidget$21(Widget): boolean  ->  net.runelite.api.widgets.Widget#isHidden(): boolean
 net.runelite.client.plugins.microbot.util.widget.Rs2Widget#matchesSpriteId(Widget, int): boolean  ->  net.runelite.api.widgets.Widget#getSpriteId(): int
