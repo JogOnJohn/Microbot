@@ -320,6 +320,7 @@ public class Rs2Walker {
     private static final int POST_HANDLE_OBJECT_FAILED_SETTLE_MS = 800;
     private static final int CLOSED_TRANSPORT_TRANSFORM_WAIT_MS = 2_500;
     private static final int OBJECT_INTERACTION_PROGRESS_WAIT_MS = 5_000;
+    private static final int SAME_PLANE_OBJECT_LANDING_TOLERANCE = 3;
 
     /** Teleport “already near destination” skip in path loop — same semantics as prior {@code distanceTo2D &lt; 3}. */
     private static final int TELEPORT_NEAR_SKIP_CHEBYSHEV = 3;
@@ -9868,7 +9869,7 @@ public class Rs2Walker {
         if (current.equals(destination)) return true;
         return before != null && before.getPlane() == destination.getPlane()
                 && before.distanceTo2D(destination) > OFFSET
-                && current.distanceTo2D(destination) <= OFFSET;
+                && current.distanceTo2D(destination) <= SAME_PLANE_OBJECT_LANDING_TOLERANCE;
     }
 
     private static boolean awaitSamePlaneObjectInteractionProgress(WorldPoint before,

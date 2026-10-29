@@ -30,6 +30,11 @@ public class SamePlaneObjectLandingTest {
                 new WorldPoint(3001, 3000, 0), destination));
     }
 
+    @Test public void ordinaryNearbyApproachMustStillWaitForMovement() {
+        assertFalse(Rs2Walker.hasReachedSamePlaneObjectLanding(new WorldPoint(2996, 3000, 0),
+                new WorldPoint(2997, 3000, 0), destination));
+    }
+
     @Test public void exactArrivalStillWorksWithoutOrigin() {
         assertTrue(Rs2Walker.hasReachedSamePlaneObjectLanding(null, destination, destination));
     }
