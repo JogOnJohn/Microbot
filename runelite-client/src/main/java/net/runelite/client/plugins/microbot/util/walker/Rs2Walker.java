@@ -9860,12 +9860,23 @@ public class Rs2Walker {
         return Rs2GameObject.getGameObject(transport.getObjectId(), transport.getOrigin(), 3);
     }
 
+    static boolean hasReachedSamePlaneObjectLanding(WorldPoint before, WorldPoint current,
+                                                    WorldPoint destination) {
+        if (current == null || destination == null || current.getPlane() != destination.getPlane()) {
+            return false;
+        }
+        if (current.equals(destination)) return true;
+        return before != null && before.getPlane() == destination.getPlane()
+                && before.distanceTo2D(destination) > OFFSET
+                && current.distanceTo2D(destination) <= OFFSET;
+    }
+
     private static boolean awaitSamePlaneObjectInteractionProgress(WorldPoint before,
                                                                     WorldPoint destination) {
         AtomicBoolean movementObserved = new AtomicBoolean(Rs2Player.isMoving());
         return sleepUntil(() -> {
             WorldPoint current = Rs2Player.getWorldLocation();
-            if (current != null && destination != null && current.equals(destination)) {
+            if (hasReachedSamePlaneObjectLanding(before, current, destination)) {
                 return true;
             }
             if (Rs2Dialogue.isInDialogue() || Rs2Dialogue.hasSelectAnOption()) {
