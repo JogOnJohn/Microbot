@@ -17,6 +17,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -26,6 +27,7 @@ public class ShortestPathWorldMapTargetTest {
 
     private Client client;
     private WorldMap worldMap;
+    private WorldMapData worldMapData;
     private Widget currentMapName;
     private ShortestPathPlugin plugin;
 
@@ -33,7 +35,7 @@ public class ShortestPathWorldMapTargetTest {
     public void setUp() throws Exception {
         client = mock(Client.class);
         worldMap = mock(WorldMap.class);
-        WorldMapData worldMapData = mock(WorldMapData.class);
+        worldMapData = mock(WorldMapData.class);
         Widget mapView = mock(Widget.class);
         Widget mapList = mock(Widget.class);
         currentMapName = mock(Widget.class);
@@ -79,6 +81,18 @@ public class ShortestPathWorldMapTargetTest {
         WorldPoint display = new WorldPoint(3116, 9696, 0);
         assertEquals(display, ShortestPathPlugin.toRealWorldPoint(display, null));
         assertEquals(display, ShortestPathPlugin.toRealWorldPoint(display, WorldMapArea.ANY));
+    }
+
+    @Test
+    public void mappedDungeonClickDoesNotRequireSurfaceMembership() throws Exception {
+        when(worldMapData.surfaceContainsPosition(anyInt(), anyInt())).thenReturn(false);
+        assertEquals(new WorldPoint(3756, 5664, 0), clickMap("Dwarven Mines", 3116, 9696));
+    }
+
+    @Test
+    public void unknownDungeonClickRetainsTheUnmappedCoordinateGuard() throws Exception {
+        when(worldMapData.surfaceContainsPosition(anyInt(), anyInt())).thenReturn(false);
+        assertNull(clickMap("Some New Area", 3116, 9696));
     }
 
     @Test
