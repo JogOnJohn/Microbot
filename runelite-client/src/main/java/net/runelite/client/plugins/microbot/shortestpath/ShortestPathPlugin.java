@@ -33,6 +33,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuEntryAdded;
 import net.runelite.api.events.MenuOpened;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.worldmap.WorldMap;
@@ -48,6 +49,8 @@ import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.questhelper.util.worldmap.WorldMapArea;
+import net.runelite.client.plugins.microbot.questhelper.util.worldmap.WorldPointMapper;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.CollisionMap;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.Pathfinder;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderConfig;
@@ -94,6 +97,7 @@ import java.util.regex.Pattern;
         description = "Draws the shortest path to a chosen destination on the map (right click a spot on the world map to use)",
         tags = {"pathfinder", "map", "waypoint", "navigation", "microbot"},
         enabledByDefault = true,
+        version = "1.0.6",
         alwaysOn = true
 )
 public class ShortestPathPlugin extends Plugin implements KeyListener {
@@ -1225,6 +1229,10 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             }
         } else {
             WorldPoint mapPoint = calculateMapPoint(client.isMenuOpen() ? lastMenuOpenedPoint : client.getMouseCanvasPosition());
+            WorldPoint realPoint = toRealWorldPoint(mapPoint, getViewedWorldMapArea());
+            if (realPoint != null && !realPoint.equals(mapPoint)) {
+                return realPoint;
+            }
             if (mapPoint != null) {
                 WorldMapData worldMapData = client.getWorldMap().getWorldMapData();
                 if (worldMapData != null && !worldMapData.surfaceContainsPosition(mapPoint.getX(), mapPoint.getY())) {
@@ -1235,9 +1243,22 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
                     return null;
                 }
             }
-            return mapPoint;
+            return realPoint;
         }
         return null;
+    }
+
+    private WorldMapArea getViewedWorldMapArea() {
+        Widget mapList = client.getWidget(InterfaceID.Worldmap.MAPLIST_DISPLAY);
+        Widget currentMap = mapList == null ? null : mapList.getChild(4);
+        return currentMap == null ? WorldMapArea.ANY : WorldMapArea.fromName(currentMap.getText());
+    }
+
+    static WorldPoint toRealWorldPoint(WorldPoint mapPoint, WorldMapArea viewedArea) {
+        if (mapPoint == null || viewedArea == null || viewedArea == WorldMapArea.ANY) {
+            return mapPoint;
+        }
+        return WorldPointMapper.getRealWorldPointFromMapPoint(mapPoint, viewedArea).getWorldPoint();
     }
 
     public void setTarget(WorldPoint target) {
