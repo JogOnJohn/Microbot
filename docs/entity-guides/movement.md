@@ -541,3 +541,14 @@ change movement, recovery ownership or route selection to handle this gap.
 
 **Defensive check:** `Rs2PlayerIsInCaveTest` covers missing positions, surface
 and underground positions, and the existing instance exclusion.
+
+## 19. Separate world-map display coordinates from routing tiles
+
+Resolve a dungeon map click through the viewed Quest Helper map area before
+using it as a path target. Keep the existing surface-membership rejection when
+an unknown display coordinate cannot be translated. Route and arrival logic use
+the real tile; target markers use its mapped display tile. Marker publication
+must still use the same fully constructed local reference.
+
+**Defensive check:** `ShortestPathWorldMapTargetTest` covers Motherlode Mine,
+surface and unknown areas, the retained rejection guard and marker round trips.
