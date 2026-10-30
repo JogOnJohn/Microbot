@@ -1261,6 +1261,14 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
         return WorldPointMapper.getRealWorldPointFromMapPoint(mapPoint, viewedArea).getWorldPoint();
     }
 
+    public static WorldMapPoint createTargetMarker(WorldPoint target) {
+        WorldMapPoint marker = new WorldMapPoint(WorldPointMapper.getMapWorldPointFromRealWorldPoint(target).getWorldPoint(), MARKER_IMAGE);
+        marker.setName("Target");
+        marker.setTarget(marker.getWorldPoint());
+        marker.setJumpOnClick(true);
+        return marker;
+    }
+
     public void setTarget(WorldPoint target) {
         setTarget(target, false);
     }
@@ -1293,10 +1301,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             }
             worldMapPointManager.removeIf(x -> x == marker);
             if (targets.size() == 1) {
-                marker = new WorldMapPoint(targets.iterator().next(), MARKER_IMAGE);
-                marker.setName("Target");
-                marker.setTarget(marker.getWorldPoint());
-                marker.setJumpOnClick(true);
+                marker = createTargetMarker(targets.iterator().next());
                 worldMapPointManager.add(marker);
             }
 
