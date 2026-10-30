@@ -50,7 +50,7 @@ public class ShortestPathWorldMapTargetTest {
         when(worldMap.getWorldMapData()).thenReturn(worldMapData);
         when(worldMapData.surfaceContainsPosition(anyInt(), anyInt())).thenReturn(true);
 
-        plugin = new ShortestPathPlugin(mock(WalkingNoticeOverlay.class));
+        plugin = new ShortestPathPlugin();
         Field clientField = ShortestPathPlugin.class.getDeclaredField("client");
         clientField.setAccessible(true);
         clientField.set(plugin, client);
