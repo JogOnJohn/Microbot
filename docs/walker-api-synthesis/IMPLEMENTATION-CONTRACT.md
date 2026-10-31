@@ -33,10 +33,10 @@ metrics and acceptable tolerances before evaluating performance-changing work.
 
 ## Tranches
 
-| Stage | Scope | Initial status |
+| Stage | Scope | Status |
 | --- | --- | --- |
 | 0 | Inventory, independent review, acceptance contract and regression discovery | Prepared; complete runtime/performance baseline still pending |
-| 1 | Collision-query facade adapters and contract tests; keep existing executor policy | In progress |
+| 1 | Collision-query facade adapters and contract tests; keep existing executor policy | Implemented and offline validated; promotion pending |
 | 2 | Readiness-only object helpers; client-thread/freshness and no-effect tests | Not started |
 | 3 | Reconcile canonical/runtime/data-sync interaction APIs before publishing adapters | Not started |
 | 4 | Typed transport conversion with requirement/converter fidelity | Not started |
@@ -55,8 +55,8 @@ to describe implementation progress. Maintain explicit dispositions as stages la
 | Surface | Disposition for first tranche |
 | --- | --- |
 | Existing public canonical walker/facade methods | Preserve unchanged contracts |
-| Rs2PathApi.hasWalkableTileWithin(WorldPoint,int) | Adapt existing canonical collision query; no reachability guarantee |
-| Rs2PathApi.nearestWalkableTile(WorldPoint,int) | Adapt existing canonical radius-1 diagnostic query; never auto-retarget |
+| Rs2PathApi.hasWalkableTileWithin(WorldPoint,int) | Adapted existing canonical collision query; no reachability guarantee |
+| Rs2PathApi.nearestWalkableTile(WorldPoint,int) | Adapted existing canonical radius-1 diagnostic query; never auto-retarget |
 | Readiness-only object helpers | Deferred to stage 2 |
 | Runtime/data-sync request-based interactions | Deferred to deliberate stage 3 reconciliation |
 | Typed transport/route/planner and shadow/canary additions | Deferred to stages 4/5; do not wholesale copy upstream facade |
@@ -87,5 +87,8 @@ to describe implementation progress. Maintain explicit dispositions as stages la
 Update status and evidence as work proceeds. Never label an entire stage complete
 because an API compiles or because its first unit test passes.
 
-- Stage 1: implementation started in the isolated client worktree. No deployment,
-  Hub migration, route-planning or executor change is authorized by this checkpoint.
+- Stage 1: client compile passed; full offline runUnitTests reported 2,727 tests,
+  6 skipped, zero failures/errors, including all 14 new query tests. See
+  [stage 1 evidence and remaining gates](STAGE-1-VALIDATION.md). Implementation is
+  isolated; promotion, Hub artifact/linkage checks, performance comparison and live
+  validation remain pending. No deployment or executor change was performed.

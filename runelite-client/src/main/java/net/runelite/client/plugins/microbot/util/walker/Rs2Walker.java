@@ -20,6 +20,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.shortestpath.*;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.CollisionMap;
+import net.runelite.client.plugins.microbot.shortestpath.pathfinder.CollisionMapQueries;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.Pathfinder;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderConfig;
 import net.runelite.client.plugins.microbot.shortestpath.transport.TransportRefusalLedger;
@@ -783,48 +784,12 @@ public class Rs2Walker {
     }
 
     static boolean hasWalkableTileWithin(CollisionMap map, WorldPoint target, int distance) {
-        if (map == null || target == null) {
-            return true;
-        }
-        if (!map.hasRegion(target.getX(), target.getY())) {
-            return true;
-        }
-        int radius = Math.max(0, distance);
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dy = -radius; dy <= radius; dy++) {
-                int x = target.getX() + dx;
-                int y = target.getY() + dy;
-                if (!map.hasRegion(x, y)) {
-                    return true;
-                }
-                if (!map.isBlocked(x, y, target.getPlane())) {
-                    return true;
-                }
-            }
-        }
-        return false;
+        return CollisionMapQueries.hasWalkableTileWithin(map, target, distance);
     }
 
     /** Nearest walkable tile to {@code target} within {@code maxRadius}, or null. Diagnostics only. */
     static WorldPoint nearestWalkableTile(CollisionMap map, WorldPoint target, int maxRadius) {
-        if (map == null || target == null) {
-            return null;
-        }
-        for (int r = 1; r <= maxRadius; r++) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dy = -r; dy <= r; dy++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) != r) {
-                        continue; // ring only; inner rings already scanned
-                    }
-                    int x = target.getX() + dx;
-                    int y = target.getY() + dy;
-                    if (map.hasRegion(x, y) && !map.isBlocked(x, y, target.getPlane())) {
-                        return new WorldPoint(x, y, target.getPlane());
-                    }
-                }
-            }
-        }
-        return null;
+        return CollisionMapQueries.nearestWalkableTile(map, target, maxRadius);
     }
 
     /** Door / gate from main path loop vs {@link #handleNearbyRawPathSceneObjects} raw-path scan (same nudge UX). */

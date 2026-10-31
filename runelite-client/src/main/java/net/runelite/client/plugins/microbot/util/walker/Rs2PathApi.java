@@ -107,6 +107,26 @@ public final class Rs2PathApi
 		return ShortestPathPlugin.getPathfinderConfig();
 	}
 
+	/**
+	 * Read-only terrain query, not a reachability check. Unknown map/target data
+	 * returns true to permit a pathfinding attempt. Nonpositive distance checks
+	 * only the target tile. Does not refresh configuration or change a route.
+	 */
+	public static boolean hasWalkableTileWithin(WorldPoint target, int distance)
+	{
+		return ShortestPathPlugin.hasWalkableTileWithin(target, distance);
+	}
+
+	/**
+	 * Diagnostic mapped terrain on rings 1 through maxRadius on the target plane.
+	 * Excludes the target itself and does not prove connectivity or retarget a route.
+	 * Missing map/target data or nonpositive radius returns null. Keep radii small.
+	 */
+	public static WorldPoint nearestWalkableTile(WorldPoint target, int maxRadius)
+	{
+		return ShortestPathPlugin.nearestWalkableTile(target, maxRadius);
+	}
+
 	/** Distance from the target at which the path is considered reached. */
 	public static void setReachedDistance(int reachedDistance)
 	{
