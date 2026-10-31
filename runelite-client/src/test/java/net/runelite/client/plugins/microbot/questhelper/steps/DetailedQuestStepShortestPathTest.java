@@ -5,6 +5,7 @@ import net.runelite.api.Client;
 import net.runelite.api.Player;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.eventbus.EventBus;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.events.PluginMessage;
 import net.runelite.client.plugins.microbot.questhelper.QuestHelperConfig;
 import net.runelite.client.plugins.microbot.questhelper.questhelpers.QuestHelper;
@@ -14,6 +15,7 @@ import org.junit.Test;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -39,6 +41,11 @@ public class DetailedQuestStepShortestPathTest
 		clientField.setAccessible(true);
 		clientField.set(step, client);
 		step.eventBus = eventBus;
+		step.clientThread = mock(ClientThread.class);
+		doAnswer(invocation -> {
+			((Runnable) invocation.getArgument(0)).run();
+			return null;
+		}).when(step.clientThread).invoke(any(Runnable.class));
 	}
 
 	@Test
