@@ -901,11 +901,12 @@ public class DetailedQuestStep extends QuestStep
 			{
 				return;
 			}
-			if (client.getLocalPlayer() == null)
+			var player = client.getLocalPlayer();
+			if (player == null)
 			{
 				return;
 			}
-			var playerWp = client.getLocalPlayer().getWorldLocation();
+			var playerWp = player.getWorldLocation();
 			if (playerWp == null)
 			{
 				return;
@@ -932,7 +933,7 @@ public class DetailedQuestStep extends QuestStep
 	@Override
 	public void disableShortestPath()
 	{
-		if (definedPoint.getWorldPoint() != null && !isLineDrawn())
+		if (definedPoint != null && definedPoint.getWorldPoint() != null && !isLineDrawn())
 		{
 			eventBus.post(new PluginMessage("shortestpath", "clear"));
 		}
