@@ -1,7 +1,7 @@
 # Walker API Synthesis Preparation
 
-Prepared 2026-10-31. Inventory only: no production Java, resources, build configuration,
-walker behaviour, or client lifecycle changes.
+Prepared 2026-10-31. The inventory checkpoint is complete; isolated implementation
+has now begun under the acceptance contract. No promotion or client lifecycle changes.
 
 ## Workspace
 
@@ -22,6 +22,7 @@ pinned refs; this task is not another upstream sync or release.
 
 ## Read Next
 
+- [Implementation contract and acceptance checklist](IMPLEMENTATION-CONTRACT.md)
 - [API inventory and semantic differences](API-INVENTORY.md)
 - [Implementation boundaries and future validation](HANDOFF.md)
 - [Reproducible inventory tool](../../tools/walker-api-audit/README.md)

@@ -1,11 +1,13 @@
 # Implementation Handoff
 
-## Prepared, Not Migrated
+## Preparation Checkpoint
 
-Only docs, inventory outputs and a standalone audit tool are added to the client
-prep branch. Hub prep contains caller reports and guidance. No production edits,
+At the preparation checkpoint, only docs, inventory outputs and a standalone audit
+tool were added to the client prep branch. Hub prep contains caller reports and
+guidance. No production edits,
 dependency changes, merges into playable, releases, pushes, installation or runtime
-validation belong to this preparation checkpoint.
+validation belonged to that preparation checkpoint. Isolated implementation has
+since begun; see [the contract and current stage record](IMPLEMENTATION-CONTRACT.md).
 
 The local workspace manifest and raw AST evidence are outside both repositories:
 `operator-work/output/audits/walker-api-synthesis-20261031/` under the MBOT workspace.
