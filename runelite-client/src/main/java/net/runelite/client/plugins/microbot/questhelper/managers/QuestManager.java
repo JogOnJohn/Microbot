@@ -374,13 +374,13 @@ public class QuestManager
 
 	public void activateShortestPath()
 	{
-		if (selectedQuest == null) return;
+		if (selectedQuest == null || selectedQuest.getCurrentStep() == null) return;
 		selectedQuest.getCurrentStep().getActiveStep().setShortestPath();
 	}
 
 	public void disableShortestPath()
 	{
-		if (selectedQuest == null) return;
+		if (selectedQuest == null || selectedQuest.getCurrentStep() == null) return;
 		selectedQuest.getCurrentStep().getActiveStep().disableShortestPath();
 	}
 
