@@ -23,6 +23,7 @@ pinned refs; this task is not another upstream sync or release.
 ## Read Next
 
 - [Implementation contract and acceptance checklist](IMPLEMENTATION-CONTRACT.md)
+- [Stage 1 validation](STAGE-1-VALIDATION.md) and [stage 2 validation/support limits](STAGE-2-VALIDATION.md)
 - [API inventory and semantic differences](API-INVENTORY.md)
 - [Implementation boundaries and future validation](HANDOFF.md)
 - [Reproducible inventory tool](../../tools/walker-api-audit/README.md)

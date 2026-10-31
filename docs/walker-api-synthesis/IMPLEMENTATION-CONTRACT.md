@@ -37,7 +37,7 @@ metrics and acceptable tolerances before evaluating performance-changing work.
 | --- | --- | --- |
 | 0 | Inventory, independent review, acceptance contract and regression discovery | Prepared; complete runtime/performance baseline still pending |
 | 1 | Collision-query facade adapters and contract tests; keep existing executor policy | Implemented and offline validated; promotion pending |
-| 2 | Readiness-only object helpers; client-thread/freshness and no-effect tests | Not started |
+| 2 | Readiness-only object helpers; client-thread/freshness and no-effect tests | Implemented and offline validated; promotion pending; instances/secondary views deferred |
 | 3 | Reconcile canonical/runtime/data-sync interaction APIs before publishing adapters | Not started |
 | 4 | Typed transport conversion with requirement/converter fidelity | Not started |
 | 5 | Typed planning integration where a concrete consumer benefit justifies it | Not started |
@@ -57,7 +57,8 @@ to describe implementation progress. Maintain explicit dispositions as stages la
 | Existing public canonical walker/facade methods | Preserve unchanged contracts |
 | Rs2PathApi.hasWalkableTileWithin(WorldPoint,int) | Adapted existing canonical collision query; no reachability guarantee |
 | Rs2PathApi.nearestWalkableTile(WorldPoint,int) | Adapted existing canonical radius-1 diagnostic query; never auto-retarget |
-| Readiness-only object helpers | Deferred to stage 2 |
+| Rs2InteractionApproach.isReady(GameObject/WallObject) | Stage 2 conservative readiness adapter; non-instanced active top-level view only; no interaction confirmation |
+| Instance/secondary-view and model-based readiness | Deferred pending coordinate-consistent helpers and tests; current queries return false |
 | Runtime/data-sync request-based interactions | Deferred to deliberate stage 3 reconciliation |
 | Typed transport/route/planner and shadow/canary additions | Deferred to stages 4/5; do not wholesale copy upstream facade |
 | Split executor and upstream test-only public hooks | Deferred; not supported merely by exposing API names |
@@ -92,3 +93,8 @@ because an API compiles or because its first unit test passes.
   [stage 1 evidence and remaining gates](STAGE-1-VALIDATION.md). Implementation is
   isolated; promotion, Hub artifact/linkage checks, performance comparison and live
   validation remain pending. No deployment or executor change was performed.
+- Stage 2: additive GameObject/WallObject readiness helpers compiled; full offline
+  runUnitTests reported 2,764 tests, 6 skipped, zero failures/errors, including 37
+  new readiness tests and both guardrails. See [stage 2 evidence and support
+  limits](STAGE-2-VALIDATION.md). No existing consumer is redirected. Instance,
+  secondary-view and model-based readiness remain deferred; no promotion occurred.
