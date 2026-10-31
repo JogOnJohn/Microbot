@@ -68,20 +68,33 @@ as new supported plugin APIs merely because upstream exposes them.
    runtime and data-sync do not prove identical bodies.
 2. **Two arguments do not identify an overload.** Canonical already has
    `walkTo(WorldPoint,int)`. An arity-only caller audit can incorrectly appear
-   compatible with `walkTo(WorldPoint,InteractionRequest)`. The private Homes
-   interaction branch needs the latter plus request factories/cancellation.
+   compatible with `walkTo(WorldPoint,InteractionRequest)`. The pinned private Homes
+   caller actually uses a separate three-argument collision:
+   `walkWithBankedTransportsAndState(WorldPoint,int,InteractionRequest)` versus
+   canonical `(WorldPoint,int,boolean)`, with different return types too. It also
+   requires request factories/cancellation and public request/lifecycle members.
 3. **Arrival, readiness and effect confirmation differ.** Our predicate-based
    `walkWithStateUntil` can return ARRIVED when its completion predicate becomes
    true before coordinate arrival. Runtime InteractionResult only reports SUCCEEDED
-   for its interaction confirmation. Retain one request across polls and cancel on
+   for its interaction confirmation, after a dispatched attempt and the scene,
+   anchor-plane and proximity gates. Retain the same request object across polls:
+   runtime reservation uses identity, not just equal field values. Cancel on
    abandonment, stop or replacement; do not create a new request every tick.
+   Cancellation marks the request immediately; owned-route cleanup can wait for
+   the next cancellation checkpoint when the lock is busy.
 4. **Preserve banked target ownership.** Existing caller-held AtomicReference
    ownership, lock-busy MOVING and changed-owner EXIT handling cannot be replaced
-   by an unconditional success boolean. Release walker ownership before caller action.
+   by an unconditional success boolean. Canonical caller-driven handoff clears its
+   route/holder and unlocks before returning to the caller. Runtime internal
+   dispatch clears its owned route but retains the interaction reservation and
+   walker lock until the surrounding finally block. Keep route ownership,
+   interaction reservation and lock ownership distinct; do not require an
+   unlock-before-dispatch rewrite.
 5. **Planning is not movement.** Upstream `Rs2PathApi.plan` is synchronous, rejects
    client-thread invocation, serializes on pathfinder state and may temporarily
    change bank/config transport state. It does not publish an active route but is
-   not a pure query. Its snapshot/policy/shadow/canary dependencies cannot simply
+   not a pure query. Restoring the bank flag and refreshing is not full configuration
+   rollback; the restoration refresh can itself throw. Its snapshot/policy/shadow/canary dependencies cannot simply
    be pasted into our thin facade.
 6. **Search complete is not target reached.** Rs2RouteResult.isSearchCompleted()
    includes SEARCH_EXHAUSTED and CUTOFF_REACHED, excluding only CANCELLED/FAILED.
@@ -91,6 +104,11 @@ as new supported plugin APIs merely because upstream exposes them.
    It neither returns radius-zero target nor proves connectivity from the start.
    The within-radius helper deliberately permits unknown maps/regions. Preserve
    instance/unmapped handling, and do not silently move scripted destinations.
+   Both pinned walkers use the nearest lookup diagnostically and reject the original
+   blocked destination rather than automatically snapping it. The nearest helper
+   returns null for absent map/target or zero/negative radius; the within helper
+   accepts absent map/target, checks radius zero for nonpositive radii and permits
+   an unknown neighboring region. These are deliberately different query contracts.
 8. **Read scene state on the client thread.** Rs2InteractionApproach is a readiness
    check, not an interaction executor. Its WallObject branch reads world location
    before its client-thread callback; adapt rather than copying that threading

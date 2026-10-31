@@ -14,15 +14,18 @@ records protected local refs. Neither is a portable build configuration.
 
 ## Next Implementation Sequence
 
-1. Reconcile canonical versus runtime/data-sync interaction API deliberately, with
-   tests for ownership, retained request identity, cancellation and observed effects.
-   Do not merge unrelated runtime changes as a shortcut.
-2. Implement one small query/adapter family per reversible commit behind the
-   current facade. Keep legacy source compatibility. Prefer existing upstream route
-   types over competing request/result definitions.
+1. Start with collision-query facade adapters, then readiness-only object helpers,
+   one reversible commit per family behind the current facade. Preserve destination
+   rejection, client-thread reads and legacy source compatibility. No clicks, camera
+   changes, active-route publication or automatic snapping belong in these helpers.
+2. Reconcile canonical versus runtime/data-sync interaction API before publishing
+   interaction adapters, with tests for ownership, retained request identity,
+   cancellation and observed effects. This is not a prerequisite for independent
+   query-only additions. Do not merge unrelated runtime changes as a shortcut.
 3. Add typed transport conversion only after explicit tests for alternatives,
    grouped item requirements, quantities, banked inventory and converter round-trip.
-4. Add planner integration only after proving policy/snapshot isolation, cancellation
+4. Reuse upstream route types rather than competing request/result definitions.
+   Add planner integration only after proving policy/snapshot isolation, cancellation
    and route ownership. No automatic replacement of the executor or destination policy.
 5. Compile affected Hub consumers against the exact candidate client artifact,
    including active private branches rather than only Hub main.
@@ -55,3 +58,33 @@ authorization before installing, replacing, launching or enabling plugins. Valid
 the then-current workload (currently Ardougne Agility), visible client and backend
 independently. Promote via the normal selective development/playable/data-sync flow
 only after validation; never reset protected branches onto this worktree.
+
+## Preparation Review And First Adapter Acceptance
+
+Independent read-only client/Hub subagent reviews verified the semantic findings
+and tightened route-versus-lock ownership, planner restoration limits and the actual
+private Homes overload attribution. No application tests were run for this review.
+
+Collision-query adapters need absent/unknown map and region, zero/negative radius,
+same-plane/ring ordering and disconnected-but-standable tile cases. Assert no
+destination, config or active-route mutation. Readiness-only helpers need null or
+despawned objects, unavailable client-thread results, wrong plane, range/offscreen
+boundaries and closed-door separation. Assert no clicks or camera changes and
+never report interaction success from readiness.
+
+Existing regression sources to retain include ShortestPathGoldenRouteBaselineTest,
+WalkerRouteCorpusTest, PersonalPohSelectionTest, World330HostedHouseTransportTest,
+World330HostedHouseAccessTest, BankedTransportItemPlanningTest,
+WalkerInteractionCompletionTest, Rs2WalkerHandoffFailureTest,
+Rs2WalkerPartialRouteSafetyTest and Rs2WalkerPathEndpointArrivalTest. Discovery of
+these tests is not execution. Keep full route coverage before promotion, not merely
+passing a small adapter filter. Converter validation has a separate task:
+
+```powershell
+.\gradlew.bat :client:validateTransportSync -PtransportSyncGeneratedDir=<fresh-converter-output>
+```
+
+Do not regenerate regression/guardrail baselines simply to make a changed route or
+threading contract pass. Hub's report now records its focused source and binary
+compatibility matrix, including expected canonical incompatibility for historical
+interaction consumers.
