@@ -3088,7 +3088,7 @@ public class Rs2Walker {
                         }, 1200);
                         WorldPoint afterClickWait = Rs2Player.getWorldLocation();
                         boolean routeRetryClicked = false;
-                        if (afterClickWait != null && afterClickWait.equals(before) && !Rs2Player.isMoving()) {
+                        if (routeClickStillUnanswered(target, before)) {
                             WorldPoint routeRetryTarget = clickMiniMapOrFallback(rawPath, b, before,
                                     MINIMAP_REACH_EUCLIDEAN - 1, false, rawAnchorIndex);
                             if (routeRetryTarget != null) {
@@ -4316,6 +4316,15 @@ public class Rs2Walker {
         routeState.idleNudgeLastObservedLocation = playerLoc;
         routeState.stuckCount = 0;
         return true;
+    }
+
+    static boolean routeClickStillUnanswered(WorldPoint cancelGoal, WorldPoint before) {
+        if (before == null || !before.equals(Rs2Player.getWorldLocation()) || Rs2Player.isMoving()) {
+            return false;
+        }
+        waitForMovementStartAfterRecovery(cancelGoal, before, null, null, -1);
+        return !isWalkCancelled(cancelGoal)
+                && before.equals(Rs2Player.getWorldLocation()) && !Rs2Player.isMoving();
     }
 
     static boolean proximityWaitSatisfied(WorldPoint now,
