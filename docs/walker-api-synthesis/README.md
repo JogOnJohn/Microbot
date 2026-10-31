@@ -3,6 +3,9 @@
 Prepared 2026-10-31. The inventory checkpoint is complete; isolated implementation
 has now begun under the acceptance contract. No promotion or client lifecycle changes.
 
+**Night checkpoint:** stage 3 is unfinished and not ready to promote. Read
+[the remaining blockers and resume instructions](STAGE-3-HANDOFF.md) first.
+
 ## Workspace
 
 Both client and Hub preparation branches are `codex/walker-api-synthesis-20261031`.

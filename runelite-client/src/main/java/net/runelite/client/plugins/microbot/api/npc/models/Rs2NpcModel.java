@@ -18,6 +18,7 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.Arrays;
 import java.util.function.Predicate;
+import java.util.function.BooleanSupplier;
 import java.util.stream.IntStream;
 
 @Getter
@@ -26,6 +27,25 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
 {
 
     private final NPC npc;
+    private static final ThreadLocal<BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();
+
+    public boolean click(String action, BooleanSupplier guard) {
+        BooleanSupplier previous = clickDispatchGuard.get();
+        try {
+            if (guard == null || Microbot.getClient() == null || !guard.getAsBoolean()) return false;
+            clickDispatchGuard.set(guard);
+            return click(action);
+        } catch (RuntimeException ex) {
+            return false;
+        } finally {
+            restoreThreadLocal(previous);
+        }
+    }
+
+    private static void restoreThreadLocal(BooleanSupplier previous) {
+        if (previous == null) clickDispatchGuard.remove();
+        else clickDispatchGuard.set(previous);
+    }
 
     public Rs2NpcModel(final NPC npc)
     {
@@ -202,7 +222,7 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
 
         Microbot.status = action + " " + npcName;
         try {
-            if (Microbot.isCantReachTargetDetectionEnabled && Microbot.cantReachTarget) {
+            if (clickDispatchGuard.get() == null && Microbot.isCantReachTargetDetectionEnabled && Microbot.cantReachTarget) {
                 if (!hasLineOfSight()) {
                     if (Microbot.cantReachTargetRetries >= Rs2Random.between(3, 5)) {
                         int retries = Microbot.resetCantReachTargetState();
@@ -272,7 +292,7 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
                 Rs2Camera.turnTo(npc);
             }
 
-            Microbot.doInvoke(new NewMenuEntry()
+            NewMenuEntry entry = new NewMenuEntry()
                             .param0(0)
                             .param1(0)
                             .opcode(menuAction.getId())
@@ -280,9 +300,12 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
                             .itemId(-1)
                             .target(npcName)
                             .actor(npc)
-                            .option(action)
-                    ,
-                    Rs2UiHelper.getActorClickbox(npc));
+                            .option(action);
+            if (clickDispatchGuard.get() != null) {
+                entry.validWhen(clickDispatchGuard.get());
+                if (!entry.isDispatchValid()) return false;
+            }
+            Microbot.doInvoke(entry, Rs2UiHelper.getActorClickbox(npc));
             return true;
 
         } catch (Exception ex) {

@@ -1,0 +1,78 @@
+package net.runelite.client.plugins.microbot.util.walker.interaction;
+
+import net.runelite.api.coords.WorldPoint;
+
+/** Pure, monotonic operation state. No client reads, input, sleeps or route ownership. */
+public final class InteractionLifecycle {
+    public enum Decision { APPROACH, DISPATCH, WAIT, SUCCEEDED, CANCELLED, FAILED }
+    private static final long OPERATION_MS = 120_000;
+    private static final long EFFECT_MS = 8_000;
+    private static final long RETRY_MS = 1_200;
+    private long started = -1;
+    private boolean initialized;
+    private long dispatched = -1;
+    private long retryAfter;
+    private long lastProgress;
+    private WorldPoint lastPosition;
+    private int attempts;
+    private boolean awaiting;
+    private Decision terminal;
+    private String reason = "in-progress";
+
+    public synchronized Decision update(long now, WorldPoint position, boolean sceneReady,
+            boolean moving, boolean ready, boolean confirmed, boolean cancelled) {
+        if (terminal != null) return terminal;
+        if (cancelled) { reason = "cancelled"; return terminal = Decision.CANCELLED; }
+        if (!initialized) { initialized = true; started = lastProgress = now; lastPosition = position; }
+        if (!activeAt(now)) return terminal;
+        if (attempts > 0 && confirmed) return terminal = Decision.SUCCEEDED;
+        if (!sceneReady) return Decision.WAIT;
+        if (position != null && !position.equals(lastPosition)) {
+            lastPosition = position;
+            lastProgress = now;
+        }
+        if (awaiting) {
+            if (now - dispatched < EFFECT_MS && (moving || now - lastProgress < 2_400)) return Decision.WAIT;
+            awaiting = false;
+            retryAfter = now + RETRY_MS;
+            if (attempts >= 3) { reason = "effect-attempts-exhausted"; return terminal = Decision.FAILED; }
+            return Decision.APPROACH;
+        }
+        if (now < retryAfter) return Decision.WAIT;
+        return ready ? Decision.DISPATCH : Decision.APPROACH;
+    }
+
+    public synchronized void dispatched(long now) {
+        if (terminal != null) return;
+        attempts++;
+        dispatched = lastProgress = now;
+        awaiting = true;
+    }
+
+    public synchronized void rejected(long now) { if (terminal == null) retryAfter = now + RETRY_MS; }
+    public synchronized boolean stalledAtArrival(long now) {
+        if (terminal != null || !initialized || awaiting || now - lastProgress < 5_000) return false;
+        reason = "arrived-not-ready";
+        terminal = Decision.FAILED;
+        return true;
+    }
+    public synchronized void cancel() {
+        if (terminal == null) { terminal = Decision.CANCELLED; reason = "cancelled"; }
+    }
+    public synchronized void fail(String failureReason) {
+        java.util.Objects.requireNonNull(failureReason);
+        if (terminal == null) { terminal = Decision.FAILED; reason = failureReason; }
+    }
+    public synchronized Decision terminal() { return terminal; }
+    public synchronized boolean activeAt(long now) {
+        if (terminal == null && initialized && (now < started || now - started >= OPERATION_MS)) {
+            terminal = Decision.FAILED;
+            reason = "operation-deadline";
+        }
+        return terminal == null;
+    }
+    public synchronized String reason() { return reason; }
+    public synchronized boolean active() { return terminal == null; }
+    public synchronized boolean awaiting() { return awaiting; }
+    public synchronized int attempts() { return attempts; }
+}

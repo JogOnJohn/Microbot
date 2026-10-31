@@ -64,6 +64,11 @@ public abstract class Mouse {
 
     public abstract Mouse click(Point point, NewMenuEntry entry);
 
+    /** Unsupported implementations must not bypass the final dispatch guard. */
+    public boolean clickGuarded(Point point, java.util.function.BooleanSupplier valid) {
+        return false;
+    }
+
     public Mouse quickClick(Point point, NewMenuEntry entry) {
         return click(point, entry);
     }

@@ -441,6 +441,139 @@ public class InputEmissionTest
 		} finally { swapStatic("mouse", oldMouse); }
 	}
 
+	@Test
+	public void aCancelledEntryAfterQuickMovementDoesNotPressOrArmTheMenu()
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		cancelOnMove(valid);
+		PointerState.setFromBot(10, 10);
+		new VirtualMouse().quickClick(new Point(100, 50), new NewMenuEntry().validWhen(valid::get));
+		assertEquals(ids(MouseEvent.MOUSE_MOVED), receivedIds());
+		assertNull(Microbot.targetMenu);
+		assertEquals(0, AwtEmitter.heldMask());
+	}
+
+	@Test
+	public void cancelledNaturalTravelNeverPressesOrArmsTheEntry() throws Exception
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		NaturalMouse motion = mock(NaturalMouse.class);
+		Mockito.doAnswer(call -> { valid.set(false); return null; }).when(motion).moveTo(100, 50);
+		swapStatic("naturalMouse", motion);
+		PointerState.setFromBot(10, 10);
+		new VirtualMouse().click(new Point(100, 50), new NewMenuEntry().validWhen(valid::get));
+		verify(motion).moveTo(100, 50);
+		assertTrue(received.isEmpty());
+		assertNull(Microbot.targetMenu);
+	}
+
+	@Test
+	public void cancellationDuringQuickSettleNeverArmsOrPresses()
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		PointerState.setFromBot(10, 10);
+		try (MockedStatic<net.runelite.client.plugins.microbot.util.Global> global =
+			Mockito.mockStatic(net.runelite.client.plugins.microbot.util.Global.class)) {
+			global.when(() -> net.runelite.client.plugins.microbot.util.Global.sleep(anyInt()))
+				.thenAnswer(call -> { valid.set(false); return null; });
+			new VirtualMouse().quickClick(new Point(100, 50), new NewMenuEntry().validWhen(valid::get));
+		}
+		assertEquals(ids(MouseEvent.MOUSE_MOVED), receivedIds());
+		assertNull(Microbot.targetMenu);
+		assertEquals(0, AwtEmitter.heldMask());
+	}
+
+	@Test
+	public void ownershipRevokedDuringFinalSceneSnapshotNeverArmsOrPresses()
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		NewMenuEntry entry = new NewMenuEntry().validWhen(valid::get);
+		Point target = new Point(100, 50);
+		PointerState.setFromBot(100, 50);
+		try (MockedStatic<SceneClickSafety> scene = Mockito.mockStatic(SceneClickSafety.class)) {
+			scene.when(() -> SceneClickSafety.appliesTo(entry)).thenReturn(true);
+			scene.when(() -> SceneClickSafety.forEntry(entry, target)).thenReturn(new java.awt.Rectangle(90, 40, 20, 20));
+			scene.when(() -> SceneClickSafety.contains(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(true);
+			scene.when(() -> SceneClickSafety.permits(entry, target)).thenReturn(true).thenAnswer(call -> {
+				valid.set(false);
+				return true;
+			});
+			new VirtualMouse().quickClick(target, entry);
+			assertTrue(received.isEmpty());
+			assertNull(Microbot.targetMenu);
+		}
+	}
+
+	@Test
+	public void rawGuardIsRecheckedAfterFallbackMoveAndReportsNoDispatch()
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		cancelOnMove(valid);
+		PointerState.setFromBot(10, 10);
+		assertTrue(!new VirtualMouse().clickGuarded(new Point(100, 50), valid::get));
+		assertEquals(ids(MouseEvent.MOUSE_MOVED), receivedIds());
+		assertEquals(0, AwtEmitter.heldMask());
+	}
+
+	@Test
+	public void rawGuardCancellationDuringTravelReportsNoDispatch() throws Exception
+	{
+		java.util.concurrent.atomic.AtomicBoolean valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+		NaturalMouse motion = mock(NaturalMouse.class);
+		Mockito.doAnswer(call -> { valid.set(false); return null; }).when(motion).moveTo(100, 50);
+		swapStatic("naturalMouse", motion);
+		assertTrue(!new VirtualMouse().clickGuarded(new Point(100, 50), valid::get));
+		verify(motion).moveTo(100, 50);
+		assertTrue(received.isEmpty());
+	}
+
+	@Test
+	public void rawGuardFailsClosedForNullThrowingClientThreadAndMissingClient() throws Exception
+	{
+		VirtualMouse mouse = new VirtualMouse();
+		Point target = new Point(100, 50);
+		assertTrue(!mouse.clickGuarded(target, null));
+		assertTrue(!mouse.clickGuarded(target, () -> { throw new IllegalStateException(); }));
+		assertTrue(!mouse.clickGuarded(null, () -> true));
+		when(client.isClientThread()).thenReturn(true);
+		assertTrue(!mouse.clickGuarded(target, () -> true));
+		swapStatic("client", null);
+		assertTrue(!mouse.clickGuarded(target, () -> true));
+		assertTrue(received.isEmpty());
+	}
+
+	@Test
+	public void supportedRawGuardEmitsTriadAndHonoursInputOwnership()
+	{
+		PointerState.setFromBot(100, 50);
+		VirtualMouse mouse = new VirtualMouse();
+		assertTrue(mouse.clickGuarded(new Point(100, 50), () -> true));
+		assertEquals(ids(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED, MouseEvent.MOUSE_CLICKED), receivedIds());
+		received.clear();
+		InputArbiter.onRealButtonPressed(MouseEvent.BUTTON1);
+		assertTrue(!mouse.clickGuarded(new Point(100, 50), () -> true));
+		assertTrue(received.isEmpty());
+	}
+
+	@Test
+	public void unsupportedMouseDoesNotFallBackToAnUnguardedClick()
+	{
+		net.runelite.client.plugins.microbot.util.mouse.Mouse mouse = mock(
+			net.runelite.client.plugins.microbot.util.mouse.Mouse.class, Mockito.CALLS_REAL_METHODS);
+		Point target = new Point(100, 50);
+		assertTrue(!mouse.clickGuarded(target, () -> true));
+		verify(mouse, never()).click(target);
+	}
+
+	private void cancelOnMove(java.util.concurrent.atomic.AtomicBoolean valid)
+	{
+		canvas.addMouseMotionListener(new java.awt.event.MouseMotionAdapter()
+		{
+			@Override
+			public void mouseMoved(MouseEvent event) { valid.set(false); }
+		});
+	}
+
 	private void record(MouseEvent event)
 	{
 		received.add(event);

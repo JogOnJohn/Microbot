@@ -466,6 +466,12 @@ public class MicrobotPlugin extends Plugin
 	@Subscribe
 	private void onMenuOptionClicked(MenuOptionClicked event)
 	{
+		if (Microbot.targetMenu instanceof net.runelite.client.plugins.microbot.util.menu.NewMenuEntry
+				&& !((net.runelite.client.plugins.microbot.util.menu.NewMenuEntry) Microbot.targetMenu).isDispatchValid()) {
+			event.consume();
+			Microbot.targetMenu = null;
+			return;
+		}
 		Microbot.getPouchScript().onMenuOptionClicked(event);
 		Rs2Gembag.onMenuOptionClicked(event);
 		Microbot.targetMenu = null;

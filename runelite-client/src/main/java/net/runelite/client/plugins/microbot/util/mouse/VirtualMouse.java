@@ -56,7 +56,7 @@ public class VirtualMouse extends Mouse {
         handleClick(emit, point, rightClick, false, () -> { }, () -> true);
     }
 
-    private void handleClick(InputLoop.Emit emit, Point point, boolean rightClick, boolean quick, Runnable beforePress, java.util.function.BooleanSupplier valid) {
+    private boolean handleClick(InputLoop.Emit emit, Point point, boolean rightClick, boolean quick, Runnable beforePress, java.util.function.BooleanSupplier valid) {
         int button = rightClick ? MouseEvent.BUTTON3 : MouseEvent.BUTTON1;
         // A human clicking where the pointer already is sends no fresh MOVED, so emit one only
         // when it is not there, which happens when NaturalMouse was skipped. No ENTERED/EXITED:
@@ -67,7 +67,7 @@ public class VirtualMouse extends Mouse {
                 sleep(Rs2Random.logNormalBounded(QUICK_CLICK_SETTLE_MIN_MS, QUICK_CLICK_SETTLE_MAX_MS));
             }
         }
-        if (!valid.getAsBoolean()) return;
+        if (!isValid(valid)) return false;
         beforePress.run();
         emit.press(point.getX(), point.getY(), button);
         sleep(quick
@@ -76,6 +76,15 @@ public class VirtualMouse extends Mouse {
         emit.release(point.getX(), point.getY(), button);
         emit.click(point.getX(), point.getY(), button);
         setLastClick(point);
+        return true;
+    }
+
+    private static boolean isValid(java.util.function.BooleanSupplier valid) {
+        try {
+            return valid != null && Microbot.getClient() != null && valid.getAsBoolean();
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
     private boolean shouldMoveNaturally(Point point) {
@@ -120,9 +129,10 @@ public class VirtualMouse extends Mouse {
     }
 
     private Mouse click(Point point, boolean rightClick, NewMenuEntry entry, boolean quick) {
-        if (point == null) return this;
+        if (point == null || Microbot.getClient() == null || entry != null && !entry.isDispatchValid()) return this;
 
         runGesture(() -> InputLoop.run(emit -> {
+            if (entry != null && !entry.isDispatchValid()) return;
             Point newPoint = point;
             boolean scene = SceneClickSafety.appliesTo(entry);
             if (scene) {
@@ -134,6 +144,7 @@ public class VirtualMouse extends Mouse {
             }
             if (!quick && shouldMoveNaturally(newPoint)) {
                 Microbot.naturalMouse.moveTo(newPoint.getX(), newPoint.getY());
+                if (entry != null && !entry.isDispatchValid()) return;
                 if (scene) {
                     java.awt.Point at = Microbot.getMouse().getMousePosition();
                     Point preferred = at == null ? newPoint : new Point(at.x, at.y);
@@ -143,12 +154,30 @@ public class VirtualMouse extends Mouse {
             }
 
             final Point clickPoint = newPoint;
-            java.util.function.BooleanSupplier valid = () -> !scene || SceneClickSafety.permits(entry, clickPoint);
-            if (!valid.getAsBoolean()) return;
+            java.util.function.BooleanSupplier valid = () -> (!scene || SceneClickSafety.permits(entry, clickPoint))
+                    && (entry == null || entry.isDispatchValid());
+            if (!isValid(valid)) return;
             handleClick(emit, clickPoint, rightClick, quick, () -> Microbot.targetMenu = entry, valid);
         }));
 
         return this;
+    }
+
+    @Override
+    public boolean clickGuarded(Point point, java.util.function.BooleanSupplier valid) {
+        try {
+            if (point == null || !isValid(valid) || Microbot.getClient().isClientThread()) return false;
+            boolean[] sent = {false};
+            runGesture(() -> InputLoop.run(emit -> {
+                if (!isValid(valid)) return;
+                if (shouldMoveNaturally(point)) Microbot.naturalMouse.moveTo(point.getX(), point.getY());
+                if (!isValid(valid)) return;
+                sent[0] = handleClick(emit, point, false, false, () -> { }, valid);
+            }));
+            return sent[0];
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
 

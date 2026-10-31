@@ -34,6 +34,9 @@ import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.input.InputArbiter;
+import net.runelite.client.plugins.microbot.util.walker.interaction.InteractionRequest;
+import net.runelite.client.plugins.microbot.util.walker.interaction.InteractionResult;
+import net.runelite.client.plugins.microbot.util.walker.interaction.InteractionLifecycle;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
@@ -979,6 +982,10 @@ public class Rs2Walker {
     // can still see null only when setTarget(null) is intended. recalculatePath no longer nulls
     // currentTarget between restarts (avoids false cancel during sleepUntil).
     private static final ReentrantLock walkerLock = new ReentrantLock();
+    private static final AtomicReference<InteractionRequest> activeInteraction = new AtomicReference<>();
+    private static final ThreadLocal<InteractionRequest> interactionOwner = new ThreadLocal<>();
+    // Legacy route writes do not take walkerLock. Drain them before reserving an interaction.
+    private static final java.util.concurrent.atomic.AtomicInteger routeMutations = new java.util.concurrent.atomic.AtomicInteger();
     /**
      * Optional completion rule owned by the thread currently executing {@link #walkUntil}.
      *
@@ -1250,6 +1257,7 @@ public class Rs2Walker {
             int distance,
             BooleanSupplier completionCondition) {
         Objects.requireNonNull(completionCondition, "completionCondition");
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (target == null) {
             return walkWithState(null, distance);
         }
@@ -1288,12 +1296,14 @@ public class Rs2Walker {
             AtomicReference<WorldPoint> ownedActiveTarget, BooleanSupplier completionCondition) {
         Objects.requireNonNull(completionCondition, "completionCondition");
         Objects.requireNonNull(ownedActiveTarget, "ownedActiveTarget");
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (target == null || isClientThread() || Thread.currentThread().isInterrupted()
                 || InputArbiter.isHuman()) return WalkerState.EXIT;
         if (!walkerLock.tryLock()) return WalkerState.MOVING;
         WalkCompletionContext previous = walkCompletionContext.get();
         WalkCompletionContext context = new WalkCompletionContext(target, completionCondition);
         try {
+            if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
             if (currentTarget != null && !currentTarget.equals(ownedActiveTarget.get())) return WalkerState.EXIT;
             walkCompletionContext.set(context);
             if ((currentTarget == null || currentTarget.equals(target)) && evaluateWalkCompletion(context)) {
@@ -1355,6 +1365,7 @@ public class Rs2Walker {
     }
 
     public static WalkerState walkWithState(WorldPoint target, int distance) {
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (config == null) {
             return WalkerState.EXIT;
         }
@@ -1377,6 +1388,7 @@ public class Rs2Walker {
             }
         }
         try {
+            if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
             if (config.walkWithBankedTransports()) {
                 return walkWithBankedTransportsAndState(target, distance, false);
             } else {
@@ -1397,6 +1409,7 @@ public class Rs2Walker {
      */
     public static WalkerState walkWithStateTry(WorldPoint target, int distance, long lockWaitMs)
     {
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (config == null)
         {
             return WalkerState.EXIT;
@@ -1440,6 +1453,7 @@ public class Rs2Walker {
         }
         try
         {
+            if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
             if (config.walkWithBankedTransports())
             {
                 return walkWithBankedTransportsAndStateLocked(target, distance, false);
@@ -1505,6 +1519,8 @@ public class Rs2Walker {
         } else {
             beginTransportRefusalWalk(target);
             currentTarget = target;
+            InteractionRequest owner = interactionOwner.get();
+            if (owner != null && activeInteraction.get() == owner) owner.ownedTarget.set(target);
         }
         Rs2PathApi.setReachedDistance(distance);
         routeState.stuckCount = 0;
@@ -1555,72 +1571,78 @@ public class Rs2Walker {
      * {@link #setTarget(WorldPoint, String) setTarget(null, reason)} when you stop (e.g. once you interact).
      */
     public static WalkerState walkStep(WorldPoint target, int distance) {
-        if (config == null) {
-            return WalkerState.EXIT;
-        }
-        if (target == null) {
-            log.warn("[Walker] walkStep rejected: null target");
-            return WalkerState.EXIT;
-        }
-        if (isClientThread()) {
-            log.warn("Please do not call the walker from the main thread");
-            return WalkerState.EXIT;
-        }
-        // Caller-driven: one click per call, never enters processWalk's loop, so isWalkCancelled
-        // never runs for it.
-        if (InputArbiter.isHuman()) {
-            return WalkerState.EXIT;
-        }
+        if (!walkerLock.tryLock()) return WalkerState.MOVING;
+        try {
+            if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
+            if (config == null) {
+                return WalkerState.EXIT;
+            }
+            if (target == null) {
+                log.warn("[Walker] walkStep rejected: null target");
+                return WalkerState.EXIT;
+            }
+            if (isClientThread()) {
+                log.warn("Please do not call the walker from the main thread");
+                return WalkerState.EXIT;
+            }
+            // Caller-driven: one click per call, never enters processWalk's loop, so isWalkCancelled
+            // never runs for it.
+            if (InputArbiter.isHuman()) {
+                return WalkerState.EXIT;
+            }
 
-        WorldPoint playerLoc = Rs2Player.getWorldLocation();
-        if (playerLoc == null) {
+            WorldPoint playerLoc = Rs2Player.getWorldLocation();
+            if (playerLoc == null) {
+                return WalkerState.MOVING;
+            }
+
+            // Arrived? (mirrors walkWithStateInternal's arrival test)
+            int distToTarget = playerLoc.distanceTo(target);
+            LocalPoint localTarget = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), target);
+            boolean walkableCheck = localTarget != null && Rs2Tile.isWalkable(localTarget);
+            boolean reachableTileCheck = distToTarget <= distance
+                    && Rs2Tile.getReachableTilesFromTile(playerLoc, distance).containsKey(target);
+            if (reachableTileCheck || (!walkableCheck && distToTarget <= distance)) {
+                return WalkerState.ARRIVED;
+            }
+
+            // (Re)start pathfinding ONLY when the caller's goal changes. Do NOT re-target while the path is
+            // still computing — setTarget() restarts pathfinding, so re-calling it every tick would reset the
+            // pathfinder forever (path drawn, but never finished, so we never click).
+            if (currentTarget == null || !currentTarget.equals(target)) {
+                setTarget(target);
+                return WalkerState.MOVING;
+            }
+            Pathfinder pathfinder = Rs2PathApi.getPathfinder();
+            if (pathfinder == null || !pathfinder.isDone()) {
+                return WalkerState.MOVING; // path still computing — wait, don't reset it
+            }
+
+            // Already in transit toward the last click — let it resolve instead of spamming clicks.
+            if (Rs2Player.isMoving()) {
+                return WalkerState.MOVING;
+            }
+
+            final List<WorldPoint> rawPath = pathfinder.getPath();
+            final List<WorldPoint> path = pathfinder.getWalkablePath();
+            if (!walkStepPathReachesTarget(path, target, distance)) {
+                setTarget(null, "rs2walker:walkStep:no-walkable-path");
+                return WalkerState.UNREACHABLE;
+            }
+
+            // One minimap click toward the target (falls back to the furthest visible path point off-clip).
+            // Click the target on the minimap, else fall back to the furthest visible planned-path point.
+            // The geometric directional fallback (a straight-line b-line toward the target) is gated to NEAR
+            // targets only: for a far target it's never right and produces off-route drift. When neither the
+            // target nor a planned-path point is clickable (e.g. the route needs a transport walkStep can't
+            // cross), no click is issued and we hold on the line rather than wander off it — walkStep is not
+            // built for transport routes; use the blocking walkTo/walkUntil for those.
+            boolean allowDirectionalFallback = playerLoc.distanceTo(target) <= NORMAL_MINIMAP_REACH_EUCLIDEAN;
+            clickMiniMapOrFallback(rawPath, target, playerLoc, NORMAL_MINIMAP_REACH_EUCLIDEAN - 1, allowDirectionalFallback, -1);
             return WalkerState.MOVING;
+        } finally {
+            walkerLock.unlock();
         }
-
-        // Arrived? (mirrors walkWithStateInternal's arrival test)
-        int distToTarget = playerLoc.distanceTo(target);
-        LocalPoint localTarget = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), target);
-        boolean walkableCheck = localTarget != null && Rs2Tile.isWalkable(localTarget);
-        boolean reachableTileCheck = distToTarget <= distance
-                && Rs2Tile.getReachableTilesFromTile(playerLoc, distance).containsKey(target);
-        if (reachableTileCheck || (!walkableCheck && distToTarget <= distance)) {
-            return WalkerState.ARRIVED;
-        }
-
-        // (Re)start pathfinding ONLY when the caller's goal changes. Do NOT re-target while the path is
-        // still computing — setTarget() restarts pathfinding, so re-calling it every tick would reset the
-        // pathfinder forever (path drawn, but never finished, so we never click).
-        if (currentTarget == null || !currentTarget.equals(target)) {
-            setTarget(target);
-            return WalkerState.MOVING;
-        }
-        Pathfinder pathfinder = Rs2PathApi.getPathfinder();
-        if (pathfinder == null || !pathfinder.isDone()) {
-            return WalkerState.MOVING; // path still computing — wait, don't reset it
-        }
-
-        // Already in transit toward the last click — let it resolve instead of spamming clicks.
-        if (Rs2Player.isMoving()) {
-            return WalkerState.MOVING;
-        }
-
-        final List<WorldPoint> rawPath = pathfinder.getPath();
-        final List<WorldPoint> path = pathfinder.getWalkablePath();
-        if (!walkStepPathReachesTarget(path, target, distance)) {
-            setTarget(null, "rs2walker:walkStep:no-walkable-path");
-            return WalkerState.UNREACHABLE;
-        }
-
-        // One minimap click toward the target (falls back to the furthest visible path point off-clip).
-        // Click the target on the minimap, else fall back to the furthest visible planned-path point.
-        // The geometric directional fallback (a straight-line b-line toward the target) is gated to NEAR
-        // targets only: for a far target it's never right and produces off-route drift. When neither the
-        // target nor a planned-path point is clickable (e.g. the route needs a transport walkStep can't
-        // cross), no click is issued and we hold on the line rather than wander off it — walkStep is not
-        // built for transport routes; use the blocking walkTo/walkUntil for those.
-        boolean allowDirectionalFallback = playerLoc.distanceTo(target) <= NORMAL_MINIMAP_REACH_EUCLIDEAN;
-        clickMiniMapOrFallback(rawPath, target, playerLoc, NORMAL_MINIMAP_REACH_EUCLIDEAN - 1, allowDirectionalFallback, -1);
-        return WalkerState.MOVING;
     }
 
     /** Wall-clock ms of the last walker heartbeat line. */
@@ -3643,9 +3665,11 @@ public class Rs2Walker {
     private static boolean isWalkCancelled(WorldPoint target) {
         // The single choke point for stopping a walk: processWalk already consults it at every
         // checkpoint and inside the movement-wait predicates.
-        if (InputArbiter.isHuman()) {
+        if (InputArbiter.isHuman() || interactionReservedByAnotherCaller()) {
             return true;
         }
+        InteractionRequest operation = interactionOwner.get();
+        if (operation != null && !operation.active()) return true;
         WalkCompletionContext completion = walkCompletionContext.get();
         if (completion != null && Objects.equals(completion.target, target)
                 && evaluateWalkCompletion(completion)) {
@@ -3812,15 +3836,24 @@ public class Rs2Walker {
      *                     maximally zoomed-out minimap.
      */
     public static boolean walkMiniMap(WorldPoint worldPoint, double zoomDistance) {
-        ensureWalkerMinimapZoom();
+        routeMutations.incrementAndGet();
+        try {
+            if (interactionMovementDeferred()) return false;
+            ensureWalkerMinimapZoom();
 
-        Point point = Rs2MiniMap.worldToMinimap(worldPoint);
+            Point point = Rs2MiniMap.worldToMinimap(worldPoint);
 
-        if (point == null) return false;
-        if (!disableWalkerUpdate && !Rs2MiniMap.isPointInsideMinimap(point)) return false;
+            if (point == null) return false;
+            if (!disableWalkerUpdate && !Rs2MiniMap.isPointInsideMinimap(point)) return false;
 
-        Microbot.getMouse().click(point);
-        return true;
+            if (activeInteraction.get() != null) {
+                return Microbot.getMouse().clickGuarded(point, interactionMovementGuard());
+            }
+            Microbot.getMouse().click(point);
+            return true;
+        } finally {
+            routeMutations.decrementAndGet();
+        }
     }
 
 
@@ -4411,6 +4444,7 @@ public class Rs2Walker {
      * @param localPoint A two-dimensional point in the local coordinate space.
      */
     public static void walkFastLocal(LocalPoint localPoint) {
+        if (interactionMovementDeferred()) return;
         Point canv = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
         int canvasX = canv != null ? canv.getX() : -1;
         int canvasY = canv != null ? canv.getY() : -1;
@@ -4421,7 +4455,7 @@ public class Rs2Walker {
                 .type(MenuAction.WALK)
                 .identifier(0)
                 .itemId(-1)
-                .option("Walk here");
+                .option("Walk here").validWhen(interactionMovementGuard());
 
         Microbot.doInvoke(entry,
                 new Rectangle(1, 1, Microbot.getClient().getCanvasWidth(), Microbot.getClient().getCanvasHeight()));
@@ -4433,6 +4467,7 @@ public class Rs2Walker {
     }
 
     private static boolean walkFastCanvasOnScreenOnly(WorldPoint worldPoint, boolean toggleRun) {
+        if (interactionMovementDeferred()) return false;
         LocalPoint localPoint = localPointForWorld(worldPoint);
         if (localPoint == null || !Rs2Camera.isTileOnScreen(localPoint)) {
             return false;
@@ -4454,7 +4489,7 @@ public class Rs2Walker {
                 .type(MenuAction.WALK)
                 .identifier(0)
                 .itemId(0)
-                .option("Walk here");
+                .option("Walk here").validWhen(interactionMovementGuard());
 
         Microbot.doInvoke(entry,
                 WalkerSceneClickSafety.clickArea(canvasPoint));
@@ -4473,6 +4508,7 @@ public class Rs2Walker {
     }
 
     public static boolean walkFastCanvas(WorldPoint worldPoint, boolean toggleRun) {
+        if (interactionMovementDeferred()) return false;
         if (worldPoint == null) {
             log.debug("[Walker] walkFastCanvas rejected: null worldPoint");
             return false;
@@ -4519,7 +4555,7 @@ public class Rs2Walker {
                 .type(MenuAction.WALK)
                 .identifier(0)
                 .itemId(0)
-                .option("Walk here");
+                .option("Walk here").validWhen(interactionMovementGuard());
 
         Microbot.doInvoke(entry,
                 WalkerSceneClickSafety.clickArea(canv));
@@ -4527,6 +4563,7 @@ public class Rs2Walker {
     }
 
     public static WorldPoint walkCanvas(WorldPoint worldPoint) {
+        if (interactionMovementDeferred()) return null;
         LocalPoint localPoint = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), worldPoint);
         if (localPoint == null) {
             log.error("Tried to walkCanvas but localpoint returned null");
@@ -9009,17 +9046,23 @@ public class Rs2Walker {
      * Force the walker to recalculate path
      */
     public static void recalculatePath() {
-        WorldPoint goal = currentTarget;
-        if (goal == null) {
-            return;
+        routeMutations.incrementAndGet();
+        try {
+            if (interactionReservedByAnotherCaller()) return;
+            WorldPoint goal = currentTarget;
+            if (goal == null) {
+                return;
+            }
+            WorldPoint start = Rs2Player.getWorldLocation();
+            if (start != null) {
+                WebWalkLog.recalc("recalculate_path from=" + compactWorldPoint(start) + " goal=" + compactWorldPoint(goal));
+            }
+            // Must not call setTarget(null)+setTarget(goal): that briefly clears {@link #currentTarget},
+            // and processWalk on another thread treats null as cancel (isWalkCancelled).
+            Rs2WalkerLifecycleRuntime.applyWalkerDestination(goal);
+        } finally {
+            routeMutations.decrementAndGet();
         }
-        WorldPoint start = Rs2Player.getWorldLocation();
-        if (start != null) {
-            WebWalkLog.recalc("recalculate_path from=" + compactWorldPoint(start) + " goal=" + compactWorldPoint(goal));
-        }
-        // Must not call setTarget(null)+setTarget(goal): that briefly clears {@link #currentTarget},
-        // and processWalk on another thread treats null as cancel (isWalkCancelled).
-        Rs2WalkerLifecycleRuntime.applyWalkerDestination(goal);
     }
 
     /**
@@ -9043,57 +9086,66 @@ public class Rs2Walker {
      *                         (teardown-safe). Non-null destinations still require a live client and login/player checks.
      */
     public static void setTarget(WorldPoint target, String clearReasonWhenNull) {
-        if (target != null && !Microbot.isLoggedIn()) {
-            log.warn("Unable to set target: not logged in");
-            return;
-        }
-        if (target != null) {
-            Client client = Microbot.getClient();
-            if (client == null) {
-                log.warn("Unable to set target: client unavailable");
+        routeMutations.incrementAndGet();
+        try {
+            if (interactionReservedByAnotherCaller()) return;
+            if (target != null && !Microbot.isLoggedIn()) {
+                log.warn("Unable to set target: not logged in");
                 return;
             }
-            Player localPlayer = client.getLocalPlayer();
-            if (!Rs2PathApi.isStartPointSet() && localPlayer == null) {
-                log.warn("Start point is not set and player is null");
-                return;
-            }
-        }
-
-        if (target == null || !Objects.equals(target, currentTarget)) localApproach.clear();
-        beginTransportRefusalWalk(target);
-        currentTarget = target;
-
-        if (target == null) {
-            // A completed/cancelled route owns its transport handoff context. Keeping the
-            // timestamp alive made an unrelated walk started within 15 seconds inherit
-            // post-transport handler suppression and misleading elapsed-time markers.
-            clearRecentTransportContext();
-            resetRouteProgress();
-            logRouteClear(clearReasonWhenNull);
-            synchronized (Rs2PathApi.getPathfinderMutex()) {
-                final Pathfinder pathfinder = Rs2PathApi.getPathfinder();
-                if (pathfinder != null) {
-                    pathfinder.cancel();
+            if (target != null) {
+                Client client = Microbot.getClient();
+                if (client == null) {
+                    log.warn("Unable to set target: client unavailable");
+                    return;
                 }
-                Future<?> pathfinderFuture = Rs2PathApi.getPathfinderFuture();
-                if (pathfinderFuture != null && !pathfinderFuture.isDone()) {
-                    pathfinderFuture.cancel(true);
+                Player localPlayer = client.getLocalPlayer();
+                if (!Rs2PathApi.isStartPointSet() && localPlayer == null) {
+                    log.warn("Start point is not set and player is null");
+                    return;
                 }
-                Rs2PathApi.setPathfinderFuture(null);
-                Rs2PathApi.setPathfinder(null);
             }
 
-            WorldMapPointManager wmm = Microbot.getWorldMapPointManager();
-            if (wmm != null) {
-                wmm.remove(Rs2PathApi.getMarker());
-            } else if (Rs2LogRateLimit.once(WORLD_MAP_REMOVE_NULL_LOGGED)) {
-                log.debug("[Walker] WorldMapPointManager null during route clear — marker may linger until teardown");
+            if (target == null || !Objects.equals(target, currentTarget)) localApproach.clear();
+            beginTransportRefusalWalk(target);
+            currentTarget = target;
+            InteractionRequest owner = interactionOwner.get();
+            if (owner != null && activeInteraction.get() == owner) owner.ownedTarget.set(target);
+
+            if (target == null) {
+                // A completed/cancelled route owns its transport handoff context. Keeping the
+                // timestamp alive made an unrelated walk started within 15 seconds inherit
+                // post-transport handler suppression and misleading elapsed-time markers.
+                clearRecentTransportContext();
+                resetRouteProgress();
+                logRouteClear(clearReasonWhenNull);
+                synchronized (Rs2PathApi.getPathfinderMutex()) {
+                    final Pathfinder pathfinder = Rs2PathApi.getPathfinder();
+                    if (pathfinder != null) {
+                        pathfinder.cancel();
+                    }
+                    Future<?> pathfinderFuture = Rs2PathApi.getPathfinderFuture();
+                    if (pathfinderFuture != null && !pathfinderFuture.isDone()) {
+                        // An interaction handoff must not interrupt a shared transport refresh.
+                        pathfinderFuture.cancel(interactionOwner.get() == null);
+                    }
+                    Rs2PathApi.setPathfinderFuture(null);
+                    Rs2PathApi.setPathfinder(null);
+                }
+
+                WorldMapPointManager wmm = Microbot.getWorldMapPointManager();
+                if (wmm != null) {
+                    wmm.remove(Rs2PathApi.getMarker());
+                } else if (Rs2LogRateLimit.once(WORLD_MAP_REMOVE_NULL_LOGGED)) {
+                    log.debug("[Walker] WorldMapPointManager null during route clear — marker may linger until teardown");
+                }
+                Rs2PathApi.setMarker(null);
+                Rs2PathApi.setStartPointSet(false);
+            } else {
+                applyWalkerDestination(target);
             }
-            Rs2PathApi.setMarker(null);
-            Rs2PathApi.setStartPointSet(false);
-        } else {
-            applyWalkerDestination(target);
+        } finally {
+            routeMutations.decrementAndGet();
         }
     }
 
@@ -12976,6 +13028,7 @@ public class Rs2Walker {
      * @return true if travel was successful, false otherwise
      */
     public static WalkerState walkWithBankedTransportsAndState(WorldPoint target, int distance, boolean forceBanking) {
+        if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
         if (target == null) {
             log.warn("Cannot travel to null target location");
             return WalkerState.EXIT;
@@ -12995,6 +13048,7 @@ public class Rs2Walker {
             }
         }
         try {
+            if (interactionReservedByAnotherCaller()) return WalkerState.MOVING;
             return walkWithBankedTransportsAndStateLocked(target, distance, forceBanking);
         } finally {
             walkerLock.unlock();
@@ -13339,5 +13393,196 @@ public class Rs2Walker {
             Microbot.doInvoke(closeEntry, closeButtonBounds != null && Rs2UiHelper.isRectangleWithinCanvas(closeButtonBounds) ? closeButtonBounds : Rs2UiHelper.getDefaultRectangle());
         }
         return sleepUntil(() -> !Rs2Widget.isWidgetVisible(InterfaceID.Worldmap.CLOSE), 3000);
+    }
+
+    /** Opt-in execution. Retain one request across polls; arrival is not interaction success. */
+    public static InteractionResult walkTo(WorldPoint target, InteractionRequest request) {
+        return advanceInteraction(target, 0, request, false);
+    }
+
+    /** Bank-aware execution retaining ownership across intermediate supply legs. */
+    public static InteractionResult walkWithBankedTransportsAndState(
+            WorldPoint target, int distance, InteractionRequest request) {
+        return advanceInteraction(target, distance, request, true);
+    }
+
+    private static InteractionResult advanceInteraction(
+            WorldPoint target, int distance, InteractionRequest request, boolean bankAware) {
+        if (request == null || target == null || distance < 0 || target.getX() < 0 || target.getY() < 0
+                || target.getPlane() < 0 || target.getPlane() > 3 || isClientThread()) return InteractionResult.FAILED;
+        if (!request.bind(target)) return InteractionResult.FAILED;
+        if (Thread.currentThread().isInterrupted() || InputArbiter.isHuman() || Microbot.pauseAllScripts.get()) request.cancel();
+        request.active(); // Realize the monotonic deadline before consulting a terminal result.
+        InteractionResult terminal = interactionTerminalResult(request);
+        if (terminal != null) {
+            tryReleaseInteraction(request);
+            return terminal;
+        }
+        if (!walkerLock.tryLock()) return InteractionResult.IN_PROGRESS;
+        InteractionRequest previous = interactionOwner.get();
+        try {
+            InteractionRequest active = activeInteraction.get();
+            if (active != null && active != request) return InteractionResult.BLOCKED;
+            if (active == null && routeMutations.get() != 0) return InteractionResult.IN_PROGRESS;
+            if (currentTarget != null && !Objects.equals(currentTarget, request.ownedTarget.get())) {
+                if (active == request) {
+                    request.lifecycle.fail("route-replaced");
+                    releaseInteraction(request);
+                }
+                return InteractionResult.BLOCKED;
+            }
+            activeInteraction.set(request);
+            if (active == null && routeMutations.get() != 0) {
+                activeInteraction.compareAndSet(request, null);
+                return InteractionResult.IN_PROGRESS;
+            }
+            interactionOwner.set(request);
+            boolean approachArrived = false;
+            for (int pass = 0; pass < 2; pass++) {
+                var snapshot = request.runtime.probe(pass > 0);
+                boolean cancelled = Thread.currentThread().isInterrupted() || InputArbiter.isHuman()
+                        || Microbot.pauseAllScripts.get();
+                var decision = request.lifecycle.update(System.nanoTime() / 1_000_000,
+                        snapshot.position, snapshot.sceneReady && !snapshot.inputBlocked, snapshot.moving, snapshot.ready,
+                        snapshot.confirmationAllowed && snapshot.sceneReady && snapshot.position != null
+                                && snapshot.position.getPlane() == request.anchor.getPlane()
+                                && snapshot.position.distanceTo(request.anchor) <= 16
+                                && (snapshot.confirmed || request.lifecycle.attempts() > 0 && request.effectObserved()), cancelled);
+                switch (decision) {
+                    case SUCCEEDED:
+                    case CANCELLED:
+                    case FAILED:
+                        releaseInteraction(request);
+                        return interactionTerminalResult(request);
+                    case WAIT:
+                        return InteractionResult.IN_PROGRESS;
+                    case DISPATCH:
+                        if (currentTarget != null && Objects.equals(currentTarget, request.ownedTarget.get()))
+                            clearWalkingRoute("interaction:handoff-owned-route");
+                        request.ownedTarget.set(null);
+                        boolean sent = request.runtime.dispatch(snapshot, () -> activeInteraction.get() == request
+                                && request.active() && !Microbot.pauseAllScripts.get() && !InputArbiter.isHuman()
+                                && !Thread.currentThread().isInterrupted());
+                        if (sent) request.lifecycle.dispatched(System.nanoTime() / 1_000_000);
+                        else request.lifecycle.rejected(System.nanoTime() / 1_000_000);
+                        InteractionResult completed = interactionTerminalResult(request);
+                        if (completed != null) {
+                            releaseInteraction(request);
+                            return completed;
+                        }
+                        return InteractionResult.IN_PROGRESS;
+                    case APPROACH:
+                        if (pass > 0) {
+                            if (approachArrived && !snapshot.moving && snapshot.sceneReady && !snapshot.inputBlocked
+                                    && request.lifecycle.stalledAtArrival(System.nanoTime() / 1_000_000)) {
+                                releaseInteraction(request);
+                                return InteractionResult.BLOCKED;
+                            }
+                            return InteractionResult.IN_PROGRESS;
+                        }
+                        if (!bankAware) request.ownedTarget.compareAndSet(null, target);
+                        WalkerState state = bankAware
+                                ? walkWithBankedTransportsUntil(target, distance, request.ownedTarget,
+                                        () -> !request.active() || request.runtime.probe(false).ready)
+                                : walkWithStateUntil(target, distance,
+                                        () -> !request.active() || request.runtime.probe(false).ready);
+                        if (Thread.currentThread().isInterrupted() || InputArbiter.isHuman()
+                                || Microbot.pauseAllScripts.get()) request.cancel();
+                        request.active();
+                        InteractionResult stopped = interactionTerminalResult(request);
+                        if (stopped != null) {
+                            releaseInteraction(request);
+                            return stopped;
+                        }
+                        if (!bankAware && currentTarget != null && !currentTarget.equals(request.ownedTarget.get())) {
+                            request.lifecycle.fail("route-replaced");
+                            releaseInteraction(request);
+                            return InteractionResult.BLOCKED;
+                        }
+                        approachArrived = state == WalkerState.ARRIVED;
+                        if (state == WalkerState.UNREACHABLE || state == WalkerState.EXIT && request.active()) {
+                            request.lifecycle.fail(state == WalkerState.UNREACHABLE ? "route-unreachable" : "route-exit");
+                            releaseInteraction(request);
+                            return InteractionResult.BLOCKED;
+                        }
+                        break;
+                }
+            }
+            return InteractionResult.IN_PROGRESS;
+        } catch (RuntimeException failure) {
+            request.lifecycle.fail("execution-failed");
+            releaseInteraction(request);
+            log.warn("Interaction operation failed: op={}", request.id, failure);
+            return InteractionResult.FAILED;
+        } finally {
+            if (previous == null) interactionOwner.remove(); else interactionOwner.set(previous);
+            walkerLock.unlock();
+        }
+    }
+
+    private static InteractionResult interactionTerminalResult(InteractionRequest request) {
+        InteractionLifecycle.Decision terminal = request.lifecycle.terminal();
+        if (terminal == null) return null;
+        if (terminal == InteractionLifecycle.Decision.SUCCEEDED) return InteractionResult.SUCCEEDED;
+        if (terminal == InteractionLifecycle.Decision.CANCELLED) return InteractionResult.CANCELLED;
+        String reason = request.lifecycle.reason();
+        return reason.startsWith("route-") || "arrived-not-ready".equals(reason)
+                ? InteractionResult.BLOCKED : InteractionResult.FAILED;
+    }
+
+    /** The walker lock is held; retain the reservation until owned-route cleanup finishes. */
+    private static void releaseInteraction(InteractionRequest request) {
+        if (activeInteraction.get() != request) return;
+        InteractionRequest previous = interactionOwner.get();
+        interactionOwner.set(request);
+        try {
+            try {
+                WorldPoint owned = request.ownedTarget.get();
+                if (owned != null && Objects.equals(currentTarget, owned)) clearWalkingRoute("interaction:release-owned-route");
+            } catch (RuntimeException cleanupFailure) {
+                log.warn("Interaction route cleanup failed: op={}", request.id, cleanupFailure);
+            } finally {
+                request.ownedTarget.set(null);
+                activeInteraction.compareAndSet(request, null);
+            }
+        } finally {
+            if (previous == null) interactionOwner.remove(); else interactionOwner.set(previous);
+        }
+    }
+
+    private static void tryReleaseInteraction(InteractionRequest request) {
+        if (!walkerLock.tryLock()) return;
+        try { releaseInteraction(request); } finally { walkerLock.unlock(); }
+    }
+
+    public static void cancelInteraction(InteractionRequest request) {
+        if (request == null) return;
+        request.cancel();
+        tryReleaseInteraction(request);
+    }
+
+    private static boolean interactionReservedByAnotherCaller() {
+        InteractionRequest active = activeInteraction.get();
+        return active != null && active != interactionOwner.get();
+    }
+
+    private static boolean interactionMovementDeferred() {
+        InteractionRequest owner = activeInteraction.get();
+        return owner != null && (owner != interactionOwner.get() || interactionMovementDeferred(owner));
+    }
+
+    private static boolean interactionMovementDeferred(InteractionRequest owner) {
+        if (activeInteraction.get() != owner || !owner.active() || owner.lifecycle.awaiting()) return true;
+        if (currentTarget != null && !currentTarget.equals(owner.destination())) return false;
+        return owner.runtime.probe(false).ready;
+    }
+
+    private static BooleanSupplier interactionMovementGuard() {
+        // Captured identity remains valid when final dispatch runs on a different thread.
+        InteractionRequest owner = interactionOwner.get();
+        if (owner == null) return () -> activeInteraction.get() == null;
+        return () -> activeInteraction.get() == owner && owner.active()
+                && !InputArbiter.isHuman() && !Microbot.pauseAllScripts.get()
+                && !interactionMovementDeferred(owner);
     }
 }

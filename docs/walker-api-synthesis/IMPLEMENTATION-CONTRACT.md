@@ -38,7 +38,7 @@ metrics and acceptable tolerances before evaluating performance-changing work.
 | 0 | Inventory, independent review, acceptance contract and regression discovery | Prepared; complete runtime/performance baseline still pending |
 | 1 | Collision-query facade adapters and contract tests; keep existing executor policy | Implemented and offline validated; promotion pending |
 | 2 | Readiness-only object helpers; client-thread/freshness and no-effect tests | Implemented and offline validated; promotion pending; instances/secondary views deferred |
-| 3 | Reconcile canonical/runtime/data-sync interaction APIs before publishing adapters | Not started |
+| 3 | Reconcile canonical/runtime/data-sync interaction APIs before publishing adapters | WIP night checkpoint; known ownership/action-slot blockers; do not promote |
 | 4 | Typed transport conversion with requirement/converter fidelity | Not started |
 | 5 | Typed planning integration where a concrete consumer benefit justifies it | Not started |
 | 6 | Optional executor changes, separately justified and measured | Deferred; not implied by API synthesis |
@@ -59,7 +59,7 @@ to describe implementation progress. Maintain explicit dispositions as stages la
 | Rs2PathApi.nearestWalkableTile(WorldPoint,int) | Adapted existing canonical radius-1 diagnostic query; never auto-retarget |
 | Rs2InteractionApproach.isReady(GameObject/WallObject) | Stage 2 conservative readiness adapter; non-instanced active top-level view only; no interaction confirmation |
 | Instance/secondary-view and model-based readiness | Deferred pending coordinate-consistent helpers and tests; current queries return false |
-| Runtime/data-sync request-based interactions | Deferred to deliberate stage 3 reconciliation |
+| Runtime/data-sync request-based interactions | Draft stage 3 port; not ready to publish/promote; see night handoff blockers |
 | Typed transport/route/planner and shadow/canary additions | Deferred to stages 4/5; do not wholesale copy upstream facade |
 | Split executor and upstream test-only public hooks | Deferred; not supported merely by exposing API names |
 | Every other inventoried declaration | Deferred pending explicit per-family disposition before its promotion |
@@ -98,3 +98,7 @@ because an API compiles or because its first unit test passes.
   new readiness tests and both guardrails. See [stage 2 evidence and support
   limits](STAGE-2-VALIDATION.md). No existing consumer is redirected. Instance,
   secondary-view and model-based readiness remain deferred; no promotion occurred.
+- Stage 3: [unfinished night checkpoint](STAGE-3-HANDOFF.md). Focused r3 passed
+  152 tests before the last two untested cancellation edits. Two P1 ownership/
+  cancellation races and one P2 action-slot mismatch remain. No full stage-3
+  validation or promotion; stop here at the user's request.
