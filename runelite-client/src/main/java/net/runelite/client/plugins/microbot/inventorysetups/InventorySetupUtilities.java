@@ -48,6 +48,11 @@ public class InventorySetupUtilities
 			}
 		}
 
+		if (input.isEmpty())
+		{
+			return 1;
+		}
+
 		// limit to max int value
 		long quantityLong = Long.parseLong(input) * factor;
 		int quantity = (int) Math.min(quantityLong, Integer.MAX_VALUE);
