@@ -270,6 +270,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
      */
     public boolean click(String action) {
         try {
+            final java.util.function.BooleanSupplier dispatchGuard = clickDispatchGuard.get();
             WorldView worldView = getWorldView();
             if (worldView == null) return false;
             var objComp = getVisibleObjectComposition();
@@ -307,15 +308,17 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             int index = action == null || action.isEmpty() ? 0 : -1;
             String objName = "";
             String[] actions = new String[0];
-            if (action != null && !action.isEmpty()) {
-                actions = objComp.getActions();
+            if (dispatchGuard != null || (action != null && !action.isEmpty())) {
+                actions = dispatchGuard == null ? objComp.getActions() : getGuardedActions();
                 if (actions == null) {
                     return false;
                 }
 
+                index = -1;
                 for (int i = 0; i < actions.length; i++) {
                     if (actions[i] == null) continue;
-                    if (action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[i]))) {
+                    if ((dispatchGuard != null && (action == null || action.isEmpty()) && !actions[i].isEmpty())
+                            || (action != null && action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[i])))) {
                         index = i;
                         break;
                     }
@@ -335,6 +338,11 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                 log.warn("Failed to interact with object {} at {} - action '{}' not found in {}",
                         getId(), getWorldLocation(), action, Arrays.toString(actions));
                 return false;
+            }
+
+            if (dispatchGuard != null) {
+                if (index > 4) return false;
+                action = Rs2UiHelper.stripColTags(actions[index]);
             }
 
 
@@ -382,7 +390,21 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                             .target(objName)
                             .setWorldViewId(worldView.getId())
                             .gameObject(tileObject);
-            if (clickDispatchGuard.get() != null) entry.validWhen(clickDispatchGuard.get());
+            if (dispatchGuard != null) {
+                final int queuedIndex = index;
+                final String queuedAction = action;
+                final MenuAction queuedOpcode = menuAction;
+                entry.validWhen(() -> dispatchGuard.getAsBoolean()
+                        && queuedOpcode != MenuAction.WIDGET_TARGET_ON_GAME_OBJECT
+                        && entry.getType() == queuedOpcode && queuedAction.equals(entry.getOption())
+                        && Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                            String[] liveActions = getGuardedActions();
+                            return liveActions != null && queuedIndex < liveActions.length
+                                    && queuedAction.equals(Rs2UiHelper.stripColTags(liveActions[queuedIndex]))
+                                    && !Microbot.getClient().isWidgetSelected();
+                        }).orElse(false));
+                if (!entry.isDispatchValid()) return false;
+            }
             Microbot.doInvoke(entry, clickArea);
 // MenuEntryImpl(getOption=Use, getTarget=Barrier, getIdentifier=43700, getType=GAME_OBJECT_THIRD_OPTION, getParam0=53, getParam1=51, getItemId=-1, isForceLeftClick=true, getWorldViewId=-1, isDeprioritized=false)
             //Rs2Reflection.invokeMenu(param0, param1, menuAction.getId(), object.getId(),-1, "", "", -1, -1);
@@ -393,6 +415,18 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         }
 
         return true;
+    }
+
+    private String[] getGuardedActions() {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            if (Microbot.getClient().isWidgetSelected()) return null;
+            ObjectComposition composition = Microbot.getClient().getObjectDefinition(tileObject.getId());
+            if (composition != null && composition.getImpostorIds() != null) {
+                composition = composition.getImpostor();
+            }
+            String[] actions = composition == null ? null : composition.getActions();
+            return actions == null ? null : actions.clone();
+        }).orElse(null);
     }
 
     private static final ThreadLocal<java.util.function.BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();

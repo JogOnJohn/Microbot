@@ -1,5 +1,12 @@
 # Stage 3 Night Checkpoint: Not Ready To Promote
 
+Historical checkpoint. Work resumed on 2026-11-01 at the user's request to finish
+the synthesis and prepare a test JAR. The stop instruction below applied to that
+night, not the resumed task. Ownership publication, contended cleanup and action
+slot fixes are now drafted; independent review also found and addressed stale
+continuation and client-thread cleanup gaps. The final resumed tree still needs
+fresh executed validation. Do not treat the old focused result as current proof.
+
 2026-10-31. User requested wrapping up for the night. Stop implementation after
 this local WIP checkpoint; no background agent or build should be left running.
 

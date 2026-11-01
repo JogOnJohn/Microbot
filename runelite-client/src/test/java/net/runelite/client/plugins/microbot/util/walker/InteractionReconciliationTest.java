@@ -220,14 +220,20 @@ public class InteractionReconciliationTest {
             f.reserve(GOAL, GOAL);
             f.isolatedCleanup();
             CountDownLatch held = new CountDownLatch(1), release = new CountDownLatch(1);
+            AtomicReference<Throwable> failure = new AtomicReference<>();
             Thread holder = new Thread(() -> {
-                f.lock.lock();
-                try {
-                    held.countDown();
-                    if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("Lock holder timed out");
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                } finally { f.lock.unlock(); }
+                try (MockedStatic<Rs2Walker> worker = mockStatic(Rs2Walker.class, CALLS_REAL_METHODS)) {
+                    worker.when(() -> Rs2Walker.clearWalkingRoute(anyString())).thenAnswer(call -> {
+                        assertSame(f.owner, f.reservation.get());
+                        f.target.set(null, null);
+                        return null;
+                    });
+                    f.lock.lock();
+                    try {
+                        held.countDown();
+                        if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("Lock holder timed out");
+                    } finally { f.lock.unlock(); }
+                } catch (Throwable ex) { failure.set(ex); }
             });
             holder.start();
             try {
@@ -243,9 +249,57 @@ public class InteractionReconciliationTest {
                 holder.join(2000);
             }
             assertFalse(holder.isAlive());
-            Rs2Walker.cancelInteraction(f.owner);
+            assertNull(failure.get());
             assertNull(f.reservation.get());
             assertNull(f.target.get(null));
+        }
+    }
+
+    @Test public void routeOwnershipIsValidatedOnlyAfterReservationPublication() throws Exception {
+        try (Fixture f = new Fixture()) {
+            @SuppressWarnings("unchecked")
+            AtomicReference<WorldPoint> owned = mock(AtomicReference.class);
+            field(InteractionRequest.class, "ownedTarget").set(f.owner, owned);
+            WorldPoint foreign = GOAL.dx(1);
+            f.target.set(null, foreign);
+            when(owned.get()).thenAnswer(call -> {
+                assertSame("A completed legacy write must be checked behind the reservation", f.owner, f.reservation.get());
+                return null;
+            });
+            assertEquals(InteractionResult.BLOCKED, f.poll(false, GOAL, f.owner));
+            assertNull(f.reservation.get());
+            assertEquals(foreign, f.target.get(null));
+            verifyNoInteractions(f.runtime);
+            f.walker.verify(() -> Rs2Walker.clearWalkingRoute(anyString()), never());
+        }
+    }
+
+    @Test public void legacySetterCannotCompleteInTheOwnershipValidationPublicationWindow() throws Exception {
+        try (Fixture f = new Fixture()) {
+            @SuppressWarnings("unchecked")
+            AtomicReference<WorldPoint> owned = mock(AtomicReference.class);
+            field(InteractionRequest.class, "ownedTarget").set(f.owner, owned);
+            f.target.set(null, GOAL);
+            f.micro.when(Microbot::isLoggedIn).thenReturn(true);
+            when(f.client.getLocalPlayer()).thenReturn(mock(net.runelite.api.Player.class));
+            java.util.concurrent.atomic.AtomicBoolean attempted = new java.util.concurrent.atomic.AtomicBoolean();
+            when(owned.get()).thenAnswer(call -> {
+                if (attempted.compareAndSet(false, true)) {
+                    // In the old ordering this setter completed after the target value had been
+                    // read for validation but before publication, leaving both counter reads zero.
+                    Rs2Walker.setTarget(GOAL.dx(1));
+                }
+                return GOAL;
+            });
+            f.walker.when(() -> Rs2Walker.walkWithStateUntil(eq(GOAL), eq(0), any(BooleanSupplier.class)))
+                    .thenReturn(WalkerState.MOVING);
+            assertEquals(InteractionResult.IN_PROGRESS, f.poll(false, GOAL, f.owner));
+            assertTrue(attempted.get());
+            assertSame(f.owner, f.reservation.get());
+            assertEquals(GOAL, f.target.get(null));
+            assertEquals(0, ((java.util.concurrent.atomic.AtomicInteger)
+                    field(Rs2Walker.class, "routeMutations").get(null)).get());
+            f.routes.verifyNoInteractions();
         }
     }
 
@@ -261,6 +315,70 @@ public class InteractionReconciliationTest {
                 });
             assertEquals(InteractionResult.IN_PROGRESS, f.poll(false, GOAL, f.owner));
             assertEquals(GOAL, f.owner.ownedTarget.get());
+        }
+    }
+
+    @Test public void clientThreadCancellationQueuesCoalescedCleanupWithoutEnteringTeardown() throws Exception {
+        Field executorField = field(Rs2Walker.class, "interactionCleanupExecutor");
+        Object previousExecutor = executorField.get(null);
+        java.util.concurrent.atomic.AtomicBoolean scheduled = (java.util.concurrent.atomic.AtomicBoolean)
+                field(Rs2Walker.class, "interactionCleanupScheduled").get(null);
+        boolean previousScheduled = scheduled.getAndSet(false);
+        java.util.concurrent.atomic.AtomicInteger submissions = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicReference<Runnable> cleanup = new AtomicReference<>();
+        executorField.set(null, (java.util.concurrent.Executor) task -> {
+            submissions.incrementAndGet();
+            assertTrue(cleanup.compareAndSet(null, task));
+        });
+        try (Fixture f = new Fixture()) {
+            f.reserve(GOAL, GOAL);
+            f.isolatedCleanup();
+            when(f.client.isClientThread()).thenReturn(true);
+            Rs2Walker.cancelInteraction(f.owner);
+            Rs2Walker.cancelInteraction(f.owner);
+            assertFalse(f.owner.active());
+            assertSame(f.owner, f.reservation.get());
+            assertEquals(GOAL, f.target.get(null));
+            assertEquals(1, submissions.get());
+            f.walker.verify(() -> Rs2Walker.clearWalkingRoute(anyString()), never());
+            when(f.client.isClientThread()).thenReturn(false);
+            cleanup.get().run();
+            assertNull(f.reservation.get());
+            assertNull(f.target.get(null));
+            assertEquals(1, submissions.get());
+        } finally {
+            executorField.set(null, previousExecutor);
+            scheduled.set(previousScheduled);
+        }
+    }
+
+    @Test public void cancelledContinuationCannotClearNewLegacyRouteAfterTemporaryUnlock() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.reserve(GOAL, GOAL);
+            f.context.set(f.owner);
+            f.isolatedCleanup();
+            WorldPoint foreign = GOAL.dx(1);
+            f.micro.when(Microbot::isLoggedIn).thenReturn(true);
+            when(f.client.getLocalPlayer()).thenReturn(mock(net.runelite.api.Player.class));
+            f.lock.lock();
+            try {
+                Rs2Walker.runWithWalkerLockReleased(() -> {
+                    Rs2Walker.cancelInteraction(f.owner);
+                    assertNull(f.reservation.get());
+                    // A new caller has no inherited operation context.
+                    f.context.remove();
+                    Rs2Walker.setTarget(foreign);
+                    f.context.set(f.owner);
+                });
+                assertEquals(foreign, f.target.get(null));
+                f.walker.when(() -> Rs2Walker.clearWalkingRoute(anyString())).thenCallRealMethod();
+                Rs2Walker.clearWalkingRoute("late-cancelled-continuation");
+                Rs2Walker.setTarget(GOAL);
+                Rs2Walker.recalculatePath();
+                assertEquals(foreign, f.target.get(null));
+                assertNull(f.reservation.get());
+                assertSame(f.owner, f.context.get());
+            } finally { f.lock.unlock(); }
         }
     }
 

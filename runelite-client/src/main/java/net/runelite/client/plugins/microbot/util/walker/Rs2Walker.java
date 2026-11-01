@@ -981,9 +981,21 @@ public class Rs2Walker {
     // setTarget() stays unlocked — cross-thread cancel; volatile currentTarget read in the loop
     // can still see null only when setTarget(null) is intended. recalculatePath no longer nulls
     // currentTarget between restarts (avoids false cancel during sleepUntil).
-    private static final ReentrantLock walkerLock = new ReentrantLock();
+    private static final ReentrantLock walkerLock = new ReentrantLock() {
+        @Override public void unlock() {
+            super.unlock();
+            // The last holder must service cancellation even when the caller stops polling.
+            if (!isHeldByCurrentThread()) {
+                InteractionRequest request = activeInteraction.get();
+                if (request != null && !request.active()) tryReleaseInteraction(request);
+            }
+        }
+    };
     private static final AtomicReference<InteractionRequest> activeInteraction = new AtomicReference<>();
     private static final ThreadLocal<InteractionRequest> interactionOwner = new ThreadLocal<>();
+    private static final java.util.concurrent.atomic.AtomicBoolean interactionCleanupScheduled =
+            new java.util.concurrent.atomic.AtomicBoolean();
+    private static java.util.concurrent.Executor interactionCleanupExecutor = createInteractionCleanupExecutor();
     // Legacy route writes do not take walkerLock. Drain them before reserving an interaction.
     private static final java.util.concurrent.atomic.AtomicInteger routeMutations = new java.util.concurrent.atomic.AtomicInteger();
     /**
@@ -13424,17 +13436,20 @@ public class Rs2Walker {
             InteractionRequest active = activeInteraction.get();
             if (active != null && active != request) return InteractionResult.BLOCKED;
             if (active == null && routeMutations.get() != 0) return InteractionResult.IN_PROGRESS;
-            if (currentTarget != null && !Objects.equals(currentTarget, request.ownedTarget.get())) {
-                if (active == request) {
-                    request.lifecycle.fail("route-replaced");
-                    releaseInteraction(request);
-                }
-                return InteractionResult.BLOCKED;
-            }
             activeInteraction.set(request);
             if (active == null && routeMutations.get() != 0) {
                 activeInteraction.compareAndSet(request, null);
                 return InteractionResult.IN_PROGRESS;
+            }
+            // Validate after publication: a completed legacy write may have raced the first counter read.
+            if (currentTarget != null && !Objects.equals(currentTarget, request.ownedTarget.get())) {
+                if (active == request) {
+                    request.lifecycle.fail("route-replaced");
+                    releaseInteraction(request);
+                } else {
+                    activeInteraction.compareAndSet(request, null);
+                }
+                return InteractionResult.BLOCKED;
             }
             interactionOwner.set(request);
             boolean approachArrived = false;
@@ -13551,8 +13566,46 @@ public class Rs2Walker {
     }
 
     private static void tryReleaseInteraction(InteractionRequest request) {
+        if (isClientThread()) {
+            scheduleInteractionCleanup();
+            return;
+        }
         if (!walkerLock.tryLock()) return;
         try { releaseInteraction(request); } finally { walkerLock.unlock(); }
+    }
+
+    private static java.util.concurrent.Executor createInteractionCleanupExecutor() {
+        java.util.concurrent.ThreadPoolExecutor executor = new java.util.concurrent.ThreadPoolExecutor(
+                1, 1, 1, TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<>(1), task -> {
+                    Thread thread = new Thread(task, "walker-interaction-cleanup");
+                    thread.setDaemon(true);
+                    return thread;
+                });
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
+    private static void scheduleInteractionCleanup() {
+        InteractionRequest pending = activeInteraction.get();
+        if (pending == null || pending.active() || !interactionCleanupScheduled.compareAndSet(false, true)) return;
+        try {
+            interactionCleanupExecutor.execute(() -> {
+                try {
+                    // Only this bounded off-client-thread worker may wait for teardown locks.
+                    walkerLock.lock();
+                    try {
+                        InteractionRequest request = activeInteraction.get();
+                        if (request != null && !request.active()) releaseInteraction(request);
+                    } finally { walkerLock.unlock(); }
+                } finally {
+                    interactionCleanupScheduled.set(false);
+                    scheduleInteractionCleanup();
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException unavailable) {
+            interactionCleanupScheduled.set(false);
+            log.warn("Interaction cleanup could not be scheduled", unavailable);
+        }
     }
 
     public static void cancelInteraction(InteractionRequest request) {
@@ -13563,7 +13616,8 @@ public class Rs2Walker {
 
     private static boolean interactionReservedByAnotherCaller() {
         InteractionRequest active = activeInteraction.get();
-        return active != null && active != interactionOwner.get();
+        InteractionRequest caller = interactionOwner.get();
+        return caller != null ? active != caller : active != null;
     }
 
     private static boolean interactionMovementDeferred() {
