@@ -18,10 +18,10 @@ import net.runelite.client.plugins.microbot.shortestpath.pathfinder.SplitFlagMap
 /** Single-row deterministic walking graph. No scene, user learned-edge file or account is consulted. */
 final class TypedPlanningFixture
 {
+	static final WorldPoint START = point(1601);
+	static final WorldPoint SHORT = point(1609);
+	static final WorldPoint LONG = point(4001);
 	private static final SplitFlagMap TERRAIN = terrain();
-	static final WorldPoint START = point(3201);
-	static final WorldPoint SHORT = point(3209);
-	static final WorldPoint LONG = point(5601);
 
 	private TypedPlanningFixture() { }
 
@@ -68,15 +68,17 @@ final class TypedPlanningFixture
 		{
 			@Override public boolean get(int x, int y, int plane, int flag)
 			{
-				return plane == 0 && flag == 1 && y == 3201 && x >= 3201 && x < 5601;
+				return plane == 0 && flag == 1 && y == 3201 && x >= START.getX() && x < LONG.getX();
 			}
 			@Override public boolean hasRegion(int x, int y)
 			{
-				return x >= 3200 && x < 5632 && y >= 3200 && y < 3264;
+				return x >= 1600 && x < 4032 && y >= 3200 && y < 3264;
 			}
 		};
 		SplitFlagMap.RegionExtent extent = SplitFlagMap.getRegionExtents();
-		for (int x = 3201 / 64; x <= 5601 / 64; x++)
+		if (START.getX() / 64 < extent.minX || LONG.getX() / 64 > extent.maxX)
+			throw new IllegalStateException("fixture must fit the pinned collision extent");
+		for (int x = START.getX() / 64; x <= LONG.getX() / 64; x++)
 			map.getRegionMapPlaneCounts()[x - extent.minX + (3201 / 64 - extent.minY) * (extent.getWidth() + 1)] = 1;
 		return map;
 	}

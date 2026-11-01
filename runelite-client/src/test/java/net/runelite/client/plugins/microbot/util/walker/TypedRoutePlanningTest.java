@@ -20,6 +20,20 @@ import static org.mockito.Mockito.*;
 
 public class TypedRoutePlanningTest
 {
+	@Test public void longWalkingBenchmarkFixtureIsReachableInsideBothBackendExtents()
+	{
+		assertEquals(2400, TypedPlanningFixture.START.distanceTo2D(TypedPlanningFixture.LONG));
+		for (PathfinderBackend backend : PathfinderBackend.values())
+		{
+			Rs2RouteResult result = TypedRoutePlanning.planWithConfig(Rs2RouteRequest.to(
+				TypedPlanningFixture.START, TypedPlanningFixture.LONG)
+				.withRefreshPolicy(Rs2RouteRequest.RefreshPolicy.NEVER),
+				TypedPlanningFixture.config(backend, false, false));
+			assertEquals(backend.toString(), Rs2RouteTermination.TARGET_REACHED, result.getTerminationReason());
+			assertTrue(result.isTargetReached(0));
+		}
+	}
+
 	@Test public void preparedProbePreservesBothBackendsAndSourceCatalog()
 	{
 		for (PathfinderBackend backend : PathfinderBackend.values())
