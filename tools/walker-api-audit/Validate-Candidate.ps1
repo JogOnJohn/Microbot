@@ -44,7 +44,7 @@ try {
     foreach ($required in @('ShortestPathGoldenRouteBaselineTest','WalkerRouteCorpusTest',
         'PersonalPohSelectionTest','World330HostedHouseAccessTest','World330HostedHouseTransportTest',
         'BankedTransportItemPlanningTest','InteractionReconciliationTest','TypedRoutePlanningTest',
-        'TypedBankRouteProbeTest','TransportEdgeBankingTest','TransportEdgeAdapterResourceTest',
+        'TypedBankRouteProbeTest','TypedPlanningActiveRouteIsolationTest','TransportEdgeBankingTest','TransportEdgeAdapterResourceTest',
         'TransportEdgeBankingCaptureTest','TransportEdgeAdapterTest','Rs2TransportValuesTest',
         'LegacyRouteStepsTest','OwnedPlanningRefreshTest','LeaguesPlanningSnapshotTest',
         'PlanningConfigCaptureTest','PlanningHouseSnapshotTest','PlanningPohReadOnlyTest',

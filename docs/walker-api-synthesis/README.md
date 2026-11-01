@@ -3,9 +3,12 @@
 Prepared 2026-10-31. The inventory checkpoint is complete; isolated implementation
 has now begun under the acceptance contract. No promotion or client lifecycle changes.
 
-**Resumed 2026-11-01:** stages 3-5 are implemented and focused validated. Full
-regression, performance, exact-artifact Hub validation and test-JAR preparation
-are in progress. The night checkpoint is historical, not a current stop instruction.
+**Completed offline 2026-11-01:** the selected implementation stages, regression,
+converter, query benchmark and exact-artifact Hub compatibility gates passed.
+A versioned test JAR is ready. The optional executor replacement was deliberately
+not selected. See [final evidence and test handoff](FINAL-HANDOFF.md) and the
+[explicit API dispositions](API-DISPOSITIONS.md). Live validation and promotion
+remain separate, unauthorized operations; the running client is untouched.
 
 ## Workspace
 

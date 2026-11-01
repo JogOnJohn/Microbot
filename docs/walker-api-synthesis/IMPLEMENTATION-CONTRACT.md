@@ -59,11 +59,11 @@ to describe implementation progress. Maintain explicit dispositions as stages la
 | Rs2PathApi.nearestWalkableTile(WorldPoint,int) | Adapted existing canonical radius-1 diagnostic query; never auto-retarget |
 | Rs2InteractionApproach.isReady(GameObject/WallObject) | Stage 2 conservative readiness adapter; non-instanced active top-level view only; no interaction confirmation |
 | Instance/secondary-view and model-based readiness | Deferred pending coordinate-consistent helpers and tests; current queries return false |
-| Runtime/data-sync request-based interactions | Reconciled opt-in APIs; ownership/cancellation/guarded action fixes; final artifact gates pending |
+| Runtime/data-sync request-based interactions | Reconciled opt-in APIs; ownership/cancellation/guarded action fixes; final offline artifact gates passed, live validation pending |
 | Typed transport and local route queries | Adapted immutable values and lossless conversion; isolated query facade with explicit unsupported-policy errors; see stage 4/5 support limits |
 | Alternate planner interface/snapshot and shadow/canary additions | Intentionally unsupported in this tranche; existing local engine remains authoritative |
 | Split executor and upstream test-only public hooks | Deferred; not supported merely by exposing API names |
-| Every other inventoried declaration | Deferred pending explicit per-family disposition before its promotion |
+| Every other inventoried declaration | Accounted for in API-DISPOSITIONS.md and inventory/api-dispositions.csv; intentionally unimported where outside the selected boundary |
 
 ## Release Gates
 
@@ -106,4 +106,7 @@ because an API compiles or because its first unit test passes.
 - Stage 5: [isolated planning](STAGE-5-VALIDATION.md), including personal/W330,
   Leagues no-side-effect capture and actual legacy/exact selected identities.
 - Combined focused r5 passed 257 tests without failures/errors/skips. Full final
-  offline gates and test-JAR preparation are not implied by this focused result.
+  offline gates and the test JAR are now separately evidenced in FINAL-HANDOFF.md.
+- Stage 6: retain the existing executor; no split-executor or alternate-engine
+  migration. All selected offline gates are complete. Live gameplay, long-session
+  stability and promotion remain pending explicit authorization.
