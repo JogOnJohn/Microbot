@@ -1,0 +1,23 @@
+allprojects {
+    tasks.withType(Test).configureEach {
+        maxParallelForks = 1
+        maxHeapSize = '2g'
+        if (project.hasProperty('walkerGeneratedDir')) {
+            def generated = project.file(project.property('walkerGeneratedDir'))
+            if (!generated.isDirectory()) throw new GradleException('walkerGeneratedDir must exist')
+            systemProperty 'microbot.transport.generated.dir', generated.absolutePath
+        }
+    }
+    afterEvaluate {
+        if (path == ':client') {
+            tasks.register('walkerApiBenchmark', JavaExec) {
+                dependsOn tasks.named('testClasses')
+                classpath = sourceSets.test.runtimeClasspath
+                mainClass.set('net.runelite.client.plugins.microbot.util.walker.TypedPlanningPerformanceMain')
+                maxHeapSize = '1g'
+                systemProperty 'microbot.test.mode', 'true'
+                args '3', '20'
+            }
+        }
+    }
+}

@@ -61,7 +61,7 @@ final class LeaguesTransportInjection
 		injectLeaguesCatalogTransports(pathfinderConfig, ctx, ctx.getUnlockedRegions(), usableTeleports, transports, transportsPacked, typeStats);
 	}
 
-	private static boolean mergeOriginlessTeleportByBestDuration(Set<Transport> usableTeleports, Transport candidate)
+	static boolean mergeOriginlessTeleportByBestDuration(Set<Transport> usableTeleports, Transport candidate)
 	{
 		if (candidate == null || candidate.getOrigin() != null || candidate.getDestination() == null)
 		{

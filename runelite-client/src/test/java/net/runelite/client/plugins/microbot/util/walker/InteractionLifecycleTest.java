@@ -8,6 +8,19 @@ import static org.junit.Assert.*;
 import static net.runelite.client.plugins.microbot.util.walker.interaction.InteractionLifecycle.Decision.*;
 
 public class InteractionLifecycleTest {
+    @Test public void arrivedWithoutReadinessHasBoundedFailureButProgressAndDispatchRemainProtected() {
+        InteractionLifecycle s = new InteractionLifecycle();
+        s.update(0, p, true, false, false, false, false);
+        assertFalse(s.stalledAtArrival(4999));
+        s.update(4000, p.dx(1), true, true, false, false, false);
+        assertFalse(s.stalledAtArrival(5000));
+        assertTrue(s.stalledAtArrival(9000));
+        assertEquals("arrived-not-ready", s.reason());
+        InteractionLifecycle sent = new InteractionLifecycle();
+        sent.update(0, p, true, false, true, false, false);
+        sent.dispatched(0);
+        assertFalse(sent.stalledAtArrival(6000));
+    }
     @Test public void inFlightGuardExpiresWithoutAnotherControllerPoll() {
         InteractionLifecycle s = new InteractionLifecycle();
         s.update(100, p, true, false, false, false, false);
@@ -78,5 +91,18 @@ public class InteractionLifecycleTest {
         InteractionRequest b = InteractionRequest.npc(1, "A", p, "Talk-to", () -> false);
         assertNotEquals(a.id, b.id); assertTrue(a.bind(p)); assertFalse(a.bind(p.dx(1)));
         a.cancel(); assertFalse(a.active()); assertTrue(b.active());
+    }
+
+    @Test public void lateDispatchAndRejectionCannotMutateATerminalOperation() {
+        for (boolean cancelled : new boolean[]{true, false}) {
+            InteractionLifecycle state = new InteractionLifecycle();
+            if (cancelled) state.cancel(); else state.fail("execution-failed");
+            var terminal = state.terminal();
+            state.dispatched(100);
+            state.rejected(200);
+            assertSame(terminal, state.terminal());
+            assertEquals(0, state.attempts());
+            assertFalse(state.awaiting());
+        }
     }
 }

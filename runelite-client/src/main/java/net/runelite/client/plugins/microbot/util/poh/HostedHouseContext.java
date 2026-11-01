@@ -23,5 +23,9 @@ public final class HostedHouseContext {
     public synchronized boolean facilitiesEligible() {
         return !recovering && rejectedGeneration != generation;
     }
+    /** Evaluate the next observation without publishing a generation or clearing a rejection. */
+    public synchronized boolean facilitiesEligibleFor(boolean inHouse) {
+        return !recovering && (present != inHouse || rejectedGeneration != generation);
+    }
     public synchronized long generation() { return generation; }
 }

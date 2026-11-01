@@ -29,10 +29,12 @@ import net.runelite.client.plugins.microbot.util.magic.RuneFilter;
 import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.leaguetransport.Rs2LeaguesTransport;
+import net.runelite.client.plugins.microbot.util.leaguetransport.LeaguesPlanningSnapshot;
 import net.runelite.client.plugins.microbot.util.poh.PohTeleports;
 import net.runelite.client.plugins.microbot.util.poh.PohTransport;
 import net.runelite.client.plugins.microbot.util.poh.World330HostedHouseTransport;
 import net.runelite.client.plugins.microbot.util.poh.data.World330HostedHouse;
+import net.runelite.client.plugins.microbot.util.poh.data.*;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
 import java.io.File;
@@ -122,6 +124,8 @@ public class PathfinderConfig {
     // returns; the in-progress runner re-runs with the latest target before releasing, so a required
     // refresh (e.g. the post-teleport W330 reanchor) is never silently dropped.
     private final java.util.concurrent.locks.ReentrantLock refreshLock = new java.util.concurrent.locks.ReentrantLock();
+    private final java.util.concurrent.atomic.AtomicInteger catalogPublishers = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicLong catalogPublication = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicBoolean refreshDirty = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile WorldPoint pendingRefreshTarget;
     // Max consecutive doRefresh runs one refresh() call may perform (see refresh()). Caps how long a
@@ -139,6 +143,7 @@ public class PathfinderConfig {
     private final TransportRefusalLedger transportRefusals = new TransportRefusalLedger();
 
     public boolean isWalkScopedTransportBlocked(Transport transport) {
+        if (planningCopy) return planningRefusals.contains(transport);
         return getTransportRefusals().isBlocked(transport);
     }
     /** Backing file for {@link #learnedBlockedEdgeKeys}; redirectable for tests. */
@@ -159,6 +164,17 @@ public class PathfinderConfig {
 
     private final Client client;
     private final ShortestPathConfig config;
+    private boolean planningCopy;
+    private Map<Integer, Integer> planningVarbitValues = Collections.emptyMap();
+    private PathfinderBackend planningBackend;
+    private LiveCollisionView planningLiveView;
+    private PlanningHouse planningHouse;
+    private LeaguesPlanningSnapshot planningLeagues;
+    private WorldPoint planningRefreshTarget;
+    private long planningDeadlineNanos;
+    private boolean planningTeleportsDisabled;
+    private final Set<String> planningRuntimeBlocks = new HashSet<>();
+    private final Set<Transport> planningRefusals = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private final List<QuestState> questStateOrder = Arrays.asList(
             QuestState.NOT_STARTED,
@@ -330,11 +346,341 @@ public class PathfinderConfig {
     }
 
     public CollisionMap getMap() {
+        if (planningCopy) return CollisionMap.frozenSnapshot(mapData, planningLiveView);
         return map.get();
     }
 
     public PathfinderBackend getBackend() {
+        if (planningCopy) return planningBackend;
         return config == null || config.pathfinderBackend() == null ? PathfinderBackend.LEGACY : config.pathfinderBackend();
+    }
+
+    /**
+     * Nonblocking catalog capture. No refresh lock is held during a client-thread callback.
+     * Busy capture fails rather than reading half-refreshed packed indexes.
+     */
+    public PathfinderConfig copyForPlanning() {
+        if ((client != null && client.isClientThread())
+                || (Microbot.getClientThread() != null && Microbot.getClientThread().isClientThread())) {
+            throw new IllegalStateException("synchronous planning on client thread");
+        }
+        PlanningCapture inputs = capturePlanningInputs();
+        Client capturedClient = inputs.client;
+        ShortestPathConfig capturedConfig = capturePlanningConfig();
+        PlanningHouse capturedHouse = inputs.house;
+        if (capturedHouse.player != null && capturedHouse.player.getRegionID() == 14162) {
+            throw new UnsupportedOperationException("isolated ToA puzzle routing requires a captured tile policy");
+        }
+        if (!refreshLock.tryLock()) throw new IllegalStateException("planning snapshot busy");
+        try {
+            CatalogSnapshot catalogs = captureCatalogs();
+            PathfinderConfig copy = new PathfinderConfig(mapData, catalogs.raw,
+                    new ArrayList<>(resourceRestrictions), capturedClient, capturedConfig, false);
+            copy.planningCopy = true;
+            copy.planningHouse = capturedHouse;
+            copy.planningBackend = getBackend();
+            copy.planningTeleportsDisabled = planningCopy ? planningTeleportsDisabled : Rs2Walker.disableTeleports;
+            long capturedAt = System.currentTimeMillis();
+            if (planningCopy) copy.planningRuntimeBlocks.addAll(planningRuntimeBlocks);
+            else runtimeBlockedTransports.forEach((key, until) -> {
+                    if (until > capturedAt) copy.planningRuntimeBlocks.add(key);
+                });
+            copy.planningLiveView = planningCopy ? planningLiveView : liveCollisionOverlay.current();
+            copy.calculationCutoffMillis = calculationCutoffMillis;
+            copy.planningDeadlineNanos = System.nanoTime()
+                    + Math.max(1, Math.min(600_000, calculationCutoffMillis > 0 ? calculationCutoffMillis : 10_000)) * 1_000_000L;
+            copy.avoidWilderness = avoidWilderness;
+            copy.avoidDangerousNpcs = avoidDangerousNpcs;
+            copy.useSpiritTrees = useSpiritTrees;
+            copy.useAgilityShortcuts = useAgilityShortcuts;
+            copy.useGrappleShortcuts = useGrappleShortcuts;
+            copy.useBoats = useBoats;
+            copy.useCanoes = useCanoes;
+            copy.useCharterShips = useCharterShips;
+            copy.useShips = useShips;
+            copy.useFairyRings = useFairyRings;
+            copy.useGnomeGliders = useGnomeGliders;
+            copy.useMinecarts = useMinecarts;
+            copy.usePoh = usePoh;
+            copy.useWorld330MaxHouse = useWorld330MaxHouse;
+            copy.usePortalNexus = usePortalNexus;
+            copy.useQuetzals = useQuetzals;
+            copy.useTeleportationLevers = useTeleportationLevers;
+            copy.useTeleportationMinigames = useTeleportationMinigames;
+            copy.useTeleportationPortals = useTeleportationPortals;
+            copy.useTeleportationSpells = useTeleportationSpells;
+            copy.useMagicCarpets = useMagicCarpets;
+            copy.useHotAirBalloons = useHotAirBalloons;
+            copy.useMagicMushtrees = useMagicMushtrees;
+            copy.useSeasonalTransports = useSeasonalTransports;
+            copy.useWildernessObelisks = useWildernessObelisks;
+            copy.useSpiritTreeEtceteria = useSpiritTreeEtceteria;
+            copy.useSpiritTreeBrimhaven = useSpiritTreeBrimhaven;
+            copy.useSpiritTreePortSarim = useSpiritTreePortSarim;
+            copy.useSpiritTreeHosidius = useSpiritTreeHosidius;
+            copy.useSpiritTreeFarmingGuild = useSpiritTreeFarmingGuild;
+            copy.distanceBeforeUsingTeleport = distanceBeforeUsingTeleport;
+            copy.useNpcs = useNpcs;
+            copy.useTeleportationItems = useTeleportationItems;
+            copy.ignoreTeleportAndItems = ignoreTeleportAndItems;
+            copy.useBankItems = useBankItems;
+            copy.maximumQuestPoints = maximumQuestPoints;
+            copy.declaredUnlocks = new HashSet<>(declaredUnlocks);
+            copy.customRestrictions = new ArrayList<>(customRestrictions);
+            copy.internalRestrictedPointsPacked.addAll(restrictedPointsPacked);
+            copy.blockedTransportEdgesPacked.addAll(blockedTransportEdgesPacked);
+            copy.learnedBlockedEdgeKeys.addAll(learnedBlockedEdgeKeys);
+            copy.usableTeleports.addAll(catalogs.teleports);
+            copy.filteredTargets.addAll(filteredTargets);
+            catalogs.active.forEach((origin, edges) -> {
+                copy.transports.put(origin, edges);
+                copy.transportsPacked.put(WorldPointUtil.packWorldPoint(origin), edges);
+            });
+            Set<Transport> candidates = Collections.newSetFromMap(new IdentityHashMap<>());
+            copy.allTransports.values().forEach(candidates::addAll);
+            copy.transports.values().forEach(candidates::addAll);
+            candidates.addAll(copy.usableTeleports);
+            for (Transport edge : candidates) if (isWalkScopedTransportBlocked(edge)) copy.planningRefusals.add(edge);
+            return copy;
+        } finally {
+            refreshLock.unlock();
+        }
+    }
+
+    private static final class CatalogSnapshot {
+        private final Map<WorldPoint, Set<Transport>> raw, active;
+        private final Set<Transport> teleports;
+        private CatalogSnapshot(Map<WorldPoint, Set<Transport>> raw, Map<WorldPoint, Set<Transport>> active, Set<Transport> teleports) {
+            this.raw = raw; this.active = active; this.teleports = teleports;
+        }
+    }
+
+    private CatalogSnapshot captureCatalogs() {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            long version = catalogPublication.get();
+            if (catalogPublishers.get() != 0) continue;
+            CatalogSnapshot captured = new CatalogSnapshot(copyCatalog(allTransports), copyCatalog(transports),
+                    new LinkedHashSet<>(usableTeleports));
+            if (catalogPublishers.get() == 0 && version == catalogPublication.get()) return captured;
+        }
+        throw new IllegalStateException("planning catalog publication busy");
+    }
+
+    private static Map<WorldPoint, Set<Transport>> copyCatalog(Map<WorldPoint, Set<Transport>> source) {
+        Map<WorldPoint, Set<Transport>> copy = new HashMap<>();
+        synchronized (source) {
+            source.forEach((origin, edges) -> copy.put(origin, new LinkedHashSet<>(edges)));
+        }
+        return copy;
+    }
+
+    private ShortestPathConfig capturePlanningConfig() {
+        if (config == null) return null;
+        Map<java.lang.reflect.Method, Object> values = new HashMap<>();
+        try {
+            for (java.lang.reflect.Method method : ShortestPathConfig.class.getMethods()) {
+                if (method.getParameterCount() == 0) {
+                    Object value = method.invoke(config);
+                    net.runelite.client.config.ConfigItem item = method.getAnnotation(net.runelite.client.config.ConfigItem.class);
+                    if (!planningCopy && item != null) {
+                        if (value instanceof Boolean) value = ShortestPathPlugin.override(item.keyName(), (Boolean) value);
+                        else if (value instanceof Integer) value = ShortestPathPlugin.override(item.keyName(), (Integer) value);
+                        else if (value instanceof TeleportationItem) value = ShortestPathPlugin.override(item.keyName(), (TeleportationItem) value);
+                    }
+                    values.put(method, value);
+                }
+            }
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("planning policy unavailable", ex);
+        }
+        return (ShortestPathConfig) java.lang.reflect.Proxy.newProxyInstance(
+                ShortestPathConfig.class.getClassLoader(), new Class<?>[]{ShortestPathConfig.class},
+                (proxy, method, args) -> {
+                    if (!values.containsKey(method)) throw new UnsupportedOperationException("read-only policy");
+                    return values.get(method);
+                });
+    }
+
+    private Client capturePlanningClient() {
+        if (client == null) return null;
+        if (Microbot.getClientThread() == null) throw new IllegalStateException("client thread unavailable");
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            GameState gameState = client.getGameState();
+            int world = client.getWorld();
+            EnumSet<WorldType> worldTypes = client.getWorldType().clone();
+            int[] levels = new int[SKILLS.length];
+            readRequirementLevels(client, levels);
+            return (Client) java.lang.reflect.Proxy.newProxyInstance(Client.class.getClassLoader(),
+                    new Class<?>[]{Client.class}, (proxy, method, args) -> {
+                        switch (method.getName()) {
+                            case "getGameState": return gameState;
+                            case "getWorld": return world;
+                            case "getWorldType": return worldTypes.clone();
+                            case "getBoostedSkillLevel": return levels[((Skill) args[0]).ordinal()];
+                            default:
+                                try { return method.invoke(client, args); }
+                                catch (java.lang.reflect.InvocationTargetException ex) { throw ex.getCause(); }
+                        }
+                    });
+        }).orElseThrow(() -> new IllegalStateException("planning client snapshot unavailable"));
+    }
+
+    private static final class PlanningCapture {
+        private final Client client;
+        private final PlanningHouse house;
+        private PlanningCapture(Client client, PlanningHouse house) { this.client = client; this.house = house; }
+    }
+
+    private PlanningCapture capturePlanningInputs() {
+        if (planningCopy) return new PlanningCapture(client, planningHouse);
+        if (client == null) return new PlanningCapture(null, PlanningHouse.empty());
+        if (Microbot.getClientThread() == null) throw new IllegalStateException("client thread unavailable");
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            if (client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null)
+                throw new IllegalStateException("planning scene unavailable");
+            return new PlanningCapture(capturePlanningClient(), capturePlanningHouse());
+        }).orElseThrow(() -> new IllegalStateException("planning inputs unavailable"));
+    }
+
+    private PlanningHouse capturePlanningHouse() {
+        if (client == null) return PlanningHouse.empty();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            boolean hosted = World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouseReadOnly();
+            boolean inside = hosted || (Rs2Player.IsInInstance() && Microbot.getRs2TileObjectCache()
+                    .query().withId(net.runelite.api.gameval.ObjectID.POH_EXIT_PORTAL).nearest() != null);
+            PohHouseConfiguration house = PohHouseConfiguration.load();
+            Set<PohTeleport> candidates = new LinkedHashSet<>(house.teleports(true));
+            Collections.addAll(candidates, PohPortal.values());
+            Collections.addAll(candidates, NexusPortal.values());
+            Collections.addAll(candidates, JewelleryBox.values());
+            Collections.addAll(candidates, MountedGlory.values());
+            Collections.addAll(candidates, MountedMythical.values());
+            Collections.addAll(candidates, MountedDigsite.values());
+            Collections.addAll(candidates, MountedXerics.values());
+            Set<PohTeleport> allowed = candidates.stream().filter(PohTeleport::isUnlockedForPlayer)
+                    .filter(t -> !PohTeleports.isTeleportBlockedReadOnly(t)).collect(Collectors.toSet());
+            return new PlanningHouse(house, Rs2Player.getWorldLocation(), hosted, inside,
+                    client.getWorld() == 330 && World330HostedHouse.ADVERTISED_HOUSE.facilitiesEligibleReadOnly(),
+                    World330HostedHouse.ADVERTISED_HOUSE.isWithinAdvertisementApproach(),
+                    World330HostedHouse.ADVERTISED_HOUSE.canReachAdvertisementBoard(false),
+                    World330HostedHouse.ADVERTISED_HOUSE.canReachAdvertisementBoard(true), allowed,
+                    PohPanel.getTransportsToPoh());
+        }).orElseThrow(() -> new IllegalStateException("planning house snapshot unavailable"));
+    }
+
+    /** Immutable detected facilities and admission facts; collecting them never observes a house transition. */
+    static final class PlanningHouse {
+        private final PohHouseConfiguration house;
+        private final WorldPoint player;
+        private final boolean inHosted, inside, eligible, nearBoard, carriedAccess, bankedAccess;
+        private final Set<PohTeleport> allowed;
+        private final Map<WorldPoint, Set<Transport>> entries;
+
+        PlanningHouse(PohHouseConfiguration house, WorldPoint player, boolean inHosted,
+                boolean inside, boolean eligible, boolean nearBoard, boolean carriedAccess,
+                boolean bankedAccess, Set<PohTeleport> allowed, Map<WorldPoint, Set<Transport>> entries) {
+            this.house = house;
+            this.player = player;
+            this.inHosted = inHosted;
+            this.inside = inside;
+            this.eligible = eligible;
+            this.nearBoard = nearBoard;
+            this.carriedAccess = carriedAccess;
+            this.bankedAccess = bankedAccess;
+            this.allowed = Set.copyOf(allowed);
+            this.entries = copyCatalog(entries);
+        }
+
+        static PlanningHouse empty() {
+            return new PlanningHouse(null, null, false, false, false, false,
+                    false, false, Collections.emptySet(), Collections.emptyMap());
+        }
+
+        boolean useHosted(PathfinderConfig c, WorldPoint target) {
+            if (!c.useWorld330MaxHouse || c.client == null || c.client.getWorld() != 330) return false;
+            if (inHosted) return true;
+            if (shouldSkipWorld330ForLocalTrip(player, target, WORLD330_MIN_TARGET_DISTANCE, false, nearBoard)) return false;
+            return c.useBankItems ? bankedAccess : carriedAccess;
+        }
+
+        Map<WorldPoint, Set<Transport>> merge(PathfinderConfig c, WorldPoint target) {
+            boolean hosted = useHosted(c, target);
+            if (!c.usePoh && !hosted) return c.allTransports;
+            Map<WorldPoint, Set<Transport>> merged = new HashMap<>();
+            c.allTransports.forEach((origin, edges) -> {
+                Set<Transport> persistent = edges.stream().filter(t -> !PohHouseConfiguration.isImportedFacility(t))
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+                if (!persistent.isEmpty()) merged.put(origin, persistent);
+            });
+            if (hosted && eligible) {
+                WorldPoint anchor = inHosted && player != null ? player : World330HostedHouse.POH_INSTANCE_ANCHOR;
+                Map<WorldPoint, Set<Transport>> graph = new HashMap<>();
+                graph.put(null, new LinkedHashSet<>(Set.of(new World330HostedHouseTransport(anchor))));
+                Set<PohTeleport> teleports = new LinkedHashSet<>();
+                Collections.addAll(teleports, PohPortal.values());
+                Collections.addAll(teleports, NexusPortal.values());
+                Collections.addAll(teleports, JewelleryBox.values());
+                Collections.addAll(teleports, MountedGlory.values());
+                Collections.addAll(teleports, MountedMythical.values());
+                Collections.addAll(teleports, MountedDigsite.values());
+                Collections.addAll(teleports, MountedXerics.values());
+                for (PohTeleport teleport : teleports) if (allowed.contains(teleport))
+                    graph.computeIfAbsent(anchor, k -> new LinkedHashSet<>()).add(new PohTransport(anchor, teleport, true));
+                addAtAnchor(graph, PohPanel.createFairyRingMap(anchor, c.allTransports), anchor);
+                addAtAnchor(graph, PohPanel.createSpiritTreeMap(anchor, c.allTransports), anchor);
+                mergeWorld330Transports(merged, graph, inHosted);
+            }
+            // Enabled W330 always takes precedence, including a skipped local trip or rejected house.
+            if (!c.usePoh || c.prefersHostedHouse()) return merged;
+            if (house != null && house.exitPortal() != null) {
+                WorldPoint exit = house.exitPortal();
+                if (house.enabled("fairyRing")) addAll(merged, PohPanel.createFairyRingMap(exit, c.allTransports));
+                if (house.enabled("spiritTree")) addAll(merged, PohPanel.createSpiritTreeMap(exit, c.allTransports));
+                for (PohTeleport teleport : house.teleports(c.usePortalNexus)) if (allowed.contains(teleport))
+                    merged.computeIfAbsent(exit, k -> new LinkedHashSet<>()).add(new PohTransport(exit, teleport));
+            }
+            if (!inside && !hosted) addAll(merged, entries);
+            return merged;
+        }
+
+        private static void addAtAnchor(Map<WorldPoint, Set<Transport>> graph,
+                Map<WorldPoint, Set<Transport>> values, WorldPoint anchor) {
+            if (values.containsKey(anchor)) graph.computeIfAbsent(anchor, k -> new LinkedHashSet<>()).addAll(values.get(anchor));
+        }
+
+        private static void addAll(Map<WorldPoint, Set<Transport>> graph, Map<WorldPoint, Set<Transport>> values) {
+            values.forEach((origin, edges) -> graph.computeIfAbsent(origin, k -> new LinkedHashSet<>()).addAll(edges));
+        }
+    }
+
+    /** Refresh only a search-owned copy; use explicit query target/bank policy, never the live target. */
+    public void refreshForPlanning(WorldPoint target, Boolean bankItems) {
+        if (!planningCopy) throw new IllegalStateException("refresh requires planning copy");
+        checkPlanningCancellation();
+        planningRefreshTarget = target;
+        if (bankItems != null) useBankItems = bankItems;
+        if (client == null || config == null) {
+            throw new IllegalStateException("refresh inputs unavailable; use NEVER for prepared offline fixtures");
+        }
+        if (!isTransportRefreshReady()) throw new IllegalStateException("planning scene unavailable");
+        doRefresh(target);
+        checkPlanningCancellation();
+    }
+
+    public static final class PlanningTimeoutException extends RuntimeException {
+        private PlanningTimeoutException() { super("planning preparation cutoff"); }
+    }
+
+    private void checkPlanningCancellation() {
+        if (!planningCopy) return;
+        if (Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException("planning interrupted");
+        if (System.nanoTime() > planningDeadlineNanos) throw new PlanningTimeoutException();
+    }
+
+    public long getRemainingPlanningMillis() {
+        if (!planningCopy) throw new IllegalStateException("planning copy required");
+        checkPlanningCancellation();
+        return Math.max(1, (planningDeadlineNanos - System.nanoTime()) / 1_000_000L);
     }
 
     public TransportAvailability exactAvailability() {
@@ -345,12 +691,18 @@ public class PathfinderConfig {
     }
 
     public void publishExactTransport(int origin, Transport selected) {
-        WorldPoint point = WorldPointUtil.unpackWorldPoint(origin);
-        Set<Transport> ordered = new LinkedHashSet<>();
-        ordered.add(selected);
-        ordered.addAll(transports.getOrDefault(point, Collections.emptySet()));
-        transports.put(point, ordered);
-        transportsPacked.put(origin, ordered);
+        catalogPublishers.incrementAndGet();
+        try {
+            WorldPoint point = WorldPointUtil.unpackWorldPoint(origin);
+            Set<Transport> ordered = new LinkedHashSet<>();
+            ordered.add(selected);
+            ordered.addAll(transports.getOrDefault(point, Collections.emptySet()));
+            transports.put(point, ordered);
+            transportsPacked.put(origin, ordered);
+        } finally {
+            catalogPublication.incrementAndGet();
+            catalogPublishers.decrementAndGet();
+        }
     }
 
     /**
@@ -467,40 +819,52 @@ public class PathfinderConfig {
         return pendingTarget;
     }
 
+    private boolean policyOverride(String key, boolean fallback) {
+        return planningCopy ? fallback : ShortestPathPlugin.override(key, fallback);
+    }
+
+    private int policyOverride(String key, int fallback) {
+        return planningCopy ? fallback : ShortestPathPlugin.override(key, fallback);
+    }
+
+    private TeleportationItem policyOverride(String key, TeleportationItem fallback) {
+        return planningCopy ? fallback : ShortestPathPlugin.override(key, fallback);
+    }
+
     private void doRefresh(WorldPoint target) {
         calculationCutoffMillis = (long) config.calculationCutoff() * Constants.GAME_TICK_LENGTH;
-        avoidWilderness = ShortestPathPlugin.override("avoidWilderness", config.avoidWilderness());
-        avoidDangerousNpcs = ShortestPathPlugin.override("avoidDangerousNpcs", config.avoidDangerousNpcs());
-        useAgilityShortcuts = ShortestPathPlugin.override("useAgilityShortcuts", config.useAgilityShortcuts());
-        useGrappleShortcuts = ShortestPathPlugin.override("useGrappleShortcuts", config.useGrappleShortcuts());
-        useBoats = ShortestPathPlugin.override("useBoats", config.useBoats());
-        useCanoes = ShortestPathPlugin.override("useCanoes", config.useCanoes());
+        avoidWilderness = policyOverride("avoidWilderness", config.avoidWilderness());
+        avoidDangerousNpcs = policyOverride("avoidDangerousNpcs", config.avoidDangerousNpcs());
+        useAgilityShortcuts = policyOverride("useAgilityShortcuts", config.useAgilityShortcuts());
+        useGrappleShortcuts = policyOverride("useGrappleShortcuts", config.useGrappleShortcuts());
+        useBoats = policyOverride("useBoats", config.useBoats());
+        useCanoes = policyOverride("useCanoes", config.useCanoes());
         declaredUnlocks = EnumSet.noneOf(Unlock.class);
-        if (ShortestPathPlugin.override("unlockCanoeAxe", config.unlockCanoeAxe())) declaredUnlocks.add(Unlock.CANOE_AXE);
-        if (ShortestPathPlugin.override("unlockDragontoothPassage", config.unlockDragontoothPassage())) declaredUnlocks.add(Unlock.DRAGONTOOTH);
-        if (ShortestPathPlugin.override("unlockXericsHonour", config.unlockXericsHonour())) declaredUnlocks.add(Unlock.XERICS_HONOUR);
-        useCharterShips = ShortestPathPlugin.override("useCharterShips", config.useCharterShips());
-        useShips = ShortestPathPlugin.override("useShips", config.useShips());
-        useMinecarts = ShortestPathPlugin.override("useMinecarts", config.useMinecarts());
-        usePoh = ShortestPathPlugin.override("usePoh", config.usePoh());
-        useWorld330MaxHouse = ShortestPathPlugin.override("useWorld330MaxHouse", config.useWorld330MaxHouse());
-        usePortalNexus = ShortestPathPlugin.override("usePortalNexus", config.usePortalNexus());
-        useSpiritTreeEtceteria = ShortestPathPlugin.override("spiritTreeEtceteria", config.spiritTreeEtceteria());
-        useSpiritTreeBrimhaven = ShortestPathPlugin.override("spiritTreeBrimhaven", config.spiritTreeBrimhaven());
-        useSpiritTreePortSarim = ShortestPathPlugin.override("spiritTreePortSarim", config.spiritTreePortSarim());
-        useSpiritTreeHosidius = ShortestPathPlugin.override("spiritTreeHosidius", config.spiritTreeHosidius());
-        useSpiritTreeFarmingGuild = ShortestPathPlugin.override("spiritTreeFarmingGuild", config.spiritTreeFarmingGuild());
-        useTeleportationItems = ShortestPathPlugin.override("useTeleportationItems", config.useTeleportationItems());
-        useTeleportationMinigames = ShortestPathPlugin.override("useTeleportationMinigames", config.useTeleportationMinigames());
-        useTeleportationLevers = ShortestPathPlugin.override("useTeleportationLevers", config.useTeleportationLevers());
-        useTeleportationPortals = ShortestPathPlugin.override("useTeleportationPortals", config.useTeleportationPortals());
-        useTeleportationSpells = ShortestPathPlugin.override("useTeleportationSpells", config.useTeleportationSpells());
-        useWildernessObelisks = ShortestPathPlugin.override("useWildernessObelisks", config.useWildernessObelisks());
-        useMagicCarpets = ShortestPathPlugin.override("useMagicCarpets", config.useMagicCarpets());
-        useHotAirBalloons = ShortestPathPlugin.override("useHotAirBalloons", config.useHotAirBalloons());
-        useMagicMushtrees = ShortestPathPlugin.override("useMagicMushtrees", config.useMagicMushtrees());
-        useSeasonalTransports = ShortestPathPlugin.override("useSeasonalTransports", config.useSeasonalTransports());
-        distanceBeforeUsingTeleport = ShortestPathPlugin.override("distanceBeforeUsingTeleports", config.distanceBeforeUsingTeleport());
+        if (policyOverride("unlockCanoeAxe", config.unlockCanoeAxe())) declaredUnlocks.add(Unlock.CANOE_AXE);
+        if (policyOverride("unlockDragontoothPassage", config.unlockDragontoothPassage())) declaredUnlocks.add(Unlock.DRAGONTOOTH);
+        if (policyOverride("unlockXericsHonour", config.unlockXericsHonour())) declaredUnlocks.add(Unlock.XERICS_HONOUR);
+        useCharterShips = policyOverride("useCharterShips", config.useCharterShips());
+        useShips = policyOverride("useShips", config.useShips());
+        useMinecarts = policyOverride("useMinecarts", config.useMinecarts());
+        usePoh = policyOverride("usePoh", config.usePoh());
+        useWorld330MaxHouse = policyOverride("useWorld330MaxHouse", config.useWorld330MaxHouse());
+        usePortalNexus = policyOverride("usePortalNexus", config.usePortalNexus());
+        useSpiritTreeEtceteria = policyOverride("spiritTreeEtceteria", config.spiritTreeEtceteria());
+        useSpiritTreeBrimhaven = policyOverride("spiritTreeBrimhaven", config.spiritTreeBrimhaven());
+        useSpiritTreePortSarim = policyOverride("spiritTreePortSarim", config.spiritTreePortSarim());
+        useSpiritTreeHosidius = policyOverride("spiritTreeHosidius", config.spiritTreeHosidius());
+        useSpiritTreeFarmingGuild = policyOverride("spiritTreeFarmingGuild", config.spiritTreeFarmingGuild());
+        useTeleportationItems = policyOverride("useTeleportationItems", config.useTeleportationItems());
+        useTeleportationMinigames = policyOverride("useTeleportationMinigames", config.useTeleportationMinigames());
+        useTeleportationLevers = policyOverride("useTeleportationLevers", config.useTeleportationLevers());
+        useTeleportationPortals = policyOverride("useTeleportationPortals", config.useTeleportationPortals());
+        useTeleportationSpells = policyOverride("useTeleportationSpells", config.useTeleportationSpells());
+        useWildernessObelisks = policyOverride("useWildernessObelisks", config.useWildernessObelisks());
+        useMagicCarpets = policyOverride("useMagicCarpets", config.useMagicCarpets());
+        useHotAirBalloons = policyOverride("useHotAirBalloons", config.useHotAirBalloons());
+        useMagicMushtrees = policyOverride("useMagicMushtrees", config.useMagicMushtrees());
+        useSeasonalTransports = policyOverride("useSeasonalTransports", config.useSeasonalTransports());
+        distanceBeforeUsingTeleport = policyOverride("distanceBeforeUsingTeleports", config.distanceBeforeUsingTeleport());
 
         //START microbot variables
         useNpcs = config.useNpcs();
@@ -545,19 +909,20 @@ public class PathfinderConfig {
         }
 
         if (!usableWildyTeleports.isEmpty()) {
-            // Added extra code to check if the key already exists
-            // if the key already exists we append instead of overwriting
-            // The issue was that the transport list would contain a transport object on the same
-            // tile as the player, this would then be overwritten by the usableWildyTeleports
-            // therefor losing the original transport object
-            WorldPoint key = WorldPointUtil.unpackWorldPoint(packedLocation);
-            Set<Transport> existingTeleports = transports.get(key);
-            if (existingTeleports != null) {
-                existingTeleports.addAll(usableWildyTeleports);
-                transportsPacked.put(packedLocation, existingTeleports);
-            } else {
-                transports.put(key, usableWildyTeleports);
-                transportsPacked.put(packedLocation, usableWildyTeleports);
+            catalogPublishers.incrementAndGet();
+            try {
+                // Copy-on-write keeps captured sets stable; packed and object indexes publish one version.
+                WorldPoint key = WorldPointUtil.unpackWorldPoint(packedLocation);
+                Set<Transport> published = transports.compute(key, (point, previous) -> {
+                    Set<Transport> combined = new LinkedHashSet<>();
+                    if (previous != null) combined.addAll(previous);
+                    combined.addAll(usableWildyTeleports);
+                    return combined;
+                });
+                transportsPacked.put(packedLocation, published);
+            } finally {
+                catalogPublication.incrementAndGet();
+                catalogPublishers.decrementAndGet();
             }
         }
 
@@ -590,21 +955,21 @@ public class PathfinderConfig {
      * @param target Optional target destination for optimized filtering (null for standard filtering)
      */
     private void refreshTransports(WorldPoint target) {
-        useFairyRings = ShortestPathPlugin.override("useFairyRings", config.useFairyRings())
-                && !QuestState.NOT_STARTED.equals(Rs2Player.getQuestState(Quest.FAIRYTALE_II__CURE_A_QUEEN))
-                && (Rs2Inventory.contains(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
-                || Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
-                || (ShortestPathPlugin.getPathfinderConfig().useBankItems && (Rs2Bank.hasItem(ItemID.DRAMEN_STAFF) || Rs2Bank.hasItem(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)))
-                || Microbot.getVarbitValue(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE) == 1);
-        useGnomeGliders = ShortestPathPlugin.override("useGnomeGliders", config.useGnomeGliders())
+        if (!planningCopy) refreshFairyRingAvailability();
+        else planningVarbitValues = Collections.emptyMap();
+        useGnomeGliders = policyOverride("useGnomeGliders", config.useGnomeGliders())
                 && QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.THE_GRAND_TREE));
-        useSpiritTrees = ShortestPathPlugin.override("useSpiritTrees", config.useSpiritTrees())
+        useSpiritTrees = policyOverride("useSpiritTrees", config.useSpiritTrees())
                 && QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.TREE_GNOME_VILLAGE));
-        useQuetzals = ShortestPathPlugin.override("useQuetzals", config.useQuetzals())
+        useQuetzals = policyOverride("useQuetzals", config.useQuetzals())
                 && QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.TWILIGHTS_PROMISE));
 
-        final Rs2LeaguesTransport.LeaguesContext leaguesCtx = Rs2LeaguesTransport.leaguesContext();
-        Microbot.getClientThread().runOnClientThreadOptional(() -> {
+        final Rs2LeaguesTransport.LeaguesContext leaguesCtx = planningCopy
+                ? Microbot.getClientThread().runOnClientThreadOptional(Rs2LeaguesTransport::planningContext)
+                    .orElseThrow(() -> new IllegalStateException("planning Leagues context unavailable"))
+                : Rs2LeaguesTransport.leaguesContext();
+        if (planningCopy) planningLeagues = LeaguesPlanningSnapshot.capture(leaguesCtx);
+        Optional<Boolean> extraLevelsBatch = Microbot.getClientThread().runOnClientThreadOptional(() -> {
             refreshExtraLevels = new int[]{client.getTotalLevel(),
                     client.getLocalPlayer() == null ? 0 : client.getLocalPlayer().getCombatLevel(),
                     client.getVarpValue(VarPlayer.QUEST_POINTS)};
@@ -615,9 +980,11 @@ public class PathfinderConfig {
             }
             return true;
         });
-        final int refreshCacheKeyHash = computeTransportRefreshCacheKeyHash(target, leaguesCtx);
+        if (planningCopy && !extraLevelsBatch.orElse(false))
+            throw new IllegalStateException("planning account-level snapshot unavailable");
+        final int refreshCacheKeyHash = planningCopy ? 0 : computeTransportRefreshCacheKeyHash(target, leaguesCtx);
 
-        TransportRefreshSnapshot snap = transportRefreshSnapshots.get(refreshCacheKeyHash);
+        TransportRefreshSnapshot snap = planningCopy ? null : transportRefreshSnapshots.get(refreshCacheKeyHash);
         if (snap != null && client != null) {
             int[] boostedProbe = new int[SKILLS.length];
             final int[] probeOrdinals = snap.sortedSkillOrdinals;
@@ -780,11 +1147,24 @@ public class PathfinderConfig {
 
         int[] boostedLevels = new int[SKILLS.length];
         refreshBoostedLevels = boostedLevels;
+        if (planningCopy) {
+            varbitIds.add(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE);
+            for (List<Restriction> group : Arrays.asList(resourceRestrictions, customRestrictions)) {
+                for (Restriction restriction : group) {
+                    restriction.getVarbits().forEach(check -> varbitIds.add(check.getVarbitId()));
+                }
+            }
+        }
+        Map<Integer, Integer> varbitValues = new HashMap<>();
         Map<Integer, Integer> varplayerValues = new HashMap<>();
-        Microbot.getClientThread().runOnClientThreadOptional(() -> {
+        Optional<Boolean> requirementBatch = Microbot.getClientThread().runOnClientThreadOptional(() -> {
             readRequirementLevels(client, boostedLevels);
             for (int id : varbitIds) {
-                Microbot.getVarbitValue(id);
+                if (planningCopy) {
+                    readPlanningVarbit(id).ifPresent(value -> varbitValues.put(id, value));
+                } else {
+                    Microbot.getVarbitValue(id);
+                }
             }
             // Read varps directly into the refresh snapshot: the global cache drops zero values,
             // so pre-warming through it never helped the zero-valued ones.
@@ -793,7 +1173,13 @@ public class PathfinderConfig {
             }
             return true;
         });
+        if (planningCopy && (!requirementBatch.orElse(false) || !varplayerValues.keySet().containsAll(varplayerIds)))
+            throw new IllegalStateException("planning requirement snapshot unavailable");
         refreshVarplayerValues = varplayerValues;
+        if (planningCopy) {
+            planningVarbitValues = Collections.unmodifiableMap(new HashMap<>(varbitValues));
+            refreshFairyRingAvailability();
+        }
         long cacheTime = System.currentTimeMillis() - cacheStart;
 
         long filterStart = System.currentTimeMillis();
@@ -812,6 +1198,7 @@ public class PathfinderConfig {
             WorldPoint point = entry.getKey();
             Set<Transport> usableTransports = new HashSet<>(entry.getValue().size());
             for (Transport transport : entry.getValue()) {
+                checkPlanningCancellation();
                 totalTransports++;
                 // Do not turn an execution refusal into a blocked ordinary walking edge.
                 if (isWalkScopedTransportBlocked(transport)) continue;
@@ -841,7 +1228,7 @@ public class PathfinderConfig {
                     continue;
                 }
 
-                if (!Rs2LeaguesTransport.isTransportAllowed(leaguesCtx, transport)) {
+                if (!(planningCopy ? planningLeagues.allows(transport) : Rs2LeaguesTransport.isTransportAllowed(leaguesCtx, transport))) {
                     continue;
                 }
                 checkedTransports++;
@@ -858,7 +1245,8 @@ public class PathfinderConfig {
             }
         }
 
-        Rs2LeaguesTransport.injectLeaguesTransports(this, leaguesCtx, usableTeleports, transports, transportsPacked, typeStats);
+        if (planningCopy) planningLeagues.inject(this, leaguesCtx, usableTeleports, transports, transportsPacked, typeStats);
+        else Rs2LeaguesTransport.injectLeaguesTransports(this, leaguesCtx, usableTeleports, transports, transportsPacked, typeStats);
         long filterTime = System.currentTimeMillis() - filterStart;
 
         int[] sortedVarbitConditions = encodeSortedConditionTriples(varbitConditions);
@@ -875,14 +1263,16 @@ public class PathfinderConfig {
                 .sorted()
                 .toArray();
         int[] sortedSkillOrdinals = requiredSkillOrdinals.stream().mapToInt(Integer::intValue).sorted().toArray();
-        int verificationHash = computeTransportRefreshVerificationHash(boostedLevels, sortedSkillOrdinals,
-                sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
-        int[] verificationComponents = computeTransportRefreshVerificationComponents(boostedLevels,
-                sortedSkillOrdinals, sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
-        transportRefreshSnapshots.put(refreshCacheKeyHash, TransportRefreshSnapshot.capture(
-                refreshCacheKeyHash, verificationHash, verificationComponents,
-                sortedSkillOrdinals, sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds,
-                transports, usableTeleports));
+        if (!planningCopy) {
+            int verificationHash = computeTransportRefreshVerificationHash(boostedLevels, sortedSkillOrdinals,
+                    sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
+            int[] verificationComponents = computeTransportRefreshVerificationComponents(boostedLevels,
+                    sortedSkillOrdinals, sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds);
+            transportRefreshSnapshots.put(refreshCacheKeyHash, TransportRefreshSnapshot.capture(
+                    refreshCacheKeyHash, verificationHash, verificationComponents,
+                    sortedSkillOrdinals, sortedVarbitConditions, sortedVarplayerConditions, sortedQuestIds,
+                    transports, usableTeleports));
+        }
 
         long similarStart = System.currentTimeMillis();
         if (useBankItems && config.maxSimilarTransportDistance() > 0) {
@@ -1210,6 +1600,7 @@ public class PathfinderConfig {
 
 
     private Map<WorldPoint, Set<Transport>> createMergedList(WorldPoint target) {
+        if (planningCopy) return planningHouse.merge(this, target);
         long stageStart = System.nanoTime();
         boolean useWorld330 = shouldUseWorld330MaxHouse(target);
         logTransportMergeStage("w330_eligibility", stageStart);
@@ -1304,6 +1695,7 @@ public class PathfinderConfig {
     }
 
     private boolean shouldUseWorld330MaxHouse(WorldPoint target) {
+        if (planningCopy) return planningHouse.useHosted(this, target == null ? planningRefreshTarget : target);
         if (!useWorld330MaxHouse || client == null || client.getWorld() != 330) {
             return false;
         }
@@ -1342,6 +1734,7 @@ public class PathfinderConfig {
     }
 
     private boolean isInWorld330HostedHouse() {
+        if (planningCopy) return useWorld330MaxHouse && planningHouse.inHosted;
         return useWorld330MaxHouse
                 && client != null
                 && client.getWorld() == 330
@@ -1409,7 +1802,7 @@ public class PathfinderConfig {
                         return true;
                     }
                     // Varbit check
-                    if (entry.getVarbits().stream().anyMatch(varbitCheck -> !varbitCheck.matches(Microbot.getVarbitValue(varbitCheck.getVarbitId())))) {
+                    if (entry.getVarbits().stream().anyMatch(varbitCheck -> !restrictionVarbitMatches(varbitCheck))) {
                         return true;
                     }
                     // Varplayer check
@@ -1495,7 +1888,44 @@ public class PathfinderConfig {
     }
 
     private boolean varbitChecks(Transport transport) {
+        if (planningCopy) {
+            if (transport.getVarbits().stream().anyMatch(check -> !planningVarbitValues.containsKey(check.getVarbitId()))) return false;
+            return TransportRequirementPolicy.varbitChecks(transport, id -> planningVarbitValues.get(id));
+        }
         return TransportRequirementPolicy.varbitChecks(transport);
+    }
+
+    private void refreshFairyRingAvailability() {
+        useFairyRings = policyOverride("useFairyRings", config.useFairyRings())
+                && !QuestState.NOT_STARTED.equals(Rs2Player.getQuestState(Quest.FAIRYTALE_II__CURE_A_QUEEN))
+                && (Rs2Inventory.contains(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
+                || Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
+                || ((planningCopy ? useBankItems : ShortestPathPlugin.getPathfinderConfig().useBankItems)
+                    && (Rs2Bank.hasItem(ItemID.DRAMEN_STAFF) || Rs2Bank.hasItem(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)))
+                || (planningCopy ? Integer.valueOf(1).equals(planningVarbitValues.get(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE))
+                    : Microbot.getVarbitValue(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE) == 1));
+    }
+
+    private boolean restrictionVarbitMatches(TransportVarbit check) {
+        if (!planningCopy) return check.matches(Microbot.getVarbitValue(check.getVarbitId()));
+        Integer value = planningVarbitValues.get(check.getVarbitId());
+        return value != null && check.matches(value);
+    }
+
+    /** Called only in the requirement client-thread batch; absence must not become a valid zero. */
+    private Optional<Integer> readPlanningVarbit(int id) {
+        try {
+            VarbitComposition definition = client.getVarbit(id);
+            int[] varps = client.getVarps();
+            if (definition == null || varps == null || definition.getIndex() < 0
+                    || definition.getIndex() >= varps.length
+                    || definition.getLeastSignificantBit() < 0
+                    || definition.getMostSignificantBit() < definition.getLeastSignificantBit()
+                    || definition.getMostSignificantBit() > 31) return Optional.empty();
+            return Optional.of(client.getVarbitValue(varps, id));
+        } catch (RuntimeException ex) {
+            return Optional.empty();
+        }
     }
 
     private boolean varplayerChecks(Transport transport) {
@@ -1517,9 +1947,10 @@ public class PathfinderConfig {
     }
 
     private int getLiveVarplayerValue(int varplayerId) {
-        return Microbot.getClientThread()
-                .runOnClientThreadOptional(() -> client.getVarpValue(varplayerId))
-                .orElse(0);
+        Optional<Integer> value = Microbot.getClientThread()
+                .runOnClientThreadOptional(() -> client.getVarpValue(varplayerId));
+        if (planningCopy) return value.orElseThrow(() -> new IllegalStateException("planning varplayer snapshot unavailable"));
+        return value.orElse(0);
     }
 
     // --- runtime transport blocklist ------------------------------------------------------------
@@ -1574,7 +2005,7 @@ public class PathfinderConfig {
                 return false;
             }
         }
-        if (isTransportRuntimeBlocked(transport)) {
+        if (planningCopy ? planningRuntimeBlocks.contains(runtimeBlockKey(transport)) : isTransportRuntimeBlocked(transport)) {
             return false;
         }
         // Check if the feature flag is disabled
@@ -1628,7 +2059,7 @@ public class PathfinderConfig {
         // Check if Teleports are globally disabled
         if (!(transport instanceof World330HostedHouseTransport)
                 && TransportType.isTeleport(transport.getType(), transport.getOrigin())
-                && Rs2Walker.disableTeleports) {
+                && (planningCopy ? planningTeleportsDisabled : Rs2Walker.disableTeleports)) {
             return false;
         }
 
@@ -1664,7 +2095,7 @@ public class PathfinderConfig {
         if (!useTransport(transport)) {
             return false;
         }
-        return Rs2LeaguesTransport.isTransportAllowed(leaguesCtx, transport);
+        return planningCopy ? planningLeagues.allows(transport) : Rs2LeaguesTransport.isTransportAllowed(leaguesCtx, transport);
     }
 
     /**
@@ -1700,10 +2131,12 @@ public class PathfinderConfig {
         Skill[] skills = Skill.values();
         return IntStream.range(0, requiredLevels.length)
             .filter(i -> requiredLevels[i] > 0)
-            .allMatch(i -> Microbot.getClient().getBoostedSkillLevel(skills[i]) >= requiredLevels[i]);
+            .allMatch(i -> (planningCopy ? client.getBoostedSkillLevel(skills[i])
+                    : Microbot.getClient().getBoostedSkillLevel(skills[i])) >= requiredLevels[i]);
     }
 
     private void updateActionBasedOnQuestState(Transport transport) {
+        if (planningCopy) return;
         if (Objects.equals(transport.getType(), TransportType.SHIP) &&
                 (Objects.equals(transport.getName(), "Veos") || Objects.equals(transport.getName(), "Captain Magoro"))) {
             QuestState questState = Rs2Player.getQuestState(Quest.CLIENT_OF_KOUREND);
@@ -1946,7 +2379,7 @@ public class PathfinderConfig {
      * drifted or a gate this doesn't model (e.g. currency) rejected it.
      */
     private String describeTeleportRejection(Transport t) {
-        if (isTransportRuntimeBlocked(t)) return "runtime-blocked-after-failed-execution";
+        if (planningCopy ? planningRuntimeBlocks.contains(runtimeBlockKey(t)) : isTransportRuntimeBlocked(t)) return "runtime-blocked-after-failed-execution";
         if (!isFeatureEnabled(t)) return "feature-toggle:" + t.getType();
         if (t.isMembers() && !client.getWorldType().contains(WorldType.MEMBERS)) return "members-world";
         if (!hasRequiredLevels(t)) return "skill-levels";
@@ -2044,8 +2477,17 @@ public class PathfinderConfig {
                 return false;
         }
 
+        if (planningCopy && Microbot.getConfigManager() == null) return false;
         String charges = Microbot.getConfigManager()
                 .getRSProfileConfiguration(ItemChargeConfig.GROUP, ItemChargeConfig.KEY_CHRONICLE);
+
+        if (planningCopy) {
+            try {
+                return charges != null && !charges.isEmpty() && Integer.parseInt(charges) > 0;
+            } catch (NumberFormatException ex) {
+                return false;
+            }
+        }
 
         // If charges are unknown, attempt to retrieve them
         if (charges == null || charges.isEmpty()) {

@@ -34,6 +34,7 @@ public class CollisionMap {
      * mix two states into a single path. Refreshed via {@link #beginSearch()}.
      */
     private LiveEdgeSource pinnedLive;
+    private boolean frozen;
     private SplitFlagMap.RegionExtent exactExtent;
 
     public byte[] getPlanes() {
@@ -71,6 +72,15 @@ public class CollisionMap {
         CollisionMap copy = new CollisionMap(collisionData);
         copy.pinnedLive = pinnedLive;
         copy.exactExtent = regionExtent();
+        copy.frozen = true;
+        return copy;
+    }
+
+    /** Search-owned map whose live view cannot be replaced by beginSearch(). */
+    public static CollisionMap frozenSnapshot(SplitFlagMap data, LiveEdgeSource live) {
+        CollisionMap copy = new CollisionMap(data);
+        copy.pinnedLive = live;
+        copy.frozen = true;
         return copy;
     }
 
@@ -134,6 +144,7 @@ public class CollisionMap {
      * client thread is free to swap in a newer snapshot.
      */
     public void beginSearch() {
+        if (frozen) return;
         pinnedLive = overlay.current();
         exactExtent = null;
     }
@@ -297,6 +308,8 @@ public class CollisionMap {
     private static final int DANGEROUS_TILE_PENALTY = 100;
 
     private int getCachedRegionId() {
+        // Frozen query maps cannot re-read the player's live scene while searching.
+        if (frozen) return -1;
         long now = System.currentTimeMillis();
         if (now - cachedRegionIdTime > REGION_CACHE_MS) {
             try {
@@ -346,14 +359,14 @@ public class CollisionMap {
                     continue;
                 }
                 int cost = config.getDistanceBeforeUsingTeleport() + transport.getDuration();
-                neighbors.add(new TransportNode(transport.getDestination(), node, cost));
+                neighbors.add(new TransportNode(transport.getDestination(), node, cost, transport));
                 if (isMoa) {
                     moaAddedHere++;
                     if (moaCosts == null) moaCosts = new ArrayList<>();
                     moaCosts.add(cost);
                 }
             } else {
-                neighbors.add(new TransportNode(transport.getDestination(), node, transport.getDuration()));
+                neighbors.add(new TransportNode(transport.getDestination(), node, transport.getDuration(), transport));
             }
             //END microbot variables
         }
@@ -455,9 +468,9 @@ public class CollisionMap {
                     if (config.isIgnoreTeleportAndItems()) {
                         continue;
                     }
-                    neighbors.add(new TransportNode(origin, node, config.getDistanceBeforeUsingTeleport() + transport.getDuration()));
+                    neighbors.add(new TransportNode(origin, node, config.getDistanceBeforeUsingTeleport() + transport.getDuration(), transport));
                 } else {
-                    neighbors.add(new TransportNode(origin, node, transport.getDuration()));
+                    neighbors.add(new TransportNode(origin, node, transport.getDuration(), transport));
                 }
             }
         }

@@ -531,6 +531,14 @@ final class LeaguesTransportTeleport
 		return unlockedOpt.orElse(EnumSet.noneOf(LeaguesRegion.class));
 	}
 
+	static EnumSet<LeaguesRegion> unlockedRegionsForPlanning()
+	{
+		return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+			if (!leaguesContextRejectOrEmptySuccess().isEmpty()) return EnumSet.noneOf(LeaguesRegion.class);
+			return readUnlockedRegionsFromSelectionVarbits();
+		}).orElseThrow(() -> new IllegalStateException("Leagues planning unlock snapshot unavailable"));
+	}
+
 	static LeaguesTeleportResult leaguesTeleport(LeaguesRegion region)
 	{
 		return leaguesTeleport(region, DEFAULT_TIMEOUT_MS);

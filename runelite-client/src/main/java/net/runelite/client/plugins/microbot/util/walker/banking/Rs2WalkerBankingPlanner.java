@@ -9,6 +9,10 @@ import net.runelite.client.plugins.microbot.shortestpath.pathfinder.Pathfinder;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.walker.Rs2PathApi;
+import net.runelite.client.plugins.microbot.util.walker.Rs2RouteRequest;
+import net.runelite.client.plugins.microbot.util.walker.Rs2RouteResult;
+import net.runelite.client.plugins.microbot.util.walker.Rs2RouteTermination;
+import net.runelite.client.plugins.microbot.util.walker.Rs2TransportEdge;
 import net.runelite.client.plugins.microbot.shortestpath.PurchasableItemCatalog;
 import net.runelite.client.plugins.microbot.shortestpath.Transport;
 import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
@@ -36,6 +40,22 @@ import java.util.stream.Collectors;
 public final class Rs2WalkerBankingPlanner {
 
     private Rs2WalkerBankingPlanner() {
+    }
+
+    /** Read-only bank preparation probe; no live route or shared bank policy is replaced. */
+    public static List<Rs2TransportEdge> getTransportEdgesForDestination(WorldPoint destination, boolean useBankItems) {
+        if (destination == null) throw new IllegalArgumentException("destination is required");
+        WorldPoint start = Rs2Player.getWorldLocation();
+        if (start == null) throw new IllegalStateException("player location unavailable");
+        Rs2RouteResult route = Rs2PathApi.plan(Rs2RouteRequest.to(start, destination).withBankItems(useBankItems));
+        if (route.getTerminationReason() != Rs2RouteTermination.TARGET_REACHED || !route.isTargetReached(0)) {
+            throw new IllegalStateException("transport probe did not reach destination: " + route.getTerminationReason());
+        }
+        if (!route.isExactTransportSelectionAvailable()) {
+            throw new UnsupportedOperationException("backend does not retain exact transport selections");
+        }
+        return route.getTransportSteps().stream().map(step -> step.getTransport().orElseThrow())
+                .collect(Collectors.toUnmodifiableList());
     }
 
     public static List<Transport> getTransportsForDestination(WorldPoint destination, boolean useBankItems, TransportType prefTransportType) {

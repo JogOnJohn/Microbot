@@ -254,6 +254,19 @@ public enum World330HostedHouse implements PohTeleport {
         return !recoveryStopped(cancelled, deadline) && condition.getAsBoolean();
     }
 
+    /** Scene fact only: does not observe departure, clear host identity or advance house generation. */
+    public boolean isInHostedHouseReadOnly() {
+        return Microbot.getClientThread() != null && Microbot.getClientThread().runOnClientThreadOptional(() ->
+                Microbot.getClient() != null && Microbot.getClient().getWorld() == 330
+                        && Microbot.getClient().getGameState() == net.runelite.api.GameState.LOGGED_IN
+                        && Microbot.getClient().getLocalPlayer() != null && isOnHostedHouseTemplate()).orElse(false);
+    }
+
+    /** Predict normal observation's admission without writing house state or invalidating live routes. */
+    public boolean facilitiesEligibleReadOnly() {
+        return sceneReady() && houseContext.facilitiesEligibleFor(isInHostedHouseReadOnly());
+    }
+
     public boolean isInHostedHouse() {
         if (Microbot.getClient() == null) return false;
         if (Microbot.getClient().getWorld() != 330) {

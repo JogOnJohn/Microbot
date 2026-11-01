@@ -299,6 +299,22 @@ While a shop, bank, deposit box or Grand Exchange inventory is open or rebuildin
 **Defensive check:** Run `Rs2InventoryInvokeMenuTest`.
 
 
+## 18. An Inventory Setup slot is empty when its id is -1
+
+`InventorySetupsItem.itemIsDummy` only recognises a slot that was never touched. Removing an item in the panel, toggling fuzzy, lock or a stack indicator on an empty slot, or updating a setup from the current inventory and equipment leaves an item with id `-1` that keeps those settings. Readers must treat null and every id `-1` row as empty. The local loader uses its private `isEmptySlot` helper; this port does not add upstream's public helper or migrate the persisted four-field schema.
+
+**Why this matters:** An emptied equipment slot made `doesEquipmentMatch` fail forever and sent `loadEquipment` to the bank on every call, and an emptied fuzzy inventory slot (name `""`) matched every item, so loading dragged items into it and `getItemsNotInInventorySetup` reported nothing.
+
+**Defensive check:** Run `InventorySetupMatchingTest`.
+
+## 19. An Rs2ItemModel can have no ItemComposition yet
+
+Models built from cached ids (`createFromCache`, the `(id, quantity, slot)` and `(id, quantity, slot, null)` constructors) start with a null composition and load it lazily. Every composition-backed getter must call `ensureCompositionLoaded()` first and fall back to a neutral value when it is still missing; `getHaPrice()` returns 0 and `isHaProfitable()` returns false in that case.
+
+**Why this matters:** `getHaPrice()` read the composition field directly and threw an NPE for bank and cached items, which also broke `isHaProfitable()` and Hub high-alch scripts.
+
+**Defensive check:** Run `Rs2ItemModelHaPriceTest`.
+
 ## Terminal supply stops need observed logout
 
 An owning script can set `withMissingSupplyHandler` on its Inventory Setup loader to keep its scheduled loop alive while `TerminalLogoutPrompt` closes the bank and requests logout. Do not show a blocking shortage notification or cancel that loop until `LOGGED_OUT` is observed. The default loader policy stays unchanged when no handler is supplied; ordinary breaks and world hops do not arm terminal Auto Login suppression.

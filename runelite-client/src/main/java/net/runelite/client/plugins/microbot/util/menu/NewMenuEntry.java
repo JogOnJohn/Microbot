@@ -32,16 +32,19 @@ public class NewMenuEntry implements MenuEntry {
     private int worldViewId = WorldView.TOPLEVEL;
     private BooleanSupplier dispatchGuard;
 
-    /** Optional opt-in guard, checked again at emission and menu dispatch. */
+    /** Optional opt-in guard, rechecked at emission and menu dispatch. */
     public NewMenuEntry validWhen(BooleanSupplier guard) {
-        dispatchGuard = guard;
+        dispatchGuard = guard == null ? () -> false : guard;
         return this;
     }
 
     public boolean isDispatchValid() {
         if (dispatchGuard == null) return true;
-        try { return dispatchGuard.getAsBoolean(); }
-        catch (RuntimeException ex) { return false; }
+        try {
+            return dispatchGuard.getAsBoolean();
+        } catch (RuntimeException ex) {
+            return false;
+        }
     }
 
     private NewMenuEntry(int param0, int param1, MenuAction type, int identifier) {
