@@ -4575,6 +4575,7 @@ public class Rs2Walker {
     }
 
     public static WorldPoint walkCanvas(WorldPoint worldPoint) {
+        BooleanSupplier movementGuard = interactionMovementGuard();
         if (interactionMovementDeferred()) return null;
         LocalPoint localPoint = LocalPoint.fromWorld(Microbot.getClient().getTopLevelWorldView(), worldPoint);
         if (localPoint == null) {
@@ -4585,9 +4586,9 @@ public class Rs2Walker {
 
         if (point == null) return null;
 
-        Microbot.getMouse().click(point);
-
-        return worldPoint;
+        return Microbot.getMouse().clickGuarded(point,
+                () -> WalkerSceneClickSafety.isSafe(point) && movementGuard.getAsBoolean())
+                ? worldPoint : null;
     }
 
     /**
