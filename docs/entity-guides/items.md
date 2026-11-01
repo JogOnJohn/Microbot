@@ -301,7 +301,7 @@ While a shop, bank, deposit box or Grand Exchange inventory is open or rebuildin
 
 ## 18. An Inventory Setup slot is empty when its id is -1
 
-`InventorySetupsItem.itemIsDummy` only recognises a slot that was never touched. Removing an item in the panel, toggling fuzzy, lock or a stack indicator on an empty slot, or updating a setup from the current inventory and equipment (which copies fuzzy, stack and lock settings onto empty slots) leaves an item with id `-1` that keeps those settings, and it is saved that way. Code that reads a setup, in the client or in Hub scripts, must treat any id `-1` row as empty with `InventorySetupsItem.isEmptySlot`; keep `itemIsDummy` for serialization only.
+`InventorySetupsItem.itemIsDummy` only recognises a slot that was never touched. Removing an item in the panel, toggling fuzzy, lock or a stack indicator on an empty slot, or updating a setup from the current inventory and equipment leaves an item with id `-1` that keeps those settings. Readers must treat null and every id `-1` row as empty. The local loader uses its private `isEmptySlot` helper; this port does not add upstream's public helper or migrate the persisted four-field schema.
 
 **Why this matters:** An emptied equipment slot made `doesEquipmentMatch` fail forever and sent `loadEquipment` to the bank on every call, and an emptied fuzzy inventory slot (name `""`) matched every item, so loading dragged items into it and `getItemsNotInInventorySetup` reported nothing.
 
