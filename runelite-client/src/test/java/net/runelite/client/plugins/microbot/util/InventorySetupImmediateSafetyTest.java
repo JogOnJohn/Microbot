@@ -74,11 +74,12 @@ public class InventorySetupImmediateSafetyTest
 		InventorySetupsItem shark = new InventorySetupsItem(ItemID.SHARK, "Shark", 1, false, InventorySetupsStackCompareID.None);
 		Rs2ItemModel bones = held(ItemID.BONES, "Bones");
 		Rs2ItemModel boots = held(ItemID.GRACEFUL_BOOTS, "Graceful boots");
+		Rs2ItemModel carriedShark = held(ItemID.SHARK, "Shark");
 		InventorySetup setup = setup(Arrays.asList(shark, emptied(5)), Collections.singletonList(emptied(10)));
 		try (MockedStatic<Rs2Inventory> inventory = mockStatic(Rs2Inventory.class);
 			 MockedStatic<Rs2Equipment> equipment = mockStatic(Rs2Equipment.class))
 		{
-			inventory.when(Rs2Inventory::all).thenReturn(Arrays.asList(held(ItemID.SHARK, "Shark"), bones));
+			inventory.when(Rs2Inventory::all).thenReturn(Arrays.asList(carriedShark, bones));
 			equipment.when(Rs2Equipment::all).thenAnswer(call -> Stream.of(boots));
 			Rs2InventorySetup loader = new Rs2InventorySetup(setup, null);
 			assertEquals(Collections.singletonList(bones), loader.getItemsNotInInventorySetup(false));
