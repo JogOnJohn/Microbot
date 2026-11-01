@@ -43,7 +43,7 @@ try {
     $summary = Get-Content -LiteralPath (Join-Path $EvidenceDirectory 'full-client-summary.json') -Raw | ConvertFrom-Json
     foreach ($required in @('ShortestPathGoldenRouteBaselineTest','WalkerRouteCorpusTest',
         'PersonalPohSelectionTest','World330HostedHouseAccessTest','World330HostedHouseTransportTest',
-        'BankedTransportItemPlanningTest','InteractionReconciliationTest','TypedRoutePlanningTest',
+        'BankedTransportItemPlanningTest','InteractionReconciliationTest','InteractionWalkCanvasGuardTest','TypedRoutePlanningTest',
         'TypedBankRouteProbeTest','TypedPlanningActiveRouteIsolationTest','TransportEdgeBankingTest','TransportEdgeAdapterResourceTest',
         'TransportEdgeBankingCaptureTest','TransportEdgeAdapterTest','Rs2TransportValuesTest',
         'LegacyRouteStepsTest','OwnedPlanningRefreshTest','LeaguesPlanningSnapshotTest',
