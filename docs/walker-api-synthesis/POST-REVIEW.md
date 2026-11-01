@@ -5,7 +5,10 @@ commit `29855fe83dd0d1995a32f1927264894cc9b20028`. The parent verified the affec
 code paths. These are static findings, not executed reproductions. No production
 fix, new build or live test was performed in this review.
 
-**Current disposition: hold live testing/promotion until the following are fixed.**
+**Historical artifact disposition: hold `01f341bcb7`; do not use it for live testing.**
+The findings below are now fixed in a [new 2.6.49 candidate](FIXED-CANDIDATE-20261101.md).
+That handoff records the current validation/promotion status; this document retains
+the original review and reproduction requirements.
 The existing offline results and exact JAR remain valid evidence of their stated
 scope, but did not cover these failure cases. The JAR has not been replaced.
 

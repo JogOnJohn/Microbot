@@ -143,7 +143,6 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         });
     }
 
-
     @Override
     public @NotNull LocalPoint getLocalLocation() {
         return tileObject.getLocalLocation();

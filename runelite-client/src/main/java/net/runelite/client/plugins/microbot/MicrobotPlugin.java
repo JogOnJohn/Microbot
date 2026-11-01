@@ -478,7 +478,6 @@ public class MicrobotPlugin extends Plugin
 		if (microbotConfig.enableMenuEntryLogging()) log.info(event.getMenuEntry().toString());
 	}
 
-
 	@Subscribe
 	private void onChatMessage(ChatMessage event)
 	{

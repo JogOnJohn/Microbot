@@ -58,7 +58,7 @@ public class PohTransport extends Transport {
         for (int switches = 0; switches <= 3; switches++) {
             if (stopped(cancelled)) return PohExecutionResult.CANCELLED;
             if (!World330HostedHouse.ADVERTISED_HOUSE.sceneReady()) return PohExecutionResult.SCENE_PENDING;
-            boolean hosted = hostedHouse && World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
+            boolean hosted = World330HostedHouse.ADVERTISED_HOUSE.isInHostedHouse();
             PohFacilityAccess.Access access = hosted ? confirmedFacilityAccess(cancelled, recoveryDeadline)
                     : PohFacilityAccess.Access.UNKNOWN;
             if (stopped(cancelled)) return PohExecutionResult.CANCELLED;

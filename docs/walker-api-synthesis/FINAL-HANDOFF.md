@@ -1,5 +1,8 @@
 # Walker API Test Candidate
 
+Historical `01f341bcb7` artifact handoff. Use [the fixed 2.6.49 candidate handoff](FIXED-CANDIDATE-20261101.md)
+for current work; this older JAR remains held and has not been overwritten.
+
 **Post-review hold:** [independent final review](POST-REVIEW.md) found Chronicle
 query input, varbit snapshot availability and walkCanvas ownership gaps. The
 offline results below remain historical evidence for this exact JAR, not clearance

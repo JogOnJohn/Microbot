@@ -394,11 +394,7 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
             if (pathfinder != null) {
                 pathfinder.cancel();
                 if (pathfinderFuture != null) {
-                    // The shared refresh reads scene/account state via interruptible client-thread
-                    // calls. Interrupting it can publish/cache empty fallback values for the next
-                    // request. Let bounded preparation finish; cancel() and the identity check
-                    // below still prevent the obsolete search from running or publishing a route.
-                    pathfinderFuture.cancel(false);
+                    pathfinderFuture.cancel(true);
                 }
             }
 

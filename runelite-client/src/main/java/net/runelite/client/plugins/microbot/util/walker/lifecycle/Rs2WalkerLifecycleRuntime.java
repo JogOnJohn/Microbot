@@ -99,9 +99,7 @@ public final class Rs2WalkerLifecycleRuntime {
                 previous.cancel();
             }
             if (Rs2PathApi.getPathfinderFuture() != null) {
-                // Shared transport refresh must finish its client-thread reads, not cache
-                // empty interruption fallbacks. The obsolete search is cancelled above.
-                Rs2PathApi.getPathfinderFuture().cancel(false);
+                Rs2PathApi.getPathfinderFuture().cancel(true);
             }
             ExecutorService executor = ensurePathfindingExecutor();
             Rs2PathApi.setPathfinder(pending);
@@ -117,18 +115,12 @@ public final class Rs2WalkerLifecycleRuntime {
             }
             try {
                 Rs2PathApi.getPathfinderConfig().refresh(ends.iterator().next());
-                if (!isCurrent(pending) || Thread.currentThread().isInterrupted()) {
-                    return;
-                }
                 if (!inCave) {
                     pending.run();
                     return;
                 }
 
                 pending.run();
-                if (!isCurrent(pending) || Thread.currentThread().isInterrupted()) {
-                    return;
-                }
                 Pathfinder walkingOnly;
                 try {
                     Rs2PathApi.getPathfinderConfig().setIgnoreTeleportAndItems(true);
@@ -141,9 +133,6 @@ public final class Rs2WalkerLifecycleRuntime {
                     Rs2PathApi.setPathfinder(selectCavePath(pending, walkingOnly, ends));
                 }
             } catch (RuntimeException failure) {
-                if (!isCurrent(pending) || Thread.currentThread().isInterrupted()) {
-                    return;
-                }
                 log.warn("[Walker] background planner refresh failed; using the previous snapshot", failure);
                 if (isCurrent(pending)) {
                     pending.run();
