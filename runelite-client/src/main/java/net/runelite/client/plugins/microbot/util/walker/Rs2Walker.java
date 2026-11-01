@@ -9299,8 +9299,8 @@ public class Rs2Walker {
                     }
                     Future<?> pathfinderFuture = Rs2PathApi.getPathfinderFuture();
                     if (pathfinderFuture != null && !pathfinderFuture.isDone()) {
-                        // An interaction handoff must not interrupt a shared transport refresh.
-                        pathfinderFuture.cancel(interactionOwner.get() == null);
+                        // Clearing any route must not poison an in-flight shared transport refresh.
+                        pathfinderFuture.cancel(false);
                     }
                     Rs2PathApi.setPathfinderFuture(null);
                     Rs2PathApi.setPathfinder(null);
