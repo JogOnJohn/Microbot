@@ -571,7 +571,7 @@ net.runelite.client.plugins.microbot.util.player.Rs2Player#isInteracting(): bool
 net.runelite.client.plugins.microbot.util.player.Rs2Player#lambda$getLocalPlayer$33(Rs2PlayerModel): boolean  ->  net.runelite.api.Client#getLocalPlayer(): Player
 net.runelite.client.plugins.microbot.util.player.Rs2Player#lambda$getLocalPlayer$33(Rs2PlayerModel): boolean  ->  net.runelite.api.Player#getId(): int
 net.runelite.client.plugins.microbot.util.player.Rs2Player#lambda$isInMemberWorld$8(World): boolean  ->  net.runelite.api.Client#getWorld(): int
-net.runelite.client.plugins.microbot.util.player.Rs2Player#lambda$isStandingOnGameObject$47(WorldPoint, GameObject): boolean  ->  net.runelite.api.GameObject#getWorldLocation(): WorldPoint
+net.runelite.client.plugins.microbot.util.player.Rs2Player#lambda$isStandingOnGameObject$48(WorldPoint, GameObject): boolean  ->  net.runelite.api.GameObject#getWorldLocation(): WorldPoint
 net.runelite.client.plugins.microbot.util.player.Rs2Player#lambda$waitForXpDrop$2(int, Skill, boolean): boolean  ->  net.runelite.api.Client#getSkillExperience(Skill): int
 net.runelite.client.plugins.microbot.util.player.Rs2Player#logout(): void  ->  net.runelite.api.Client#getCanvasHeight(): int
 net.runelite.client.plugins.microbot.util.player.Rs2Player#logout(): void  ->  net.runelite.api.Client#getCanvasWidth(): int
