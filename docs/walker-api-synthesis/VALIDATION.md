@@ -1,5 +1,9 @@
 # Preparation Validation
 
+Historical inventory-only evidence. Current implementation and artifact acceptance
+results are in [the final handoff](FINAL-HANDOFF.md); the pending gates below
+describe the preparation checkpoint, not the final candidate.
+
 2026-10-31, documentation/tooling-only checkpoint:
 
 - JDK 17 parser fixture self-test passed.

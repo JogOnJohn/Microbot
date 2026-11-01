@@ -1,5 +1,10 @@
 # Walker API Test Candidate
 
+**Post-review hold:** [independent final review](POST-REVIEW.md) found Chronicle
+query input, varbit snapshot availability and walkCanvas ownership gaps. The
+offline results below remain historical evidence for this exact JAR, not clearance
+for live use. Fix and revalidate a new artifact before launch/promotion.
+
 Completed 2026-11-01. This is an isolated, uninstalled test candidate, not a
 playable-branch promotion or a claim of live gameplay success.
 

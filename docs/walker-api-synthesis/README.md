@@ -1,5 +1,9 @@
 # Walker API Synthesis Preparation
 
+**Post-review hold (2026-11-01):** independent review found three safety gaps not
+covered by the passing offline gates. See [findings and required fixes](POST-REVIEW.md).
+Do not launch/promote the candidate until those fixes and a new artifact pass.
+
 Prepared 2026-10-31. The inventory checkpoint is complete; isolated implementation
 has now begun under the acceptance contract. No promotion or client lifecycle changes.
 

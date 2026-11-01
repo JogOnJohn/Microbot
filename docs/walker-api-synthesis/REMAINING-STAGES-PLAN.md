@@ -1,5 +1,10 @@
 # Remaining Stages Plan
 
+Historical planning checkpoint. The selected offline stages are now completed;
+see [final evidence and current limits](FINAL-HANDOFF.md). The optional split
+executor was deliberately not selected. The proposals below are not an outstanding
+implementation checklist or authorization for live operations.
+
 Planning sidecar, 2026-11-01. This document proposes bounded future work; it does
 not implement it, authorize builds/deployment, or change any acceptance gate in
 [IMPLEMENTATION-CONTRACT.md](IMPLEMENTATION-CONTRACT.md).

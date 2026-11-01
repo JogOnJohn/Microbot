@@ -1,5 +1,8 @@
 # Implementation Handoff
 
+This is the historical preparation handoff. For completed implementation, exact
+artifact pins and remaining live-test limits, use [the final handoff](FINAL-HANDOFF.md).
+
 ## Preparation Checkpoint
 
 At the preparation checkpoint, only docs, inventory outputs and a standalone audit

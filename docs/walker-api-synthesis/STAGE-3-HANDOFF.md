@@ -1,5 +1,10 @@
 # Stage 3 Night Checkpoint: Not Ready To Promote
 
+Superseded for current status by [the final handoff](FINAL-HANDOFF.md): the known
+blockers below were resolved and the offline candidate gates passed. This document
+retains the original checkpoint evidence; live validation and promotion remain
+separate pending operations.
+
 Historical checkpoint. Work resumed on 2026-11-01 at the user's request to finish
 the synthesis and prepare a test JAR. The stop instruction below applied to that
 night, not the resumed task. Ownership publication, contended cleanup and action
