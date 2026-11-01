@@ -165,6 +165,7 @@ public class PathfinderConfig {
     private final Client client;
     private final ShortestPathConfig config;
     private boolean planningCopy;
+    private Map<Integer, Integer> planningVarbitValues = Collections.emptyMap();
     private PathfinderBackend planningBackend;
     private LiveCollisionView planningLiveView;
     private PlanningHouse planningHouse;
@@ -954,13 +955,8 @@ public class PathfinderConfig {
      * @param target Optional target destination for optimized filtering (null for standard filtering)
      */
     private void refreshTransports(WorldPoint target) {
-        useFairyRings = policyOverride("useFairyRings", config.useFairyRings())
-                && !QuestState.NOT_STARTED.equals(Rs2Player.getQuestState(Quest.FAIRYTALE_II__CURE_A_QUEEN))
-                && (Rs2Inventory.contains(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
-                || Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
-                || ((planningCopy ? useBankItems : ShortestPathPlugin.getPathfinderConfig().useBankItems)
-                    && (Rs2Bank.hasItem(ItemID.DRAMEN_STAFF) || Rs2Bank.hasItem(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)))
-                || Microbot.getVarbitValue(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE) == 1);
+        if (!planningCopy) refreshFairyRingAvailability();
+        else planningVarbitValues = Collections.emptyMap();
         useGnomeGliders = policyOverride("useGnomeGliders", config.useGnomeGliders())
                 && QuestState.FINISHED.equals(Rs2Player.getQuestState(Quest.THE_GRAND_TREE));
         useSpiritTrees = policyOverride("useSpiritTrees", config.useSpiritTrees())
@@ -1151,11 +1147,24 @@ public class PathfinderConfig {
 
         int[] boostedLevels = new int[SKILLS.length];
         refreshBoostedLevels = boostedLevels;
+        if (planningCopy) {
+            varbitIds.add(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE);
+            for (List<Restriction> group : Arrays.asList(resourceRestrictions, customRestrictions)) {
+                for (Restriction restriction : group) {
+                    restriction.getVarbits().forEach(check -> varbitIds.add(check.getVarbitId()));
+                }
+            }
+        }
+        Map<Integer, Integer> varbitValues = new HashMap<>();
         Map<Integer, Integer> varplayerValues = new HashMap<>();
         Optional<Boolean> requirementBatch = Microbot.getClientThread().runOnClientThreadOptional(() -> {
             readRequirementLevels(client, boostedLevels);
             for (int id : varbitIds) {
-                Microbot.getVarbitValue(id);
+                if (planningCopy) {
+                    readPlanningVarbit(id).ifPresent(value -> varbitValues.put(id, value));
+                } else {
+                    Microbot.getVarbitValue(id);
+                }
             }
             // Read varps directly into the refresh snapshot: the global cache drops zero values,
             // so pre-warming through it never helped the zero-valued ones.
@@ -1167,6 +1176,10 @@ public class PathfinderConfig {
         if (planningCopy && (!requirementBatch.orElse(false) || !varplayerValues.keySet().containsAll(varplayerIds)))
             throw new IllegalStateException("planning requirement snapshot unavailable");
         refreshVarplayerValues = varplayerValues;
+        if (planningCopy) {
+            planningVarbitValues = Collections.unmodifiableMap(new HashMap<>(varbitValues));
+            refreshFairyRingAvailability();
+        }
         long cacheTime = System.currentTimeMillis() - cacheStart;
 
         long filterStart = System.currentTimeMillis();
@@ -1789,7 +1802,7 @@ public class PathfinderConfig {
                         return true;
                     }
                     // Varbit check
-                    if (entry.getVarbits().stream().anyMatch(varbitCheck -> !varbitCheck.matches(Microbot.getVarbitValue(varbitCheck.getVarbitId())))) {
+                    if (entry.getVarbits().stream().anyMatch(varbitCheck -> !restrictionVarbitMatches(varbitCheck))) {
                         return true;
                     }
                     // Varplayer check
@@ -1875,7 +1888,44 @@ public class PathfinderConfig {
     }
 
     private boolean varbitChecks(Transport transport) {
+        if (planningCopy) {
+            if (transport.getVarbits().stream().anyMatch(check -> !planningVarbitValues.containsKey(check.getVarbitId()))) return false;
+            return TransportRequirementPolicy.varbitChecks(transport, id -> planningVarbitValues.get(id));
+        }
         return TransportRequirementPolicy.varbitChecks(transport);
+    }
+
+    private void refreshFairyRingAvailability() {
+        useFairyRings = policyOverride("useFairyRings", config.useFairyRings())
+                && !QuestState.NOT_STARTED.equals(Rs2Player.getQuestState(Quest.FAIRYTALE_II__CURE_A_QUEEN))
+                && (Rs2Inventory.contains(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
+                || Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF, ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)
+                || ((planningCopy ? useBankItems : ShortestPathPlugin.getPathfinderConfig().useBankItems)
+                    && (Rs2Bank.hasItem(ItemID.DRAMEN_STAFF) || Rs2Bank.hasItem(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)))
+                || (planningCopy ? Integer.valueOf(1).equals(planningVarbitValues.get(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE))
+                    : Microbot.getVarbitValue(VarbitID.LUMBRIDGE_DIARY_ELITE_COMPLETE) == 1));
+    }
+
+    private boolean restrictionVarbitMatches(TransportVarbit check) {
+        if (!planningCopy) return check.matches(Microbot.getVarbitValue(check.getVarbitId()));
+        Integer value = planningVarbitValues.get(check.getVarbitId());
+        return value != null && check.matches(value);
+    }
+
+    /** Called only in the requirement client-thread batch; absence must not become a valid zero. */
+    private Optional<Integer> readPlanningVarbit(int id) {
+        try {
+            VarbitComposition definition = client.getVarbit(id);
+            int[] varps = client.getVarps();
+            if (definition == null || varps == null || definition.getIndex() < 0
+                    || definition.getIndex() >= varps.length
+                    || definition.getLeastSignificantBit() < 0
+                    || definition.getMostSignificantBit() < definition.getLeastSignificantBit()
+                    || definition.getMostSignificantBit() > 31) return Optional.empty();
+            return Optional.of(client.getVarbitValue(varps, id));
+        } catch (RuntimeException ex) {
+            return Optional.empty();
+        }
     }
 
     private boolean varplayerChecks(Transport transport) {
@@ -2427,8 +2477,17 @@ public class PathfinderConfig {
                 return false;
         }
 
+        if (planningCopy && Microbot.getConfigManager() == null) return false;
         String charges = Microbot.getConfigManager()
                 .getRSProfileConfiguration(ItemChargeConfig.GROUP, ItemChargeConfig.KEY_CHRONICLE);
+
+        if (planningCopy) {
+            try {
+                return charges != null && !charges.isEmpty() && Integer.parseInt(charges) > 0;
+            } catch (NumberFormatException ex) {
+                return false;
+            }
+        }
 
         // If charges are unknown, attempt to retrieve them
         if (charges == null || charges.isEmpty()) {
