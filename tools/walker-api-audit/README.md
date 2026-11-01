@@ -42,3 +42,23 @@ The self-test covers implicit interface visibility, varargs, nested declarations
 constructors, explicit static imports and method references. It is not application
 test coverage. All generated findings require focused compilation and semantic tests
 before implementation is promoted.
+
+## Candidate Validation
+
+`Summarize-Tests.ps1` archives actual JUnit XML and reports failures, errors and
+skips separately. `candidate-tests.init.gradle` bounds test forks and optionally
+forwards `-PwalkerGeneratedDir` to the generated-resource tests. It also registers
+the offline `:client:walkerApiBenchmark` fixture harness; it never launches a client.
+
+`Validate-Candidate.ps1` requires a clean exact commit and explicit fresh converter
+output/evidence/artifact paths. It runs the complete client suite, insists that
+the named route/PoH/banking/interaction/planning/threading suites execute without
+skips, runs the dedicated generated validator, checks the documented offline
+benchmark threshold, then builds and hashes a versioned test JAR. It refuses to
+overwrite an artifact or evidence directory. Hub compilation/linkage, installation,
+live validation, branch promotion and pushes remain separate gates.
+
+`Build-Dispositions.ps1` combines a new pinned candidate XML inventory with the
+historical CSVs. It accounts for each original and added declaration, and refuses
+to silently drop a playable declaration. Its output remains syntax-only evidence,
+not a substitute for exact JAR compilation, symbolic linkage or semantic tests.

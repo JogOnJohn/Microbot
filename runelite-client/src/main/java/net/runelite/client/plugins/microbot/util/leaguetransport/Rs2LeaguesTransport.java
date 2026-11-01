@@ -191,6 +191,13 @@ public final class Rs2LeaguesTransport
 		return new LeaguesContext(true, LeaguesTransportTeleport.unlockedRegions());
 	}
 
+	/** Read-only context capture that distinguishes a timed-out unlock read from an empty set. */
+	public static LeaguesContext planningContext()
+	{
+		if (!isLeaguesActive()) return INACTIVE_CONTEXT;
+		return new LeaguesContext(true, LeaguesTransportTeleport.unlockedRegionsForPlanning());
+	}
+
 	public static boolean isTransportAllowed(LeaguesContext ctx, Transport transport)
 	{
 		return LeaguesTransportInjection.isTransportAllowed(ctx, transport);

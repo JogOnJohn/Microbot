@@ -38,10 +38,10 @@ metrics and acceptable tolerances before evaluating performance-changing work.
 | 0 | Inventory, independent review, acceptance contract and regression discovery | Prepared; complete runtime/performance baseline still pending |
 | 1 | Collision-query facade adapters and contract tests; keep existing executor policy | Implemented and offline validated; promotion pending |
 | 2 | Readiness-only object helpers; client-thread/freshness and no-effect tests | Implemented and offline validated; promotion pending; instances/secondary views deferred |
-| 3 | Reconcile canonical/runtime/data-sync interaction APIs before publishing adapters | WIP night checkpoint; known ownership/action-slot blockers; do not promote |
-| 4 | Typed transport conversion with requirement/converter fidelity | Not started |
-| 5 | Typed planning integration where a concrete consumer benefit justifies it | Not started |
-| 6 | Optional executor changes, separately justified and measured | Deferred; not implied by API synthesis |
+| 3 | Reconcile canonical/runtime/data-sync interaction APIs before publishing adapters | Implemented and focused validated; final regression/artifact gates pending |
+| 4 | Typed transport conversion with requirement/converter fidelity | Implemented and focused validated; documented unavailable cases fail closed |
+| 5 | Typed planning integration where a concrete consumer benefit justifies it | Implemented isolated route/bank probes for both backends; final gates pending |
+| 6 | Optional executor changes, separately justified and measured | Retain existing executor; no optional rewrite selected; confirm with final regression gates |
 
 Each stage needs a small reversible commit and acceptance evidence. Query-only
 adapters do not wait for the interaction migration. Neither partial readiness nor
@@ -59,8 +59,9 @@ to describe implementation progress. Maintain explicit dispositions as stages la
 | Rs2PathApi.nearestWalkableTile(WorldPoint,int) | Adapted existing canonical radius-1 diagnostic query; never auto-retarget |
 | Rs2InteractionApproach.isReady(GameObject/WallObject) | Stage 2 conservative readiness adapter; non-instanced active top-level view only; no interaction confirmation |
 | Instance/secondary-view and model-based readiness | Deferred pending coordinate-consistent helpers and tests; current queries return false |
-| Runtime/data-sync request-based interactions | Draft stage 3 port; not ready to publish/promote; see night handoff blockers |
-| Typed transport/route/planner and shadow/canary additions | Deferred to stages 4/5; do not wholesale copy upstream facade |
+| Runtime/data-sync request-based interactions | Reconciled opt-in APIs; ownership/cancellation/guarded action fixes; final artifact gates pending |
+| Typed transport and local route queries | Adapted immutable values and lossless conversion; isolated query facade with explicit unsupported-policy errors; see stage 4/5 support limits |
+| Alternate planner interface/snapshot and shadow/canary additions | Intentionally unsupported in this tranche; existing local engine remains authoritative |
 | Split executor and upstream test-only public hooks | Deferred; not supported merely by exposing API names |
 | Every other inventoried declaration | Deferred pending explicit per-family disposition before its promotion |
 
@@ -98,7 +99,11 @@ because an API compiles or because its first unit test passes.
   new readiness tests and both guardrails. See [stage 2 evidence and support
   limits](STAGE-2-VALIDATION.md). No existing consumer is redirected. Instance,
   secondary-view and model-based readiness remain deferred; no promotion occurred.
-- Stage 3: [unfinished night checkpoint](STAGE-3-HANDOFF.md). Focused r3 passed
-  152 tests before the last two untested cancellation edits. Two P1 ownership/
-  cancellation races and one P2 action-slot mismatch remain. No full stage-3
-  validation or promotion; stop here at the user's request.
+- Stage 3: [interaction reconciliation](STAGE-3-VALIDATION.md) supersedes the
+  historical night stop. All known blockers were addressed and focused validated.
+- Stage 4: [typed conversion and preparation](STAGE-4-VALIDATION.md), preserving
+  richer local requirements and returning unavailable for unsupported preparation.
+- Stage 5: [isolated planning](STAGE-5-VALIDATION.md), including personal/W330,
+  Leagues no-side-effect capture and actual legacy/exact selected identities.
+- Combined focused r5 passed 257 tests without failures/errors/skips. Full final
+  offline gates and test-JAR preparation are not implied by this focused result.

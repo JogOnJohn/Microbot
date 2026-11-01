@@ -108,6 +108,15 @@ public final class Rs2PathApi
 	}
 
 	/**
+	 * Synchronous query on a search-owned configuration; never publishes an active route.
+	 * Must run off the client thread. Search completion is not physical arrival.
+	 */
+	public static Rs2RouteResult plan(Rs2RouteRequest request)
+	{
+		return TypedRoutePlanning.plan(request);
+	}
+
+	/**
 	 * Read-only terrain query, not a reachability check. Unknown map/target data
 	 * returns true to permit a pathfinding attempt. Nonpositive distance checks
 	 * only the target tile. Does not refresh configuration or change a route.

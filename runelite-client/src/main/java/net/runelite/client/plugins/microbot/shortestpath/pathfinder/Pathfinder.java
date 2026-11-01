@@ -59,8 +59,10 @@ public class Pathfinder implements Runnable {
     private final PathfinderConfig config;
     private final PathfinderBackend backend;
     private volatile List<PathStep> exactSteps = Collections.emptyList();
+    private volatile List<PathStep> legacySelectedSteps;
     @Getter
     private volatile String terminationReason;
+    private long planningDeadlineNanos = Long.MAX_VALUE;
     private CollisionMap map;
     private final boolean targetInWilderness;
 
@@ -219,7 +221,41 @@ public class Pathfinder implements Runnable {
 
     public synchronized void cancel() {
         cancelled = true;
-        if (backend == PathfinderBackend.EXACT) terminationReason = "cancelled";
+        terminationReason = "cancelled";
+    }
+
+    /** Indexed selected steps, including the start; never reconstructed by endpoint lookup. */
+    public List<PathStep> getSelectedSteps() {
+        List<PathStep> selected = backend == PathfinderBackend.EXACT ? exactSteps : legacySelectedSteps;
+        return selected == null ? Collections.emptyList() : List.copyOf(selected);
+    }
+
+    public boolean isExactSelectionAvailable() {
+        return backend == PathfinderBackend.EXACT || legacySelectedSteps != null;
+    }
+
+    private void recordLegacySelection(java.util.function.Supplier<List<PathStep>> capture) {
+        if (planningDeadlineNanos == Long.MAX_VALUE) return;
+        try {
+            legacySelectedSteps = List.copyOf(capture.get());
+        } catch (RuntimeException unavailable) {
+            legacySelectedSteps = null;
+            log.debug("Legacy selected transport identity unavailable", unavailable);
+        }
+    }
+
+    /** Opt-in total search budget for read-only probes; does not change executor searches. */
+    public void setPlanningBudgetMillis(long budgetMillis) {
+        if (budgetMillis <= 0 || budgetMillis > 600_000) throw new IllegalArgumentException("planning budget");
+        planningDeadlineNanos = System.nanoTime() + budgetMillis * 1_000_000L;
+    }
+
+    private boolean queryCancelled() {
+        return cancelled || (planningDeadlineNanos != Long.MAX_VALUE && Thread.currentThread().isInterrupted());
+    }
+
+    private boolean queryBudgetExpired() {
+        return System.nanoTime() > planningDeadlineNanos;
     }
 
     public Transport getTransportForStep(WorldPoint origin, WorldPoint destination) {
@@ -572,6 +608,7 @@ public class Pathfinder implements Runnable {
     }
 
     private List<WorldPoint> combineBidirectionalPath(Node forwardAtMeet, Node backwardAtMeet) {
+        recordLegacySelection(() -> LegacyRouteSteps.joined(forwardAtMeet, backwardAtMeet));
         List<WorldPoint> head = forwardAtMeet.getPath();
         List<WorldPoint> full = new ArrayList<>(head.size() + 64);
         full.addAll(head);
@@ -652,7 +689,8 @@ public class Pathfinder implements Runnable {
         config.refreshTeleports(start, wildernessLevel);
         boolean reachedGoal = false;
         boolean timedOut = false;
-        while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty())) {
+        while (!queryCancelled() && (!boundary.isEmpty() || !pending.isEmpty())) {
+            if (queryBudgetExpired()) { timedOut = true; break; }
             Node b = boundary.peek();
             Node p = pending.peek();
             Node node;
@@ -725,6 +763,7 @@ public class Pathfinder implements Runnable {
                 : reachedGoal ? "reached-goal"
                 : timedOut ? "time-cutoff"
                 : (boundary.isEmpty() && pending.isEmpty()) ? "queues-drained" : "loop-ended";
+        terminationReason = queryCancelled() ? "cancelled" : uniExit;
         pathfinderDiag("uni finished exit=%s cancelled=%s boundaryEmpty=%s pendingEmpty=%s bestLastNode=%s cutoffMs=%d",
                 uniExit,
                 cancelled,
@@ -743,6 +782,7 @@ public class Pathfinder implements Runnable {
     }
 
     private void runBidirectional() {
+        boolean timedOut = false;
         int goalPacked = targetsPacked[0];
         Map<Integer, Set<Transport>> incoming = new HashMap<>(512);
         buildIncomingByDestination(incoming);
@@ -784,7 +824,8 @@ public class Pathfinder implements Runnable {
         final boolean startIsolated = isIsolatedInCollisionMap(start);
         final boolean goalIsolated = isIsolatedInCollisionMap(goalPacked);
 
-        while (!cancelled && (!boundary.isEmpty() || !pending.isEmpty() || !boundaryBackward.isEmpty() || !pendingBackward.isEmpty())) {
+        while (!queryCancelled() && (!boundary.isEmpty() || !pending.isEmpty() || !boundaryBackward.isEmpty() || !pendingBackward.isEmpty())) {
+            if (queryBudgetExpired()) { timedOut = true; break; }
             if (bestMeetingCost[0] == Long.MAX_VALUE) {
                 if (startIsolated && boundary.isEmpty() && pending.isEmpty()) {
                     WebWalkLog.pf("bidir_abort reason=forward-dead-isolated-start start={} nodes={}",
@@ -833,6 +874,8 @@ public class Pathfinder implements Runnable {
                 if (nodePos == goalPacked
                         || (targetAcceptRadius[0] > 0
                         && WorldPointUtil.distanceBetween(nodePos, goalPacked) <= targetAcceptRadius[0])) {
+                    Node terminal = node;
+                    recordLegacySelection(() -> LegacyRouteSteps.forward(terminal));
                     joinedPath = node.getPath();
                     pathNeedsUpdate = false;
                     bestLastNode = null;
@@ -882,6 +925,7 @@ public class Pathfinder implements Runnable {
             }
 
             if (System.currentTimeMillis() > cutoffTimeMillis) {
+                timedOut = true;
                 WebWalkLog.pf("bidir_cutoff nodes={}", stats.getNodesChecked());
                 break;
             }
@@ -894,6 +938,9 @@ public class Pathfinder implements Runnable {
             WebWalkLog.pf("bidir meet_at={} cost={}",
                     WorldPointUtil.toString(meetF[0].packedPosition), bestMeetingCost[0]);
         }
+
+        terminationReason = queryCancelled() ? "cancelled"
+                : timedOut ? "time-cutoff" : joinedPath != null ? "reached-goal" : "queues-drained";
 
         pathfinderDiag("bidir finished joinedPath=%s meetCost=%s forwardFrontier=%d/%d backwardFrontier=%d/%d cancelled=%s",
                 joinedPath == null ? "null" : joinedPath.size(),
@@ -916,7 +963,9 @@ public class Pathfinder implements Runnable {
 
     @Override
     public void run() {
+        legacySelectedSteps = null;
         if (Microbot.getClientThread() != null && Microbot.getClientThread().isClientThread()) {
+            terminationReason = "client-thread-rejected";
             path = Collections.emptyList();
             smoothedPath = Collections.emptyList();
             joinedPath = null;
@@ -964,8 +1013,13 @@ public class Pathfinder implements Runnable {
                 runUnidirectional();
             }
         } catch (Exception e) {
+            terminationReason = "backend-failure";
             log.error("[Pathfinder] Exception in run(): ", e);
         } finally {
+            if (joinedPath == null) {
+                Node terminal = bestLastNode;
+                recordLegacySelection(() -> LegacyRouteSteps.forward(terminal));
+            }
             done = !cancelled;
 
             boundary.clear();
@@ -996,7 +1050,8 @@ public class Pathfinder implements Runnable {
                     }
                 }
             }
-            ExactSearchAdapter.Outcome outcome = ExactSearchAdapter.search(config, map, start, goals, targetInWilderness, () -> cancelled);
+            ExactSearchAdapter.Outcome outcome = ExactSearchAdapter.search(config, map, start, goals, targetInWilderness,
+                    () -> queryCancelled() || queryBudgetExpired());
             synchronized (this) {
                 if (!cancelled) {
                     exactSteps = outcome.steps;
@@ -1008,13 +1063,15 @@ public class Pathfinder implements Runnable {
                     }
                     stats.nodesChecked = outcome.counters.statesPopped();
                     stats.transportsChecked = outcome.counters.transportCandidates();
-                    terminationReason = outcome.reason;
+                    terminationReason = queryBudgetExpired() && "cancelled".equals(outcome.reason)
+                            && !queryCancelled() ? "time-cutoff" : outcome.reason;
                     joinedPath = outcome.steps.stream().map(step -> WorldPointUtil.unpackWorldPoint(step.getPackedPosition())).collect(Collectors.toList());
                 }
             }
         } catch (java.util.concurrent.CancellationException e) {
-            cancelled = true;
-            terminationReason = "cancelled";
+            boolean budget = queryBudgetExpired() && !queryCancelled();
+            cancelled = !budget;
+            terminationReason = budget ? "time-cutoff" : "cancelled";
         } catch (Exception | OutOfMemoryError | LinkageError e) {
             terminationReason = "backend-failure";
             joinedPath = Collections.emptyList();

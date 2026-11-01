@@ -168,6 +168,23 @@ final class LeaguesTransportPersistence
 		}
 	}
 
+	/** Never lazy-load/purge profile data from a read-only planning request. */
+	static void requirePlanningState() {
+		if (!persistLoaded || cachedVersionDir == null)
+			throw new IllegalStateException("Leagues planning state not initialized by live lifecycle");
+	}
+
+	static Path planningVersionDir() { requirePlanningState(); return cachedVersionDir; }
+	static Map<LeaguesRegion, WorldPoint> planningLandings() {
+		requirePlanningState(); return new HashMap<>(PERSIST_REGION_LANDINGS);
+	}
+	static Set<Integer> planningBlockedDestinations() {
+		requirePlanningState(); return new java.util.HashSet<>(PERSIST_BLOCKED_DESTS);
+	}
+	static Map<Integer, LeaguesRegion> planningBlockedRegions() {
+		requirePlanningState(); return new HashMap<>(PERSIST_BLOCKED_DEST_REGIONS);
+	}
+
 	static boolean isCalibrationConsentAllowed()
 	{
 		ensureLoaded();

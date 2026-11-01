@@ -12898,6 +12898,24 @@ public class Rs2Walker {
         return getTransportsForDestination(destination, useBankItems, TransportType.TELEPORTATION_ITEM);
     }
 
+    /** Typed, isolated route probe. Throws on partial routes or unavailable exact selections. */
+    public static List<Rs2TransportEdge> getTransportEdgesForDestination(WorldPoint destination, boolean useBankItems) {
+        return Rs2WalkerBankingPlanner.getTransportEdgesForDestination(destination, useBankItems);
+    }
+
+    public static List<Rs2TransportEdge> getMissingTransportEdges(List<Rs2TransportEdge> edges) {
+        return TransportEdgeBanking.getMissingEdges(edges);
+    }
+
+    public static Map<Integer, Integer> getMissingTransportEdgeItemIdsWithQuantities(List<Rs2TransportEdge> edges) {
+        return TransportEdgeBanking.getMissingItemQuantities(edges);
+    }
+
+    /** Check isSatisfiable before treating an empty withdrawal map as prepared. */
+    public static Rs2TransportLoadout getMissingTransportEdgeLoadout(List<Rs2TransportEdge> edges) {
+        return TransportEdgeBanking.getMissingLoadout(edges);
+    }
+
     /**
      * Prepares and analyzes required transport items for reaching a destination.
      * Similar but improved to Rs2Slayer.prepareItemTransports()

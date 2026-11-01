@@ -63,6 +63,13 @@ public class PohTeleports {
         return result == PohMenuInteraction.Result.UNAVAILABLE ? FAILED_TELEPORT_BLOCK_MS : 15_000L;
     }
 
+    /** Query-only cooldown check; expired entries remain owned by the normal execution lifecycle. */
+    public static boolean isTeleportBlockedReadOnly(net.runelite.client.plugins.microbot.util.poh.data.PohTeleport teleport) {
+        if (teleport == null) return false;
+        Long until = failedTeleportBlockUntil.get(teleport.displayInfo());
+        return until != null && until > System.currentTimeMillis();
+    }
+
     public static boolean isTeleportBlocked(net.runelite.client.plugins.microbot.util.poh.data.PohTeleport teleport) {
         if (teleport == null) {
             return false;

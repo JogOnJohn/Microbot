@@ -3,8 +3,9 @@
 Prepared 2026-10-31. The inventory checkpoint is complete; isolated implementation
 has now begun under the acceptance contract. No promotion or client lifecycle changes.
 
-**Night checkpoint:** stage 3 is unfinished and not ready to promote. Read
-[the remaining blockers and resume instructions](STAGE-3-HANDOFF.md) first.
+**Resumed 2026-11-01:** stages 3-5 are implemented and focused validated. Full
+regression, performance, exact-artifact Hub validation and test-JAR preparation
+are in progress. The night checkpoint is historical, not a current stop instruction.
 
 ## Workspace
 
@@ -27,6 +28,7 @@ pinned refs; this task is not another upstream sync or release.
 
 - [Implementation contract and acceptance checklist](IMPLEMENTATION-CONTRACT.md)
 - [Stage 1 validation](STAGE-1-VALIDATION.md) and [stage 2 validation/support limits](STAGE-2-VALIDATION.md)
+- [Interaction reconciliation](STAGE-3-VALIDATION.md), [typed transports](STAGE-4-VALIDATION.md), and [isolated planning](STAGE-5-VALIDATION.md)
 - [API inventory and semantic differences](API-INVENTORY.md)
 - [Implementation boundaries and future validation](HANDOFF.md)
 - [Reproducible inventory tool](../../tools/walker-api-audit/README.md)
