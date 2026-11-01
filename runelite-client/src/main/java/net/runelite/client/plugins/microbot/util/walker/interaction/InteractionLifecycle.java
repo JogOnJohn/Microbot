@@ -43,12 +43,13 @@ public final class InteractionLifecycle {
     }
 
     public synchronized void dispatched(long now) {
+        if (terminal != null) return;
         attempts++;
         dispatched = lastProgress = now;
         awaiting = true;
     }
 
-    public synchronized void rejected(long now) { retryAfter = now + RETRY_MS; }
+    public synchronized void rejected(long now) { if (terminal == null) retryAfter = now + RETRY_MS; }
     public synchronized boolean stalledAtArrival(long now) {
         if (terminal != null || !initialized || awaiting || now - lastProgress < 5_000) return false;
         reason = "arrived-not-ready";
@@ -58,6 +59,11 @@ public final class InteractionLifecycle {
     public synchronized void cancel() {
         if (terminal == null) { terminal = Decision.CANCELLED; reason = "cancelled"; }
     }
+    public synchronized void fail(String failureReason) {
+        java.util.Objects.requireNonNull(failureReason);
+        if (terminal == null) { terminal = Decision.FAILED; reason = failureReason; }
+    }
+    public synchronized Decision terminal() { return terminal; }
     public synchronized boolean activeAt(long now) {
         if (terminal == null && initialized && (now < started || now - started >= OPERATION_MS)) {
             terminal = Decision.FAILED;

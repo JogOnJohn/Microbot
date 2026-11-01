@@ -18,6 +18,7 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.Arrays;
 import java.util.function.Predicate;
+import java.util.function.BooleanSupplier;
 import java.util.stream.IntStream;
 
 @Getter
@@ -26,6 +27,25 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
 {
 
     private final NPC npc;
+    private static final ThreadLocal<BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();
+
+    public boolean click(String action, BooleanSupplier guard) {
+        BooleanSupplier previous = clickDispatchGuard.get();
+        try {
+            if (guard == null || Microbot.getClient() == null || !guard.getAsBoolean()) return false;
+            clickDispatchGuard.set(guard);
+            return click(action);
+        } catch (RuntimeException ex) {
+            return false;
+        } finally {
+            restoreThreadLocal(previous);
+        }
+    }
+
+    private static void restoreThreadLocal(BooleanSupplier previous) {
+        if (previous == null) clickDispatchGuard.remove();
+        else clickDispatchGuard.set(previous);
+    }
 
     public Rs2NpcModel(final NPC npc)
     {
@@ -227,14 +247,17 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
                 }
             }
 
-            final NPCComposition npcComposition = Microbot.getClientThread().runOnClientThreadOptional(
-                    () -> Microbot.getClient().getNpcDefinition(getId())).orElse(null);
-            if (npcComposition == null) {
+            final BooleanSupplier dispatchGuard = clickDispatchGuard.get();
+            final NPCComposition npcComposition = dispatchGuard == null
+                    ? Microbot.getClientThread().runOnClientThreadOptional(
+                            () -> Microbot.getClient().getNpcDefinition(getId())).orElse(null)
+                    : null;
+            if (dispatchGuard == null && npcComposition == null) {
                 log.error("Error interacting with NPC '{}' for action '{}': NPCComposition is null", npcName, action);
                 return false;
             }
 
-            final String[] actions = npcComposition.getActions();
+            final String[] actions = dispatchGuard == null ? npcComposition.getActions() : getGuardedActions();
             if (actions == null) {
                 log.error("Error interacting with NPC '{}' for action '{}': Actions are null", npcName, action);
                 return false;
@@ -272,7 +295,7 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
                 Rs2Camera.turnTo(npc);
             }
 
-            Microbot.doInvoke(new NewMenuEntry()
+            NewMenuEntry entry = new NewMenuEntry()
                             .param0(0)
                             .param1(0)
                             .opcode(menuAction.getId())
@@ -280,9 +303,20 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
                             .itemId(-1)
                             .target(npcName)
                             .actor(npc)
-                            .option(action).validWhen(clickDispatchGuard.get())
-                    ,
-                    Rs2UiHelper.getActorClickbox(npc));
+                            .option(action);
+            if (dispatchGuard != null) {
+                final String queuedAction = actions[index];
+                entry.validWhen(() -> dispatchGuard.getAsBoolean()
+                        && entry.getType() == menuAction && queuedAction.equals(entry.getOption())
+                        && Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                            String[] liveActions = getGuardedActions();
+                            return liveActions != null && index < liveActions.length
+                                    && queuedAction.equals(liveActions[index])
+                                    && getMenuAction(index) == menuAction;
+                        }).orElse(false));
+                if (!entry.isDispatchValid()) return false;
+            }
+            Microbot.doInvoke(entry, Rs2UiHelper.getActorClickbox(npc));
             return true;
 
         } catch (Exception ex) {
@@ -291,15 +325,13 @@ public class Rs2NpcModel extends Rs2ActorModel implements IEntity
         }
     }
 
-    private static final ThreadLocal<java.util.function.BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();
-
-    public boolean click(String action, java.util.function.BooleanSupplier guard) {
-        java.util.function.BooleanSupplier previous = clickDispatchGuard.get();
-        clickDispatchGuard.set(guard);
-        try { return click(action); }
-        finally {
-            if (previous == null) clickDispatchGuard.remove(); else clickDispatchGuard.set(previous);
-        }
+    private String[] getGuardedActions() {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            if (Microbot.getClient().isWidgetSelected()) return null;
+            NPCComposition composition = npc.getTransformedComposition();
+            String[] actions = composition == null ? null : composition.getActions();
+            return actions == null ? null : actions.clone();
+        }).orElse(null);
     }
 
     private MenuAction getMenuAction(int index) {

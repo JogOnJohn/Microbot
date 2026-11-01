@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
@@ -35,11 +36,13 @@ public class InteractionTargetBoundaryTest {
         final MockedStatic<Rs2Tile> tiles = mockStatic(Rs2Tile.class);
         final MockedStatic<Rs2Dialogue> dialogue = mockStatic(Rs2Dialogue.class);
         final MockedStatic<InputArbiter> input = mockStatic(InputArbiter.class);
+        final MockedStatic<Perspective> projection = mockStatic(Perspective.class);
         final Client c = mock(Client.class);
         final ClientThread ct = mock(ClientThread.class);
         final WorldView view = mock(WorldView.class);
         final WorldPoint p = new WorldPoint(3242, 3450, 0), n = p.dy(2);
         final NPC npc = mock(NPC.class);
+        @SuppressWarnings("unchecked") final IndexedObjectSet<NPC> liveNpcs = mock(IndexedObjectSet.class);
         final NPCComposition definition = mock(NPCComposition.class);
         final Rs2NpcModel model = mock(Rs2NpcModel.class);
         final AtomicReference<Rs2NpcModel> selected = new AtomicReference<>(model);
@@ -52,15 +55,28 @@ public class InteractionTargetBoundaryTest {
             micro.when(Microbot::getClientThread).thenReturn(ct);
             when(c.getTopLevelWorldView()).thenReturn(view);
             when(view.getScene()).thenReturn(mock(Scene.class));
-            when(c.getLocalPlayer()).thenReturn(mock(Player.class));
+            Player actor = mock(Player.class);
+            when(c.getLocalPlayer()).thenReturn(actor);
+            when(actor.getWorldView()).thenReturn(view);
+            when(actor.getWorldLocation()).thenReturn(p);
+            when(c.getWorldView(0)).thenReturn(view);
             when(c.getGameState()).thenReturn(GameState.LOGGED_IN);
             when(c.getTickCount()).thenReturn(100);
             when(c.getViewportWidth()).thenReturn(100);
             when(c.getViewportHeight()).thenReturn(100);
             player.when(Rs2Player::getWorldLocation).thenReturn(p);
+            when(npc.getId()).thenReturn(10415);
+            when(npc.getIndex()).thenReturn(3);
+            doReturn(liveNpcs).when(view).npcs();
+            when(liveNpcs.byIndex(3)).thenReturn(npc);
             when(npc.getWorldView()).thenReturn(view);
             when(npc.getWorldLocation()).thenReturn(n);
             when(npc.getConvexHull()).thenReturn(new Rectangle(10, 10, 20, 20));
+            when(npc.getLocalLocation()).thenReturn(LocalPoint.fromScene(40, 50));
+            when(npc.getModel()).thenReturn(mock(Model.class));
+            projection.when(() -> Perspective.getClickbox(eq(c), eq(view), any(Model.class),
+                    anyInt(), anyInt(), anyInt(), anyInt()))
+                    .thenAnswer(call -> selected.get() == null ? null : selected.get().getNpc().getConvexHull());
             when(definition.getActions()).thenReturn(new String[]{"Talk-to"});
             when(npc.getTransformedComposition()).thenReturn(definition);
             when(model.getNpc()).thenReturn(npc);
@@ -73,7 +89,7 @@ public class InteractionTargetBoundaryTest {
             tiles.when(() -> Rs2Tile.getReachableTilesFromTile(p, 10)).thenReturn(reachable);
         }
         @Override public void close() {
-            input.close(); dialogue.close(); tiles.close(); player.close(); micro.close();
+            projection.close(); input.close(); dialogue.close(); tiles.close(); player.close(); micro.close();
         }
     }
 
@@ -98,17 +114,25 @@ public class InteractionTargetBoundaryTest {
         try (Fixture f = new Fixture()) {
             var ready = f.request.runtime.probe(false);
             NPC replacement = mock(NPC.class);
+            when(replacement.getId()).thenReturn(10415);
+            when(replacement.getIndex()).thenReturn(3);
+            when(replacement.getLocalLocation()).thenReturn(LocalPoint.fromScene(40, 50));
+            when(replacement.getModel()).thenReturn(mock(Model.class));
             when(replacement.getWorldView()).thenReturn(f.view);
             when(replacement.getWorldLocation()).thenReturn(f.n);
             when(replacement.getConvexHull()).thenReturn(new Rectangle(10, 10, 20, 20));
             when(replacement.getTransformedComposition()).thenReturn(f.definition);
             when(f.model.getNpc()).thenReturn(replacement);
+            when(f.liveNpcs.byIndex(3)).thenReturn(replacement);
             assertFalse(f.request.runtime.dispatch(ready, () -> true));
             verify(f.model, never()).click(anyString(), any());
             when(f.model.getNpc()).thenReturn(f.npc);
+            when(f.liveNpcs.byIndex(3)).thenReturn(f.npc);
+            assertFalse("A pre-replacement snapshot must not regain permission", f.request.runtime.dispatch(ready, () -> true));
+            var reacquired = f.request.runtime.probe(true);
             when(f.npc.getWorldLocation()).thenReturn(f.n.dx(1));
             f.reachable.put(f.n.dx(1), 3);
-            assertTrue(f.request.runtime.dispatch(ready, () -> true));
+            assertTrue(f.request.runtime.dispatch(reacquired, () -> true));
         }
     }
 
@@ -148,7 +172,7 @@ public class InteractionTargetBoundaryTest {
             f.dialogue.when(Rs2Dialogue::isInDialogue).thenReturn(true);
             Widget name = mock(Widget.class);
             when(name.getText()).thenReturn("Amy");
-            when(f.c.getWidget(WidgetInfo.DIALOG_NPC_NAME)).thenReturn(name);
+            when(f.c.getWidget(WidgetInfo.DIALOG_NPC_NAME.getId())).thenReturn(name);
             var snapshot = f.request.runtime.probe(true);
             assertTrue(snapshot.inputBlocked); assertFalse(snapshot.ready); assertFalse(snapshot.confirmed);
             when(name.getText()).thenReturn("<col=ffffff>Jeff</col>");
@@ -165,7 +189,7 @@ public class InteractionTargetBoundaryTest {
             assertTrue(f.request.runtime.probe(true).ready);
             assertTrue(f.request.runtime.probe(false).ready);
             assertEquals(2, f.request.runtime.clientReadSamples);
-            assertEquals(1, f.request.runtime.targetQueries);
+            assertEquals(2, f.request.runtime.targetQueries); // Fresh identity query even when collision is memoized.
             assertEquals(1, f.request.runtime.collisionProbes);
             assertEquals(1, f.request.runtime.cacheHits);
             assertTrue(f.request.runtime.probeNanos >= f.request.runtime.clientReadNanos);
@@ -192,7 +216,7 @@ public class InteractionTargetBoundaryTest {
                     assertEquals(InteractionResult.BLOCKED, Rs2Walker.walkTo(f.n, competing));
                     f.dialogue.when(Rs2Dialogue::isInDialogue).thenReturn(true);
                     Widget name = mock(Widget.class); when(name.getText()).thenReturn("Jeff");
-                    when(f.c.getWidget(WidgetInfo.DIALOG_NPC_NAME)).thenReturn(name);
+                    when(f.c.getWidget(WidgetInfo.DIALOG_NPC_NAME.getId())).thenReturn(name);
                     when(f.c.getTickCount()).thenReturn(101);
                     assertEquals(InteractionResult.SUCCEEDED, banked
                         ? Rs2Walker.walkWithBankedTransportsAndState(f.n, 0, f.request)

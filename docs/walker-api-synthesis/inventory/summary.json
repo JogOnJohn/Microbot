@@ -1,0 +1,118 @@
+{
+  "schema": 1,
+  "scope": "Explicit source declarations and lexical static-owner consumers; not binary or semantic compatibility",
+  "variants": [
+    {
+      "name": "playable",
+      "commit": "3d93dbf85524baf112fa4487121c58e05d48eea0",
+      "parsedFiles": 189,
+      "externalTypes": 205,
+      "externalMethods": 1416,
+      "externalFields": 667
+    },
+    {
+      "name": "runtime",
+      "commit": "19049dd3b9078cc5d7b0ce7828788182e3ce9437",
+      "parsedFiles": 195,
+      "externalTypes": 214,
+      "externalMethods": 1454,
+      "externalFields": 711
+    },
+    {
+      "name": "data-sync",
+      "commit": "6a8317fca6476d3d06c8b2c9e21c60825db0fec0",
+      "parsedFiles": 195,
+      "externalTypes": 214,
+      "externalMethods": 1450,
+      "externalFields": 710
+    },
+    {
+      "name": "upstream-development",
+      "commit": "41024245fda6245d53d3f7f0ec1b757c1880f5f5",
+      "parsedFiles": 191,
+      "externalTypes": 223,
+      "externalMethods": 1454,
+      "externalFields": 772
+    },
+    {
+      "name": "upstream-main",
+      "commit": "050a0826cea60a010a123f4090e44364c4044313",
+      "parsedFiles": 191,
+      "externalTypes": 223,
+      "externalMethods": 1454,
+      "externalFields": 772
+    }
+  ],
+  "comparisons": [
+    {
+      "comparison": "playable-vs-upstream-development",
+      "counts": [
+        {
+          "Name": "declaration-difference",
+          "Count": 35
+        },
+        {
+          "Name": "declaration-shape-match",
+          "Count": 1619
+        },
+        {
+          "Name": "left-only",
+          "Count": 724
+        },
+        {
+          "Name": "right-only",
+          "Count": 866
+        }
+      ]
+    },
+    {
+      "comparison": "playable-vs-upstream-main",
+      "counts": [
+        {
+          "Name": "declaration-difference",
+          "Count": 35
+        },
+        {
+          "Name": "declaration-shape-match",
+          "Count": 1619
+        },
+        {
+          "Name": "left-only",
+          "Count": 724
+        },
+        {
+          "Name": "right-only",
+          "Count": 866
+        }
+      ]
+    },
+    {
+      "comparison": "playable-vs-runtime",
+      "counts": [
+        {
+          "Name": "declaration-shape-match",
+          "Count": 2378
+        },
+        {
+          "Name": "right-only",
+          "Count": 92
+        }
+      ]
+    },
+    {
+      "comparison": "playable-vs-data-sync",
+      "counts": [
+        {
+          "Name": "declaration-shape-match",
+          "Count": 2378
+        },
+        {
+          "Name": "right-only",
+          "Count": 87
+        }
+      ]
+    }
+  ],
+  "consumerRecords": 12618,
+  "consumerCalls": 11223
+}

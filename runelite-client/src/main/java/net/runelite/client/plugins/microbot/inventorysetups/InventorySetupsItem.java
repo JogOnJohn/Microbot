@@ -73,6 +73,11 @@ public class InventorySetupsItem
 		return new InventorySetupsItem(-1, "", 0, false, InventorySetupsStackCompareID.None, false, -1);
 	}
 
+	public InventorySetupsItem copyToSlot(final int newSlot)
+	{
+		return new InventorySetupsItem(id, name, quantity, fuzzy, stackCompare, locked, newSlot);
+	}
+
 	public static boolean itemIsDummy(final InventorySetupsItem item)
 	{
 		// Don't use the name to compare

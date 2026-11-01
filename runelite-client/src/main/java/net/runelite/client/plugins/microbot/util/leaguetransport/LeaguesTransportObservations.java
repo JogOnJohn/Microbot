@@ -457,6 +457,16 @@ final class LeaguesTransportObservations
 
 	static List<Transport> loadCatalogTransports(Set<LeaguesRegion> unlockedRegions)
 	{
+		return loadCatalogTransports(unlockedRegions, false);
+	}
+
+	static List<Transport> loadCatalogTransportsReadOnly(Set<LeaguesRegion> unlockedRegions)
+	{
+		return loadCatalogTransports(unlockedRegions, true);
+	}
+
+	private static List<Transport> loadCatalogTransports(Set<LeaguesRegion> unlockedRegions, boolean readOnly)
+	{
 		if (unlockedRegions == null || unlockedRegions.isEmpty())
 		{
 			return Collections.emptyList();
@@ -466,8 +476,8 @@ final class LeaguesTransportObservations
 		Set<String> seenKeys = new HashSet<>();
 
 		List<Path> sources = new ArrayList<>();
-		Path file = catalogFile();
-		Path dir = catalogDir();
+		Path file = readOnly ? LeaguesTransportPersistence.planningVersionDir().resolve("leagues-transport-catalog.jsonl") : catalogFile();
+		Path dir = readOnly ? LeaguesTransportPersistence.planningVersionDir().resolve("leagues-transport-catalog.d") : catalogDir();
 		sources.add(file);
 
 		try
@@ -485,6 +495,7 @@ final class LeaguesTransportObservations
 		}
 		catch (Exception ignored)
 		{
+			if (readOnly) throw new IllegalStateException("Leagues planning catalog directory unreadable", ignored);
 		}
 
 		for (Path source : sources)
@@ -493,7 +504,7 @@ final class LeaguesTransportObservations
 			{
 				continue;
 			}
-			for (CatalogParsedRow row : loadCatalogFileRowsCached(source))
+			for (CatalogParsedRow row : readOnly ? parseCatalogFileRows(source, true) : loadCatalogFileRowsCached(source))
 			{
 				if (!unlockedRegions.contains(row.required))
 				{
@@ -537,6 +548,11 @@ final class LeaguesTransportObservations
 
 	private static List<CatalogParsedRow> parseCatalogFileRows(Path source)
 	{
+		return parseCatalogFileRows(source, false);
+	}
+
+	private static List<CatalogParsedRow> parseCatalogFileRows(Path source, boolean readOnly)
+	{
 		List<CatalogParsedRow> out = new ArrayList<>();
 		try (BufferedReader br = Files.newBufferedReader(source, StandardCharsets.UTF_8))
 		{
@@ -575,7 +591,7 @@ final class LeaguesTransportObservations
 				}
 				if (schema != CATALOG_SCHEMA_VERSION)
 				{
-					if (LOGGED_OLD_CATALOG_SCHEMA.compareAndSet(false, true))
+					if (!readOnly && LOGGED_OLD_CATALOG_SCHEMA.compareAndSet(false, true))
 					{
 						log.info("[Leagues] ignoring old catalog schema (expected {}, got {})", CATALOG_SCHEMA_VERSION, schema);
 					}
@@ -655,6 +671,7 @@ final class LeaguesTransportObservations
 		}
 		catch (Exception ignored)
 		{
+			if (readOnly) throw new IllegalStateException("Leagues planning catalog unreadable", ignored);
 		}
 		return out;
 	}

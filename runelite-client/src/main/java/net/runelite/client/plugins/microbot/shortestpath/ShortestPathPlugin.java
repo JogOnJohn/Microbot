@@ -52,6 +52,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.questhelper.util.worldmap.WorldMapArea;
 import net.runelite.client.plugins.microbot.questhelper.util.worldmap.WorldPointMapper;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.CollisionMap;
+import net.runelite.client.plugins.microbot.shortestpath.pathfinder.CollisionMapQueries;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.Pathfinder;
 import net.runelite.client.plugins.microbot.shortestpath.pathfinder.PathfinderConfig;
 import net.runelite.client.plugins.microbot.util.walker.WebWalkLog;
@@ -220,6 +221,18 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
     private static int reachedDistance;
     @Getter(AccessLevel.PACKAGE)
     private ShortestPathScript shortestPathScript;
+
+    /** Read-only terrain check; unknown collision data permits a pathfinding attempt. */
+    public static boolean hasWalkableTileWithin(WorldPoint target, int distance) {
+        PathfinderConfig config = pathfinderConfig;
+        return CollisionMapQueries.hasWalkableTileWithin(config == null ? null : config.getMap(), target, distance);
+    }
+
+    /** Diagnostic nearest mapped terrain, excluding the target itself; does not retarget a route. */
+    public static WorldPoint nearestWalkableTile(WorldPoint target, int maxRadius) {
+        PathfinderConfig config = pathfinderConfig;
+        return CollisionMapQueries.nearestWalkableTile(config == null ? null : config.getMap(), target, maxRadius);
+    }
 
     // Set by onGameStateChanged when the client transitions to LOGGED_IN. Scheduled from the next
     // game tick so hydrated client state can be captured before the worker rebuilds transports.

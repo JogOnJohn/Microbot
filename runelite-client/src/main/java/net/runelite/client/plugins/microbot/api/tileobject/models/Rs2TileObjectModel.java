@@ -73,6 +73,10 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
     private final TileObject tileObject;
     private String[] actions;
 
+    public boolean represents(TileObject candidate) {
+        return tileObject == candidate;
+    }
+
 
     @Override
     public long getHash() {
@@ -267,6 +271,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
      */
     public boolean click(String action) {
         try {
+            final java.util.function.BooleanSupplier dispatchGuard = clickDispatchGuard.get();
             WorldView worldView = getWorldView();
             if (worldView == null) return false;
             var objComp = getVisibleObjectComposition();
@@ -304,15 +309,17 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             int index = action == null || action.isEmpty() ? 0 : -1;
             String objName = "";
             String[] actions = new String[0];
-            if (action != null && !action.isEmpty()) {
-                actions = objComp.getActions();
+            if (dispatchGuard != null || (action != null && !action.isEmpty())) {
+                actions = dispatchGuard == null ? objComp.getActions() : getGuardedActions();
                 if (actions == null) {
                     return false;
                 }
 
+                index = -1;
                 for (int i = 0; i < actions.length; i++) {
                     if (actions[i] == null) continue;
-                    if (action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[i]))) {
+                    if ((dispatchGuard != null && (action == null || action.isEmpty()) && !actions[i].isEmpty())
+                            || (action != null && action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[i])))) {
                         index = i;
                         break;
                     }
@@ -332,6 +339,11 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                 log.warn("Failed to interact with object {} at {} - action '{}' not found in {}",
                         getId(), getWorldLocation(), action, Arrays.toString(actions));
                 return false;
+            }
+
+            if (dispatchGuard != null) {
+                if (index > 4) return false;
+                action = Rs2UiHelper.stripColTags(actions[index]);
             }
 
 
@@ -369,7 +381,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                 return false;
             }
 
-            Microbot.doInvoke(new NewMenuEntry()
+            NewMenuEntry entry = new NewMenuEntry()
                             .param0(param0)
                             .param1(param1)
                             .opcode(menuAction.getId())
@@ -378,9 +390,23 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
                             .option(action)
                             .target(objName)
                             .setWorldViewId(worldView.getId())
-                            .gameObject(tileObject).validWhen(clickDispatchGuard.get())
-                    ,
-                    clickArea);
+                            .gameObject(tileObject);
+            if (dispatchGuard != null) {
+                final int queuedIndex = index;
+                final String queuedAction = action;
+                final MenuAction queuedOpcode = menuAction;
+                entry.validWhen(() -> dispatchGuard.getAsBoolean()
+                        && queuedOpcode != MenuAction.WIDGET_TARGET_ON_GAME_OBJECT
+                        && entry.getType() == queuedOpcode && queuedAction.equals(entry.getOption())
+                        && Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                            String[] liveActions = getGuardedActions();
+                            return liveActions != null && queuedIndex < liveActions.length
+                                    && queuedAction.equals(Rs2UiHelper.stripColTags(liveActions[queuedIndex]))
+                                    && !Microbot.getClient().isWidgetSelected();
+                        }).orElse(false));
+                if (!entry.isDispatchValid()) return false;
+            }
+            Microbot.doInvoke(entry, clickArea);
 // MenuEntryImpl(getOption=Use, getTarget=Barrier, getIdentifier=43700, getType=GAME_OBJECT_THIRD_OPTION, getParam0=53, getParam1=51, getItemId=-1, isForceLeftClick=true, getWorldViewId=-1, isDeprioritized=false)
             //Rs2Reflection.invokeMenu(param0, param1, menuAction.getId(), object.getId(),-1, "", "", -1, -1);
 
@@ -392,12 +418,26 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
         return true;
     }
 
+    private String[] getGuardedActions() {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            if (Microbot.getClient().isWidgetSelected()) return null;
+            ObjectComposition composition = Microbot.getClient().getObjectDefinition(tileObject.getId());
+            if (composition != null && composition.getImpostorIds() != null) {
+                composition = composition.getImpostor();
+            }
+            String[] actions = composition == null ? null : composition.getActions();
+            return actions == null ? null : actions.clone();
+        }).orElse(null);
+    }
+
     private static final ThreadLocal<java.util.function.BooleanSupplier> clickDispatchGuard = new ThreadLocal<>();
 
     public boolean click(String action, java.util.function.BooleanSupplier guard) {
+        if (guard == null) return false;
         java.util.function.BooleanSupplier previous = clickDispatchGuard.get();
         clickDispatchGuard.set(guard);
-        try { return click(action); }
+        try { return guard.getAsBoolean() && click(action); }
+        catch (RuntimeException unavailable) { return false; }
         finally {
             if (previous == null) clickDispatchGuard.remove(); else clickDispatchGuard.set(previous);
         }
@@ -405,14 +445,31 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
 
     /** Live footprint for bounded interaction-edge checks. */
     public net.runelite.api.coords.WorldArea getInteractionFootprint() {
-        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
-            WorldPoint location = getWorldLocation();
-            if (location == null) return null;
-            if (tileObject instanceof GameObject) {
-                GameObject object = (GameObject) tileObject;
-                return new net.runelite.api.coords.WorldArea(location, object.sizeX(), object.sizeY());
-            }
-            return new net.runelite.api.coords.WorldArea(location, 1, 1);
-        }).orElse(null);
+        if (Microbot.getClientThread() == null) return null;
+        try {
+            return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                WorldView view = getWorldView();
+                if (view == null) return null;
+                WorldPoint location;
+                int width = 1, height = 1;
+                if (tileObject instanceof GameObject) {
+                    GameObject object = (GameObject) tileObject;
+                    Point min = object.getSceneMinLocation();
+                    if (min == null) return null;
+                    width = object.sizeX(); height = object.sizeY();
+                    if (width < 1 || height < 1 || width > 8 || height > 8
+                            || min.getX() < 0 || min.getY() < 0 || min.getX() + width > view.getSizeX()
+                            || min.getY() + height > view.getSizeY()) return null;
+                    location = WorldPoint.fromScene(view, min.getX(), min.getY(), view.getPlane());
+                } else {
+                    location = tileObject.getWorldLocation();
+                }
+                if (location == null || location.getPlane() != view.getPlane()
+                        || width < 1 || height < 1 || width > 8 || height > 8) return null;
+                int x = location.getX() - view.getBaseX(), y = location.getY() - view.getBaseY();
+                if (x < 0 || y < 0 || x + width > view.getSizeX() || y + height > view.getSizeY()) return null;
+                return new net.runelite.api.coords.WorldArea(location, width, height);
+            }).orElse(null);
+        } catch (RuntimeException unavailable) { return null; }
     }
 }

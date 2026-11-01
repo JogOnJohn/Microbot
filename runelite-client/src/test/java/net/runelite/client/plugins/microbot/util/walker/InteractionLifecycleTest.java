@@ -92,4 +92,17 @@ public class InteractionLifecycleTest {
         assertNotEquals(a.id, b.id); assertTrue(a.bind(p)); assertFalse(a.bind(p.dx(1)));
         a.cancel(); assertFalse(a.active()); assertTrue(b.active());
     }
+
+    @Test public void lateDispatchAndRejectionCannotMutateATerminalOperation() {
+        for (boolean cancelled : new boolean[]{true, false}) {
+            InteractionLifecycle state = new InteractionLifecycle();
+            if (cancelled) state.cancel(); else state.fail("execution-failed");
+            var terminal = state.terminal();
+            state.dispatched(100);
+            state.rejected(200);
+            assertSame(terminal, state.terminal());
+            assertEquals(0, state.attempts());
+            assertFalse(state.awaiting());
+        }
+    }
 }

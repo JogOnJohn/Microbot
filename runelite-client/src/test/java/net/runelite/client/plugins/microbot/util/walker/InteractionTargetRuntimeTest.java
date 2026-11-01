@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.coords.LocalPoint;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.api.npc.Rs2NpcCache;
@@ -22,6 +23,11 @@ import static org.mockito.ArgumentMatchers.*;
 
 public class InteractionTargetRuntimeTest {
     @Test public void mappedAccessIsNotEnoughWithoutAReachableUnblockedObjectEdge() {
+        try (MockedStatic<Microbot> micro = mockStatic(Microbot.class)) {
+        ClientThread ct = mock(ClientThread.class);
+        when(ct.runOnClientThreadOptional(any())).thenAnswer(call ->
+                Optional.ofNullable(((Callable<?>) call.getArgument(0)).call()));
+        micro.when(Microbot::getClientThread).thenReturn(ct);
         WorldView view = mock(WorldView.class);
         when(view.getBaseX()).thenReturn(3200);
         when(view.getBaseY()).thenReturn(3400);
@@ -44,12 +50,14 @@ public class InteractionTargetRuntimeTest {
         when(view.getCollisionMaps()).thenReturn(null);
         assertFalse(net.runelite.client.plugins.microbot.util.walker.interaction.InteractionTargetRuntime
             .objectEdgeReachable(object, java.util.Set.of(access), view));
+        }
     }
 
     @Test public void liveDoorChangeInvalidatesCachedReadinessBeforeDispatch() throws Exception {
         try (MockedStatic<Microbot> micro = mockStatic(Microbot.class);
              MockedStatic<Rs2Player> player = mockStatic(Rs2Player.class);
              MockedStatic<Rs2Tile> tiles = mockStatic(Rs2Tile.class);
+             MockedStatic<Perspective> projection = mockStatic(Perspective.class);
              MockedStatic<Rs2Dialogue> dialogue = mockStatic(Rs2Dialogue.class)) {
             Client c = mock(Client.class);
             ClientThread ct = mock(ClientThread.class);
@@ -60,17 +68,30 @@ public class InteractionTargetRuntimeTest {
             WorldView view = mock(WorldView.class);
             when(c.getTopLevelWorldView()).thenReturn(view);
             when(view.getScene()).thenReturn(mock(Scene.class));
-            when(c.getLocalPlayer()).thenReturn(mock(Player.class));
+            Player actor = mock(Player.class);
+            when(c.getLocalPlayer()).thenReturn(actor);
+            when(actor.getWorldView()).thenReturn(view);
+            when(c.getWorldView(0)).thenReturn(view);
             when(c.getGameState()).thenReturn(GameState.LOGGED_IN);
             when(c.getTickCount()).thenReturn(100);
             when(c.getViewportWidth()).thenReturn(100);
             when(c.getViewportHeight()).thenReturn(100);
             WorldPoint p = new WorldPoint(3242, 3450, 0), n = p.dy(2);
+            when(actor.getWorldLocation()).thenReturn(p);
             player.when(Rs2Player::getWorldLocation).thenReturn(p);
             NPC npc = mock(NPC.class);
+            when(npc.getId()).thenReturn(10415);
+            when(npc.getIndex()).thenReturn(3);
+            @SuppressWarnings("unchecked") IndexedObjectSet<NPC> liveNpcs = mock(IndexedObjectSet.class);
+            doReturn(liveNpcs).when(view).npcs();
+            when(liveNpcs.byIndex(3)).thenReturn(npc);
             when(npc.getWorldView()).thenReturn(view);
             when(npc.getWorldLocation()).thenReturn(n);
             when(npc.getConvexHull()).thenReturn(new Rectangle(10, 10, 20, 20));
+            when(npc.getLocalLocation()).thenReturn(LocalPoint.fromScene(40, 50));
+            when(npc.getModel()).thenReturn(mock(Model.class));
+            projection.when(() -> Perspective.getClickbox(eq(c), eq(view), any(Model.class),
+                    anyInt(), anyInt(), anyInt(), anyInt())).thenAnswer(call -> npc.getConvexHull());
             NPCComposition definition = mock(NPCComposition.class);
             when(definition.getActions()).thenReturn(new String[]{"Talk-to"});
             when(npc.getTransformedComposition()).thenReturn(definition);
@@ -98,9 +119,11 @@ public class InteractionTargetRuntimeTest {
             } finally { Microbot.cantReachTarget = previousCantReach; }
             when(view.isInstance()).thenReturn(true);
             assertTrue(request.runtime.probe(true).sceneReady);
+            assertFalse(request.runtime.probe(true).confirmationAllowed);
             assertFalse(request.runtime.probe(true).ready);
             when(c.getGameState()).thenReturn(GameState.LOADING);
             assertFalse(request.runtime.probe(true).sceneReady);
+            assertFalse(request.runtime.probe(true).confirmationAllowed);
         }
     }
 }

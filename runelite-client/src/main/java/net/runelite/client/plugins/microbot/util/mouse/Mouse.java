@@ -64,11 +64,9 @@ public abstract class Mouse {
 
     public abstract Mouse click(Point point, NewMenuEntry entry);
 
-    /** Opt-in cancellable raw click. Implementations may recheck after pointer movement. */
+    /** Unsupported implementations must not bypass the final dispatch guard. */
     public boolean clickGuarded(Point point, java.util.function.BooleanSupplier valid) {
-        if (point == null || !valid.getAsBoolean()) return false;
-        click(point);
-        return true;
+        return false;
     }
 
     public Mouse quickClick(Point point, NewMenuEntry entry) {

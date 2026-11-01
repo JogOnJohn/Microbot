@@ -35,3 +35,22 @@ exception must return false so the caller can re-query instead of assuming succe
 
 **Defensive check:** Rs2TileObjectModelCompositionTest covers default-click
 visibility, absent action arrays, first-option dispatch and scene exceptions.
+
+## 5. A same-tick cache match does not prove an object is still in the scene
+
+The tile-object singleton may reuse its list for the current tick. Re-query it,
+but also check the exact raw object against its live anchor tile on the client
+thread before declaring interaction readiness. A replacement with the same ID
+and hash is not the original object. Validate the active WorldView and actual
+tile-array dimensions, including null or ragged rows; do not rescan the whole
+scene or invalidate the shared cache merely to check one target.
+
+Readiness is a read-only snapshot, not a click authorization or confirmed effect.
+The caller must re-query and apply the normal dispatch guards before acting.
+When existing local-path helpers cannot represent a WorldView/instance in one
+consistent coordinate space, return not-ready rather than mixing coordinates.
+
+**Where this applies:** `Rs2InteractionApproach` and future handoff adapters.
+
+**Defensive check:** `Rs2InteractionApproachTest` covers stale cached objects,
+live-tile identity, unavailable scene state and client-thread-only reads.
