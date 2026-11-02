@@ -80,7 +80,7 @@ public class Rs2TileObjectModel implements TileObject {
 
     @Override
     public WorldView getWorldView() {
-        return tileObject.getWorldView();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> tileObject.getWorldView()).orElse(null);
     }
 
     public int getId() {

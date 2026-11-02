@@ -196,11 +196,15 @@ public class Rs2UiHelper {
     public static Rectangle getTileClickbox(Tile tile) {
         if (tile == null) return getDefaultRectangle();
 
-        LocalPoint localPoint = tile.getLocalLocation();
-        if (localPoint == null) return getDefaultRectangle();
-
-        // Get the screen point of the tile center
-        Point screenPoint = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getPlane());
+        Point screenPoint = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            LocalPoint localPoint = tile.getLocalLocation();
+            if (localPoint == null) return null;
+            try {
+                return Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getPlane());
+            } catch (IndexOutOfBoundsException unavailable) {
+                return null;
+            }
+        }).orElse(null);
 
         if (screenPoint == null) return getDefaultRectangle();
         

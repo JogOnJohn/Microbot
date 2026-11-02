@@ -16,6 +16,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.util.Optional;
 
 @Slf4j
 public class Rs2Camera {
@@ -265,25 +266,42 @@ public class Rs2Camera {
         if (tileObject == null) return false;
         Client client = Microbot.getClient();
         LocalPoint localPoint = tileObject.getLocalLocation();
-        if (!isInWorldViewScene(client, localPoint)) return false;
         int[] viewport = viewportSize();
         if (viewport == null) return false;
-        Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
+        Polygon poly = getCanvasTilePoly(localPoint).orElse(null);
         if (poly == null) return false;
         return poly.getBounds2D().getX() <= viewport[0] && poly.getBounds2D().getY() <= viewport[1];
     }
 
     public static boolean isTileOnScreen(LocalPoint localPoint) {
         Client client = Microbot.getClient();
-        if (!isInWorldViewScene(client, localPoint)) return false;
         int[] viewport = viewportSize();
         if (viewport == null) return false;
-        Polygon poly = Perspective.getCanvasTilePoly(client, localPoint);
+        Polygon poly = getCanvasTilePoly(localPoint).orElse(null);
         if (poly == null) return false;
         Rectangle viewportBounds = new Rectangle(0, 0, viewport[0], viewport[1]);
         if (!poly.intersects(viewportBounds)) return false;
-        Point canvasPoint = Perspective.localToCanvas(client, localPoint, client.getPlane());
-        return canvasPoint != null;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            if (!isInWorldViewScene(client, localPoint)) return null;
+            try {
+                return Perspective.localToCanvas(client, localPoint, client.getPlane());
+            } catch (IndexOutOfBoundsException e) {
+                return null;
+            }
+        }).isPresent();
+    }
+
+    public static Optional<Polygon> getCanvasTilePoly(LocalPoint localPoint) {
+        if (localPoint == null) return Optional.empty();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Client client = Microbot.getClient();
+            if (!isInWorldViewScene(client, localPoint)) return null;
+            try {
+                return Perspective.getCanvasTilePoly(client, localPoint);
+            } catch (IndexOutOfBoundsException e) {
+                return null;
+            }
+        });
     }
 
     private static int[] viewportSize() {
@@ -303,6 +321,20 @@ public class Rs2Camera {
                     && sceneX >= 0 && sceneY >= 0
                     && sceneX < worldView.getSizeX() && sceneY < worldView.getSizeY();
         }).orElse(false);
+    }
+
+    public static Optional<Point> getCanvasTilePoint(LocalPoint localPoint) {
+        if (localPoint == null) return Optional.empty();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Client client = Microbot.getClient();
+            WorldView view = client.getWorldView(localPoint.getWorldView());
+            if (!isInWorldViewScene(client, localPoint) || view == null) return null;
+            try {
+                return Perspective.localToCanvas(client, localPoint, view.getPlane());
+            } catch (IndexOutOfBoundsException unavailable) {
+                return null;
+            }
+        });
     }
 
     // get the camera zoom
@@ -439,7 +471,7 @@ public class Rs2Camera {
         if (tile == null) return false;
         int[] viewport = viewportSize();
         if (viewport == null) return false;
-        Polygon poly = Perspective.getCanvasTilePoly(Microbot.getClient(), tile);
+        Polygon poly = getCanvasTilePoly(tile).orElse(null);
         if (poly == null) return false;
         Rectangle tileBounds = poly.getBounds();
         int viewportWidth = viewport[0];
