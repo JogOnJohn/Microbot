@@ -96,8 +96,13 @@ import java.util.regex.Pattern;
         name = PluginDescriptor.Mocrosoft + "Web Walker",
         description = "Draws the shortest path to a chosen destination on the map (right click a spot on the world map to use)",
         tags = {"pathfinder", "map", "waypoint", "navigation", "microbot"},
+<<<<<<< HEAD
         enabledByDefault = true,
         version = "1.0.6",
+=======
+        enabledByDefault = false,
+        version = "1.0.7",
+>>>>>>> 5d3007d6f6 (fix(shortestpath): take the pathfinding executor atomically in exit)
         alwaysOn = true
 )
 public class ShortestPathPlugin extends Plugin implements KeyListener {
@@ -340,10 +345,14 @@ public class ShortestPathPlugin extends Plugin implements KeyListener {
 
     //Method from microbot
     public static void exit() {
-        if (pathfindingExecutor != null) {
-            Rs2Walker.clearWalkingRoute("shortest-path-plugin:exit");
-            pathfindingExecutor.shutdownNow();
+        ExecutorService executor;
+        synchronized (pathfinderMutex) {
+            executor = pathfindingExecutor;
             pathfindingExecutor = null;
+        }
+        if (executor != null) {
+            Rs2Walker.clearWalkingRoute("shortest-path-plugin:exit");
+            executor.shutdownNow();
         }
     }
 
