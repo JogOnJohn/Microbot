@@ -160,7 +160,7 @@ public class Rs2TileObjectModelCompositionTest {
         try (MockedStatic<Rs2Camera> camera = Mockito.mockStatic(Rs2Camera.class)) {
             camera.when(() -> Rs2Camera.isTileOnScreen(any(LocalPoint.class))).thenReturn(true);
             assertFalse(new Rs2TileObjectModel(tileObject).click());
-            camera.verify(() -> Rs2Camera.turnTo(tileObject));
+            camera.verify(() -> Rs2Camera.turnTo(tileObject, 5));
             microbot.verify(() -> Microbot.doInvoke(any(NewMenuEntry.class), any(Rectangle.class)), never());
         }
     }
