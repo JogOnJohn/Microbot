@@ -74,6 +74,9 @@ public class InteractionWalkCanvasGuardTest {
             micro.when(Microbot::getClientThread).thenReturn(thread);
             micro.when(Microbot::getMouse).thenReturn(mouse);
             when(client.getTopLevelWorldView()).thenReturn(view);
+            when(client.getWorldView(tile.getWorldView())).thenReturn(view);
+            when(view.getSizeX()).thenReturn(104);
+            when(view.getSizeY()).thenReturn(104);
             when(client.getViewportWidth()).thenReturn(100);
             when(client.getViewportHeight()).thenReturn(100);
             when(thread.runOnClientThreadOptional(any())).thenAnswer(call ->
