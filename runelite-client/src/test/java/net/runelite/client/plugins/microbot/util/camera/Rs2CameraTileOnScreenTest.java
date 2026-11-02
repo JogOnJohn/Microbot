@@ -159,11 +159,11 @@ public class Rs2CameraTileOnScreenTest {
         ClientThread clientThread = mock(ClientThread.class);
         when(clientThread.runOnClientThreadOptional(any())).thenAnswer(inv -> {
             Callable<?> callable = inv.getArgument(0);
-            onClientThread.set(true);
+            boolean previous = onClientThread.getAndSet(true);
             try {
                 return Optional.ofNullable(callable.call());
             } finally {
-                onClientThread.set(false);
+                onClientThread.set(previous);
             }
         });
         microbot.when(Microbot::getClientThread).thenReturn(clientThread);
