@@ -9,7 +9,7 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 
-final class WalkerSceneClickSafety {
+public final class WalkerSceneClickSafety {
     private static final int[] OVERLAYS = {
             InterfaceID.ToplevelOsrsStretch.SIDE_MENU,
             InterfaceID.ToplevelOsrsStretch.CHAT_CONTAINER,
@@ -25,7 +25,7 @@ final class WalkerSceneClickSafety {
         return point == null ? null : new Rectangle(point.getX() - 4, point.getY() - 4, 8, 8);
     }
 
-    static boolean isSafe(Point point) {
+    public static boolean isSafe(Point point) {
         if (point == null) return false;
         return Microbot.getClientThread().runOnClientThreadOptional(() -> {
             Client client = Microbot.getClient();

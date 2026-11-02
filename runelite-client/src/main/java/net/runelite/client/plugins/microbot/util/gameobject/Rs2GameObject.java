@@ -1782,8 +1782,8 @@ public class Rs2GameObject {
     }
 
     public static boolean clickObject(TileObject object, String action) {
-        if (object == null) return false;
-        WorldView objectWorldView = object.getWorldView();
+        if (object == null || Microbot.getClientThread() == null) return false;
+        WorldView objectWorldView = Microbot.getClientThread().runOnClientThreadOptional(() -> object.getWorldView()).orElse(null);
         if (objectWorldView == null) return false;
         // Use LocalPoint-based distance when the object is in the current scene (e.g. inside a
         // POH instance, where Rs2Player.getWorldLocation() returns the overworld-template tile

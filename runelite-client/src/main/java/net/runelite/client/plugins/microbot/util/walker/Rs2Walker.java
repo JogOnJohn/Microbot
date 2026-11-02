@@ -1235,6 +1235,10 @@ public class Rs2Walker {
      * @see #walkTo(WorldPoint)
      * <p>{@code null} {@code target}: {@link #walkWithState(WorldPoint, int)} returns {@link WalkerState#EXIT}; this method returns {@code false}.
      */
+    public static boolean isWalkingOnCurrentThread() {
+        return walkerLock.isHeldByCurrentThread();
+    }
+
     public static boolean walkTo(WorldPoint target, int distance) {
         return walkWithState(target, distance) == WalkerState.ARRIVED;
     }
@@ -4466,7 +4470,7 @@ public class Rs2Walker {
      */
     public static void walkFastLocal(LocalPoint localPoint) {
         if (interactionMovementDeferred()) return;
-        Point canv = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
+        Point canv = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
         int canvasX = canv != null ? canv.getX() : -1;
         int canvasY = canv != null ? canv.getY() : -1;
 
@@ -4493,10 +4497,7 @@ public class Rs2Walker {
         if (localPoint == null || !Rs2Camera.isTileOnScreen(localPoint)) {
             return false;
         }
-        Point canvasPoint = Perspective.localToCanvas(
-                Microbot.getClient(),
-                localPoint,
-                Microbot.getClient().getTopLevelWorldView().getPlane());
+        Point canvasPoint = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
         int canvasX = canvasPoint != null ? canvasPoint.getX() : -1;
         int canvasY = canvasPoint != null ? canvasPoint.getY() : -1;
         if (canvasX < 0 || canvasY < 0 || !WalkerSceneClickSafety.isSafe(canvasPoint)) {
@@ -4553,7 +4554,7 @@ public class Rs2Walker {
             return false;
         }
 
-        canv = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
+        canv = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
 
         int canvasX = canv != null ? canv.getX() : -1;
         int canvasY = canv != null ? canv.getY() : -1;
@@ -4591,7 +4592,7 @@ public class Rs2Walker {
             log.error("Tried to walkCanvas but localpoint returned null");
             return null;
         }
-        Point point = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
+        Point point = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
 
         if (point == null) return null;
 
