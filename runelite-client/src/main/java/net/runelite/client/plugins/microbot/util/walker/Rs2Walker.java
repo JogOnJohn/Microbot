@@ -1272,6 +1272,10 @@ public class Rs2Walker {
      * @see #walkTo(WorldPoint)
      * <p>{@code null} {@code target}: {@link #walkWithState(WorldPoint, int)} returns {@link WalkerState#EXIT}; this method returns {@code false}.
      */
+    public static boolean isWalkingOnCurrentThread() {
+        return walkerLock.isHeldByCurrentThread();
+    }
+
     public static boolean walkTo(WorldPoint target, int distance) {
         return walkWithState(target, distance) == WalkerState.ARRIVED;
     }
