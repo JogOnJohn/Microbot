@@ -26,6 +26,7 @@ public class CoveredObjectRecoveryTest {
     private MockedStatic<Rs2Walker> walker;
     private MockedStatic<InputArbiter> input;
     private Client client;
+    private ClientThread clientThread;
     private TileObject object;
     private final Rectangle area = new Rectangle(20, 20, 10, 10);
     private boolean oldPause;
@@ -37,6 +38,7 @@ public class CoveredObjectRecoveryTest {
         client = mock(Client.class);
         object = mock(TileObject.class);
         WorldView view = mock(WorldView.class);
+        when(view.isTopLevel()).thenReturn(true);
         Scene scene = mock(Scene.class);
         Player player = mock(Player.class);
         when(client.getLocalPlayer()).thenReturn(player);
@@ -46,6 +48,7 @@ public class CoveredObjectRecoveryTest {
         when(object.getWorldLocation()).thenReturn(target);
         when(view.getScene()).thenReturn(scene);
         ClientThread thread = mock(ClientThread.class);
+        clientThread = thread;
         when(thread.runOnClientThreadOptional(any())).thenAnswer(inv -> Optional.ofNullable(((Callable<?>) inv.getArgument(0)).call()));
         bot = mockStatic(Microbot.class);
         bot.when(Microbot::getClient).thenReturn(client);
@@ -111,9 +114,9 @@ public class CoveredObjectRecoveryTest {
     }
 
     @Test public void clientThreadAndHumanInputFailClosed() {
-        when(client.isClientThread()).thenReturn(true);
+        when(clientThread.isClientThread()).thenReturn(true);
         assertNull(Rs2TileObjectModel.recoverCoveredClick(object, () -> true));
-        when(client.isClientThread()).thenReturn(false);
+        when(clientThread.isClientThread()).thenReturn(false);
         input.when(InputArbiter::isHuman).thenReturn(true);
         assertNull(Rs2TileObjectModel.recoverCoveredClick(object, () -> true));
         camera.verifyNoInteractions();
@@ -126,5 +129,11 @@ public class CoveredObjectRecoveryTest {
         Thread.currentThread().interrupt();
         assertNull(Rs2TileObjectModel.recoverCoveredClick(object, () -> true));
         camera.verifyNoInteractions();
+    }
+
+    @Test public void instanceRecoveryDoesNotUseGlobalCoordinates() {
+        when(object.getWorldView().getScene().isInstance()).thenReturn(true);
+        assertNull(Rs2TileObjectModel.recoverCoveredClick(object, () -> true));
+        walker.verify(() -> Rs2Walker.walkWithStateTry(target, 2, 0), never());
     }
 }

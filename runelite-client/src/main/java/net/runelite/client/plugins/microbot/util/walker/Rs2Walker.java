@@ -4377,7 +4377,7 @@ public class Rs2Walker {
      * @param localPoint A two-dimensional point in the local coordinate space.
      */
     public static void walkFastLocal(LocalPoint localPoint) {
-        Point canv = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
+        Point canv = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
         int canvasX = canv != null ? canv.getX() : -1;
         int canvasY = canv != null ? canv.getY() : -1;
 
@@ -4403,10 +4403,7 @@ public class Rs2Walker {
         if (localPoint == null || !Rs2Camera.isTileOnScreen(localPoint)) {
             return false;
         }
-        Point canvasPoint = Perspective.localToCanvas(
-                Microbot.getClient(),
-                localPoint,
-                Microbot.getClient().getTopLevelWorldView().getPlane());
+        Point canvasPoint = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
         int canvasX = canvasPoint != null ? canvasPoint.getX() : -1;
         int canvasY = canvasPoint != null ? canvasPoint.getY() : -1;
         if (canvasX < 0 || canvasY < 0 || !WalkerSceneClickSafety.isSafe(canvasPoint)) {
@@ -4462,7 +4459,7 @@ public class Rs2Walker {
             return false;
         }
 
-        canv = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
+        canv = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
 
         int canvasX = canv != null ? canv.getX() : -1;
         int canvasY = canv != null ? canv.getY() : -1;
@@ -4498,7 +4495,7 @@ public class Rs2Walker {
             log.error("Tried to walkCanvas but localpoint returned null");
             return null;
         }
-        Point point = Perspective.localToCanvas(Microbot.getClient(), localPoint, Microbot.getClient().getTopLevelWorldView().getPlane());
+        Point point = Rs2Camera.getCanvasTilePoint(localPoint).orElse(null);
 
         if (point == null) return null;
 

@@ -315,10 +315,26 @@ public class Rs2Camera {
         if (localPoint == null) return false;
         int sceneX = localPoint.getSceneX();
         int sceneY = localPoint.getSceneY();
-        WorldView worldView = client.getWorldView(localPoint.getWorldView());
-        return worldView != null
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            WorldView worldView = client.getWorldView(localPoint.getWorldView());
+            return worldView != null
                     && sceneX >= 0 && sceneY >= 0
                     && sceneX < worldView.getSizeX() && sceneY < worldView.getSizeY();
+        }).orElse(false);
+    }
+
+    public static Optional<Point> getCanvasTilePoint(LocalPoint localPoint) {
+        if (localPoint == null) return Optional.empty();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            Client client = Microbot.getClient();
+            WorldView view = client.getWorldView(localPoint.getWorldView());
+            if (!isInWorldViewScene(client, localPoint) || view == null) return null;
+            try {
+                return Perspective.localToCanvas(client, localPoint, view.getPlane());
+            } catch (IndexOutOfBoundsException unavailable) {
+                return null;
+            }
+        });
     }
 
     // get the camera zoom

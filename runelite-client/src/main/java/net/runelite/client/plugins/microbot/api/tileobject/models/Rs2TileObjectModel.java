@@ -104,7 +104,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
 
     @Override
     public WorldView getWorldView() {
-        return tileObject.getWorldView();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> tileObject.getWorldView()).orElse(null);
     }
 
     public int getId() {
@@ -393,13 +393,14 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             WorldPoint[] positions = Microbot.getClientThread().runOnClientThreadOptional(() -> {
                 Player player = Microbot.getClient().getLocalPlayer();
                 WorldView view = object.getWorldView();
-                if (player == null || view == null || view != player.getWorldView()
+                if (player == null || view == null || !view.isTopLevel() || view != player.getWorldView()
                         || view.getScene() == null || view.getScene().isInstance()) return null;
                 WorldPoint target = object.getWorldLocation(), start = player.getWorldLocation();
                 return target == null || start == null || target.getPlane() != start.getPlane()
                         ? null : new WorldPoint[]{start, target};
             }).orElse(null);
-            if (positions == null || positions[0].distanceTo2D(positions[1]) <= 2 || !mayRecover(ownerValid)) return null;
+            if (positions == null || positions[0].distanceTo2D(positions[1]) <= 2
+                    || positions[0].distanceTo2D(positions[1]) > 12 || !mayRecover(ownerValid)) return null;
             log.debug("Object remains covered by the interface; trying a bounded closer walk");
             if (Rs2Walker.walkWithStateTry(positions[1], 2, 0) != WalkerState.ARRIVED || !mayRecover(ownerValid)) return null;
             boolean stillPresent = Microbot.getClientThread().runOnClientThreadOptional(() -> {
@@ -414,7 +415,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
     }
 
     private static boolean mayRecover(java.util.function.BooleanSupplier ownerValid) {
-        return Microbot.getClient() != null && !Microbot.getClient().isClientThread()
+        return Microbot.getClientThread() != null && !Microbot.getClientThread().isClientThread()
                 && !Thread.currentThread().isInterrupted() && !Microbot.pauseAllScripts.get()
                 && !InputArbiter.isHuman() && ownerValid.getAsBoolean();
     }
