@@ -16,6 +16,9 @@ import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.plugins.microbot.util.misc.SceneClickSafety;
+import net.runelite.client.plugins.microbot.util.input.InputArbiter;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
+import net.runelite.client.plugins.microbot.util.walker.WalkerState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -105,7 +108,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
 
     @Override
     public WorldView getWorldView() {
-        return tileObject.getWorldView();
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> tileObject.getWorldView()).orElse(null);
     }
 
     public int getId() {
@@ -362,6 +365,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             log.info("[QuestObjectClick] object={} name='{}' action='{}' optionIndex={} menuAction={} location={}",
                     getId(), objName, action, index, menuAction, getWorldLocation());
 
+            if (dispatchGuard != null && !dispatchGuard.getAsBoolean()) return false;
             boolean turned = false;
             if (!Rs2Camera.isTileOnScreen(getLocalLocation())) {
                 Rs2Camera.turnTo(tileObject);
@@ -369,10 +373,7 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             }
 
             Rectangle clickArea = SceneClickSafety.forObject(tileObject, null);
-            if (clickArea == null && !turned) {
-                Rs2Camera.turnTo(tileObject);
-                clickArea = SceneClickSafety.forObject(tileObject, null);
-            }
+            if (clickArea == null) clickArea = recoverCoveredClick(tileObject, dispatchGuard == null ? () -> true : dispatchGuard);
             if (clickArea == null) {
                 if (SceneClickSafety.shouldWarnCovered(getId(), System.currentTimeMillis())) {
                     log.warn("Can't click object {}: clickbox unavailable or covered by the interface after a camera turn", getId());
@@ -471,4 +472,44 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
             }).orElse(null);
         } catch (RuntimeException unavailable) { return null; }
     }
+    private static final ThreadLocal<Boolean> coveredRecovery = ThreadLocal.withInitial(() -> false);
+
+    static Rectangle recoverCoveredClick(TileObject object, java.util.function.BooleanSupplier ownerValid) {
+        if (!mayRecover(ownerValid) || coveredRecovery.get() || Rs2Walker.isWalkingOnCurrentThread()) return null;
+        coveredRecovery.set(true);
+        try {
+            Rs2Camera.turnTo(object, 5);
+            if (!mayRecover(ownerValid)) return null;
+            Rectangle area = SceneClickSafety.forObject(object, null);
+            if (area != null) return area;
+            WorldPoint[] positions = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                Player player = Microbot.getClient().getLocalPlayer();
+                WorldView view = object.getWorldView();
+                if (player == null || view == null || !view.isTopLevel() || view != player.getWorldView()
+                        || view.getScene() == null || view.getScene().isInstance()) return null;
+                WorldPoint target = object.getWorldLocation(), start = player.getWorldLocation();
+                return target == null || start == null || target.getPlane() != start.getPlane()
+                        ? null : new WorldPoint[]{start, target};
+            }).orElse(null);
+            if (positions == null || positions[0].distanceTo2D(positions[1]) <= 2
+                    || positions[0].distanceTo2D(positions[1]) > 12 || !mayRecover(ownerValid)) return null;
+            log.debug("Object remains covered by the interface; trying a bounded closer walk");
+            if (Rs2Walker.walkWithStateTry(positions[1], 2, 0) != WalkerState.ARRIVED || !mayRecover(ownerValid)) return null;
+            boolean stillPresent = Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                if (Microbot.getRs2TileObjectCache() == null) return false;
+                return Microbot.getRs2TileObjectCache().query().withId(object.getId()).toList().stream()
+                        .anyMatch(model -> model.tileObject == object && positions[1].equals(model.getWorldLocation()));
+            }).orElse(false);
+            return stillPresent && mayRecover(ownerValid) ? SceneClickSafety.forObject(object, null) : null;
+        } finally {
+            coveredRecovery.remove();
+        }
+    }
+
+    private static boolean mayRecover(java.util.function.BooleanSupplier ownerValid) {
+        return Microbot.getClientThread() != null && !Microbot.getClientThread().isClientThread()
+                && !Thread.currentThread().isInterrupted() && !Microbot.pauseAllScripts.get()
+                && !InputArbiter.isHuman() && ownerValid.getAsBoolean();
+    }
+
 }
