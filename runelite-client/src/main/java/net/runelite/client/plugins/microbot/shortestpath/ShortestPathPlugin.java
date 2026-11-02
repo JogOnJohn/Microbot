@@ -96,13 +96,8 @@ import java.util.regex.Pattern;
         name = PluginDescriptor.Mocrosoft + "Web Walker",
         description = "Draws the shortest path to a chosen destination on the map (right click a spot on the world map to use)",
         tags = {"pathfinder", "map", "waypoint", "navigation", "microbot"},
-<<<<<<< HEAD
         enabledByDefault = true,
-        version = "1.0.6",
-=======
-        enabledByDefault = false,
-        version = "1.0.7",
->>>>>>> 5d3007d6f6 (fix(shortestpath): take the pathfinding executor atomically in exit)
+        version = "1.0.8",
         alwaysOn = true
 )
 public class ShortestPathPlugin extends Plugin implements KeyListener {
