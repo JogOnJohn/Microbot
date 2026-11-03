@@ -976,7 +976,7 @@ public class PathfinderConfig {
             if (maximumQuestPoints == 0) {
                 maximumQuestPoints = client.getDBTableRows(DBTableID.Quest.ID).stream()
                         .filter(row -> (Integer) client.getDBTableField(row, DBTableID.Quest.COL_RELEASE_TYPE, 0)[0] != 0)
-                        .mapToInt(row -> (Integer) client.getDBTableField(row, DBTableID.Quest.COL_QUESTPOINTS, 0)[0]).sum();
+                        .mapToInt(row -> (Integer) client.getDBTableField(row, DBTableID.Quest.COL_QUESTPOINTS_OVERRIDE, 0)[0]).sum();
             }
             return true;
         });
