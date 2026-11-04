@@ -164,9 +164,10 @@ public class Rs2Magic {
         if (magicSpell == MagicAction.TELEPORT_TO_HOUSE) {
             return castHouseAction(magicSpell, option);
         }
+        String[] actions = magicSpell.getActions();
         if (magicSpell.getName().toLowerCase().contains("teleport") ||
                 magicSpell.getName().toLowerCase().contains("bones to") ||
-                (magicSpell.getActions() != null && Arrays.stream(magicSpell.getActions()).anyMatch(x -> x != null && x.equalsIgnoreCase("cast")))) {
+                (actions != null && Arrays.stream(actions).anyMatch(x -> x != null && x.equalsIgnoreCase("cast")))) {
             menuAction = MenuAction.CC_OP;
         } else {
             menuAction = MenuAction.WIDGET_TARGET;
