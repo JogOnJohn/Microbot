@@ -16,13 +16,15 @@ public class MicrobotPluginListPanelOpenConfigTest {
     @SuppressWarnings("unchecked")
     public void openingPluginWithoutConfigDescriptorDoesNotBuildConfigPanel() {
         Provider<MicrobotConfigPanel> configPanelProvider = mock(Provider.class);
+        Provider<LocalPluginsPanel> localPluginsPanelProvider = mock(Provider.class);
         MicrobotPluginListPanel panel = new MicrobotPluginListPanel(
                 mock(ConfigManager.class),
                 mock(PluginManager.class),
                 mock(MicrobotPluginManager.class),
                 mock(ExternalPluginManager.class),
                 mock(EventBus.class),
-                configPanelProvider);
+                configPanelProvider,
+                localPluginsPanelProvider);
 
         panel.openConfigurationPanel(new MicrobotPluginConfigurationDescriptor(
                 "No Config", "Plugin without config", new String[0], null, null));
