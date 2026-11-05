@@ -382,17 +382,22 @@ public class PohTeleports {
      */
     public static boolean usePortalNexus(NexusPortal nexusPortal) {
         //TODO: Add config here to inform the user if the teleport is a wilderness teleport
-        GameObject portal = findPohObjectAnywhere(NexusPortal.PORTAL_IDS);
-        var reachable = Microbot.getRs2TileObjectCache().query().fromWorldView()
-                .withIds(Arrays.stream(NexusPortal.PORTAL_IDS).mapToInt(Integer::intValue).toArray())
-                .nearestReachable();
         if (getPortalNexusInterface() == null) {
+            int[] nexusIds = Arrays.stream(NexusPortal.PORTAL_IDS).mapToInt(Integer::intValue).toArray();
+            var reachable = Microbot.getClientThread().runOnClientThreadOptional(() ->
+                    Microbot.getRs2TileObjectCache().query()
+                            .withIds(nexusIds)
+                            .fromWorldView()
+                            .nearestReachable()).orElse(null);
             if (reachable != null) {
                 reachable.click("Teleport Menu");
-            } else if (portal != null) {
-                Rs2GameObject.interact(portal, "Teleport Menu");
             } else {
-                log.warn("Portal nexus not found");
+                GameObject portal = findPohObjectAnywhere(NexusPortal.PORTAL_IDS);
+                if (portal == null) {
+                    log.warn("Portal nexus not found");
+                    return false;
+                }
+                Rs2GameObject.interact(portal, "Teleport Menu");
             }
         }
 

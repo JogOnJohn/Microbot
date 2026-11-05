@@ -138,7 +138,7 @@ public class DiagnosticReportCollector
 			.descriptorVersion(descriptor.version())
 			.installedVersion(installedVersion)
 			.latestVersion(manifest == null ? null : manifest.getVersion())
-			.hubInstalled(installedVersion != null)
+			.hubInstalled(microbotPluginManager.isHubInstalled(internalName))
 			.active(pluginManager.isPluginActive(plugin))
 			.build();
 	}

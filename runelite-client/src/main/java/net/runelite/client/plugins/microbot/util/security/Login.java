@@ -110,6 +110,10 @@ public class Login {
                     .collect(Collectors.toList());
         }
 
+        if (filteredWorlds.isEmpty()) {
+            return isMembers ? 360 : 383;
+        }
+
         Random random = new Random();
         World world = filteredWorlds.stream()
                 .skip(random.nextInt(filteredWorlds.size()))
