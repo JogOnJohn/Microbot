@@ -621,7 +621,7 @@ public class PluginManager {
     @SuppressWarnings("unchecked")
     public Plugin preparePlugin(Class<? extends Plugin> type, Collection<Plugin> dependencies)
             throws PluginInstantiationException {
-        return instantiate(new ArrayList<>(dependencies), (Class<Plugin>) type);
+        return instantiatePlugin(dependencies, (Class<Plugin>) type);
     }
 
     /** Prevent profile changes and UI toggles from restarting a plugin during permanent disposal. */
