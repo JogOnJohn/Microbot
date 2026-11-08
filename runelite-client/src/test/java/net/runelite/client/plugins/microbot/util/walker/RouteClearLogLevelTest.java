@@ -38,10 +38,10 @@ public class RouteClearLogLevelTest
 	}
 
 	@Test
-	public void reasonlessClearStaysBelowWarn()
+	public void reasonlessClearStaysBelowWarn() throws ReflectiveOperationException
 	{
-		Rs2WalkerDoors.logRouteClear(null);
-		Rs2WalkerDoors.logRouteClear("  ");
+		logRouteClear(null);
+		logRouteClear("  ");
 
 		assertEquals(2, appender.list.size());
 		for (ILoggingEvent event : appender.list)
@@ -52,12 +52,19 @@ public class RouteClearLogLevelTest
 	}
 
 	@Test
-	public void reasonedClearLogsAtInfo()
+	public void reasonedClearLogsAtInfo() throws ReflectiveOperationException
 	{
-		Rs2WalkerDoors.logRouteClear("plugin:stop");
+		logRouteClear("plugin:stop");
 
 		assertEquals(1, appender.list.size());
 		assertEquals(Level.INFO, appender.list.get(0).getLevel());
 		assertEquals("[WebWalk] clear | plugin:stop", appender.list.get(0).getFormattedMessage());
+	}
+
+	private static void logRouteClear(String reason) throws ReflectiveOperationException
+	{
+		var method = Rs2Walker.class.getDeclaredMethod("logRouteClear", String.class);
+		method.setAccessible(true);
+		method.invoke(null, reason);
 	}
 }
