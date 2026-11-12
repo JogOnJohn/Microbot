@@ -213,7 +213,7 @@ public class Rs2Widget {
             Widget foundWidget = null;
             if (children == null) {
                 // Search through root widgets if no specific children are provided
-                List<Widget> rootWidgets = Arrays.stream(Microbot.getClient().getWidgetRoots())
+                List<Widget> rootWidgets = Arrays.stream(widgetRoots())
                         .filter(x -> x != null && !x.isHidden()).collect(Collectors.toList());
                 for (Widget rootWidget : rootWidgets) {
                     if (rootWidget == null) continue;
@@ -325,7 +325,7 @@ public class Rs2Widget {
 
             if (children == null) {
                 // Search through root widgets if no specific children are provided
-                List<Widget> rootWidgets = Arrays.stream(Microbot.getClient().getWidgetRoots())
+                List<Widget> rootWidgets = Arrays.stream(widgetRoots())
                         .filter(widget -> widget != null && !widget.isHidden())
                         .collect(Collectors.toList());
                 for (Widget rootWidget : rootWidgets) {
@@ -976,5 +976,15 @@ public class Rs2Widget {
 	   }
 	   return false;
    }
+
+    static Widget[] widgetRoots() {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            try {
+                return Microbot.getClient().getWidgetRoots();
+            } catch (NullPointerException e) {
+                return null;
+            }
+        }).orElse(new Widget[0]);
+    }
 
 }
